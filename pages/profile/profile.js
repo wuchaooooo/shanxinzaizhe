@@ -114,8 +114,16 @@ Page({
     this.options = options
     const app = getApp()
 
-    // 是否是联合创始人
-    this.setData({ isCofounder: !!app.globalData.currentUser })
+    // 注册身份识别回调
+    this._currentUserCb = (user) => {
+      this.setData({ isCofounder: !!user })
+    }
+    app.globalData.currentUserListeners.push(this._currentUserCb)
+
+    // 立即应用已有结果（如果身份识别已完成）
+    if (app.globalData.openid && app.globalData.partnersData && app.globalData.partnersData.length > 0) {
+      this.setData({ isCofounder: !!app.globalData.currentUser })
+    }
 
     // 加载善心 logo（代码：shanxinzheli）
     const shanxinLogoPath = getAssetPath('shanxinzheli')
@@ -254,7 +262,8 @@ Page({
     const listeners = [
       { list: 'imageReadyListeners', cb: '_imageReadyCb' },
       { list: 'partnersDataListeners', cb: '_partnersDataCb' },
-      { list: 'assetsDataListeners', cb: '_assetsDataCb' }
+      { list: 'assetsDataListeners', cb: '_assetsDataCb' },
+      { list: 'currentUserListeners', cb: '_currentUserCb' }
     ]
 
     listeners.forEach(({ list, cb }) => {
@@ -334,7 +343,10 @@ Page({
   },
 
   onHidePoster() {
-    this.setData({ showPoster: false })
+    this.setData({
+      showPoster: false,
+      posterImage: ''
+    })
   },
 
 

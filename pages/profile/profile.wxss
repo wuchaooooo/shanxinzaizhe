@@ -983,12 +983,96 @@
   align-items: center;
   gap: 24rpx;
   padding: 40rpx;
+  min-height: 80vh;
+  position: relative;
+}
+
+.poster-skeleton {
+  width: 100%;
+  aspect-ratio: 0.5;
+  background: linear-gradient(90deg,
+    rgba(194, 0, 0, 0.08) 0%,
+    rgba(194, 0, 0, 0.15) 50%,
+    rgba(194, 0, 0, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 16rpx;
+  position: absolute;
+  top: 40rpx;
+  left: 40rpx;
+  right: 40rpx;
+  width: calc(100% - 80rpx);
+  overflow: hidden;
+  animation: skeleton-pulse 2s ease-in-out infinite;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.poster-skeleton-hide {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.poster-skeleton-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .poster-image {
   width: 100%;
   border-radius: 16rpx;
-  background-color: #f5f5f5;
+  background-color: transparent;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  position: relative;
+  opacity: 0;
+  display: block;
+}
+
+.poster-image-show {
+  animation: image-fade-in 0.4s ease both;
+}
+
+@keyframes image-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .poster-loading {
@@ -1008,6 +1092,23 @@
   color: #64748b;
   text-align: center;
   padding-bottom: 16rpx;
+  min-height: 34rpx;
+  line-height: 34rpx;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.poster-tip-show {
+  animation: tip-fade-in 0.3s ease 0.2s both;
+}
+
+@keyframes tip-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Canvas 隐藏 */

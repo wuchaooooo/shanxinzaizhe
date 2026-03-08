@@ -13,7 +13,11 @@ const feishuApi = require('./feishu-api.js')
  */
 async function generateTeamPoster(page, canvasId, currentPartner, partnersData = null) {
     try {
-        wx.showLoading({ title: '生成中...' })
+        // 立即显示弹窗（骨架屏状态）
+        page.setData({
+            showPoster: true,
+            posterImage: ''
+        })
 
         let partners = partnersData || getPartnersDataSync()
 
@@ -34,7 +38,6 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
         const qrcodeImageUrl = getAssetPath('mini_program_qr_code')
 
         if (!headerImageUrl || !qrcodeImageUrl) {
-            wx.hideLoading()
             wx.showToast({ title: '资源加载中，请稍后重试', icon: 'none' })
             return
         }
@@ -301,21 +304,21 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
                     width: canvasWidth, height: canvasHeight,
                     destWidth: canvasWidth * 2, destHeight: canvasHeight * 2,
                     success: (res) => {
-                        page.setData({ posterImage: res.tempFilePath, showPoster: true })
-                        wx.hideLoading()
+                        // 延迟显示海报，避免动画卡顿
+                        setTimeout(() => {
+                            page.setData({ posterImage: res.tempFilePath })
+                        }, 50)
                     },
                     fail: (err) => {
                         console.error('生成海报失败:', err)
-                        wx.hideLoading()
                         wx.showToast({ title: '生成失败', icon: 'none' })
                     }
                 }, page)
-            }, 500)
+            }, 300)
         })
 
     } catch (error) {
         console.error('生成海报出错:', error)
-        wx.hideLoading()
         wx.showToast({ title: '生成失败', icon: 'none' })
     }
 }

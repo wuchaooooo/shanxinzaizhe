@@ -130,10 +130,14 @@ App({
   // 根据 openid 查找对应的联合创始人记录
   _matchCurrentUser(openid) {
     const partners = this.globalData.partnersData
-    if (!partners || partners.length === 0) return
+    if (!partners || partners.length === 0) {
+      console.log('身份识别：等待合伙人数据加载...')
+      return
+    }
     const matched = partners.find(p => p.wxOpenid && p.wxOpenid.trim() === openid.trim()) || null
     this.globalData.currentUser = matched
     console.log('身份识别结果:', matched ? `联合创始人 ${matched.name}` : '普通用户')
+    // 始终通知 listeners，即使是 null（普通用户）
     this.globalData.currentUserListeners.forEach(cb => cb(matched))
   },
 

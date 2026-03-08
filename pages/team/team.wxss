@@ -78,17 +78,22 @@
 
 /* 团队统计 */
 .team-stats-section {
-  padding: 24rpx 32rpx;
   margin-top: 176rpx;
-  display: flex;
-  justify-content: space-between;
-  text-align: center;
-  background-color: #ffffff;
   margin-left: 32rpx;
   margin-right: 32rpx;
   margin-bottom: 48rpx;
+  background-color: #ffffff;
   border-radius: 24rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  position: relative;
+}
+
+.team-stats-content {
+  padding: 24rpx 32rpx;
+  display: flex;
+  justify-content: space-between;
+  text-align: center;
 }
 
 .team-stat-item {
@@ -114,6 +119,68 @@
   font-size: 22rpx;
   color: #64748b;
   margin-top: 6rpx;
+}
+
+.team-stats-poster-btn {
+  margin: 0 auto 32rpx;
+  background-color: #c20000;
+  border-radius: 16rpx;
+  padding: 16rpx 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  width: fit-content;
+  min-width: 240rpx;
+  box-shadow: 0 4rpx 16rpx rgba(194, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  animation: poster-btn-breathing 2s ease-in-out infinite;
+}
+
+.team-stats-poster-btn-hidden {
+  opacity: 0;
+  pointer-events: none;
+  animation: none;
+}
+
+.team-stats-poster-btn:active {
+  transform: scale(0.95);
+  animation: none;
+}
+
+@keyframes poster-btn-breathing {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4rpx 16rpx rgba(194, 0, 0, 0.2);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 8rpx 24rpx rgba(194, 0, 0, 0.3);
+  }
+}
+
+.poster-btn-icon {
+  width: 40rpx;
+  height: 40rpx;
+  background-color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rpx;
+  flex-shrink: 0;
+}
+
+.poster-btn-icon-img {
+  width: 100%;
+  height: 100%;
+}
+
+.poster-btn-text {
+  font-size: 28rpx;
+  color: #ffffff;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* 合伙人网格 */
@@ -242,17 +309,17 @@
 
 .partner-name.skeleton-text {
   width: 120rpx;
-  height: 26rpx;
+  height: 34rpx;
 }
 
 .partner-school.skeleton-text {
   width: 120rpx;
-  height: 20rpx;
+  height: 26rpx;
 }
 
 .partner-title.skeleton-text {
   width: 96rpx;
-  height: 18rpx;
+  height: 23rpx;
   padding: 6rpx 12rpx;
   box-sizing: content-box;
 }
@@ -283,6 +350,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.3;
+  height: 34rpx;
 }
 
 .partner-school-container {
@@ -300,6 +369,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.3;
+  height: 26rpx;
 }
 
 .partner-title-container {
@@ -321,11 +392,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.3;
+  height: 23rpx;
 }
 
-/* 加入团队 */
-.join-section {
-  padding: 64rpx 32rpx;
+/* 团队宣言 */
+.team-motto-section {
+  padding: 64rpx 32rpx 32rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -333,7 +406,7 @@
   gap: 32rpx;
 }
 
-.join-icon {
+.motto-icon {
   width: 128rpx;
   height: 128rpx;
   border-radius: 50%;
@@ -344,16 +417,23 @@
   font-size: 80rpx;
 }
 
-.join-title {
+.motto-title {
   font-size: 40rpx;
   font-weight: bold;
   color: #0f172a;
 }
 
-.join-desc {
+.motto-desc {
   font-size: 28rpx;
   color: #64748b;
   padding: 0 48rpx;
+}
+
+/* 加入团队按钮 */
+.join-btn-section {
+  padding: 0 32rpx 64rpx;
+  display: flex;
+  justify-content: center;
 }
 
 .join-btn {
@@ -414,7 +494,7 @@
   z-index: 1000;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.3s;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 .poster-modal-show {
@@ -429,9 +509,10 @@
   border-radius: 32rpx 32rpx 0 0;
   overflow: hidden;
   transform: translateY(100%);
-  transition: transform 0.3s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
+  will-change: transform;
 }
 
 .poster-content-show {
@@ -471,18 +552,119 @@
   align-items: center;
   gap: 24rpx;
   padding: 40rpx;
+  min-height: 80vh;
+  position: relative;
+}
+
+.poster-skeleton {
+  width: 100%;
+  aspect-ratio: 0.5;
+  background: linear-gradient(90deg,
+    rgba(194, 0, 0, 0.08) 0%,
+    rgba(194, 0, 0, 0.15) 50%,
+    rgba(194, 0, 0, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 16rpx;
+  position: absolute;
+  top: 40rpx;
+  left: 40rpx;
+  right: 40rpx;
+  width: calc(100% - 80rpx);
+  overflow: hidden;
+  animation: skeleton-pulse 2s ease-in-out infinite;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.poster-skeleton-hide {
+  opacity: 0;
+  animation: none;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.poster-skeleton-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .poster-image {
   width: 100%;
   border-radius: 16rpx;
   box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  background-color: transparent;
+  position: relative;
+  opacity: 0;
+  display: block;
+}
+
+.poster-image-show {
+  animation: image-fade-in 0.4s ease both;
+}
+
+@keyframes image-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .poster-tip {
   font-size: 24rpx;
   color: #64748b;
   text-align: center;
+  min-height: 34rpx;
+  line-height: 34rpx;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.poster-tip-show {
+  animation: tip-fade-in 0.3s ease 0.2s both;
+}
+
+@keyframes tip-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .poster-canvas {
@@ -490,5 +672,3 @@
   left: -9999px;
   top: 0;
 }
-
-

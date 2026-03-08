@@ -80,7 +80,8 @@ Page({
     isCofounder: false,  // 当前用户是否为联合创始人
     loading: false,
     allImagesLoaded: false, // 是否所有合伙人头像已加载完成
-    shanxinLogoUrl: '' // 善心logo
+    shanxinLogoUrl: '', // 善心logo
+    posterBtnLogoLoaded: false // 海报按钮logo是否加载完成
   },
 
   checkAllImagesLoaded(partners) {
@@ -165,8 +166,10 @@ Page({
       this.setData({ isCofounder: !!user })
     }
     app.globalData.currentUserListeners.push(this._currentUserCb)
-    // 立即应用已有结果
-    if (app.globalData.openid) {
+
+    // 立即应用已有结果（如果身份识别已完成）
+    // 注意：只有当 openid 和 partnersData 都存在时，才能确定身份识别已完成
+    if (app.globalData.openid && app.globalData.partnersData && app.globalData.partnersData.length > 0) {
       this.setData({ isCofounder: !!app.globalData.currentUser })
     }
   },
@@ -237,23 +240,6 @@ Page({
 
   onShow() {
     getApp().preloadFeishuData()
-
-    // 重置头像动画状态，让头像重新播放入场动画
-    const partners = this.data.partners
-    if (partners.some(p => p.loaded)) {
-      const resetUpdates = {}
-      partners.forEach((p, i) => { if (p.loaded) resetUpdates[`partners[${i}].loaded`] = false })
-      const filteredPartners = this.data.filteredPartners
-      filteredPartners.forEach((p, i) => { if (p.loaded) resetUpdates[`filteredPartners[${i}].loaded`] = false })
-      this.setData(resetUpdates)
-
-      setTimeout(() => {
-        const restoreUpdates = {}
-        this.data.partners.forEach((p, i) => { if (p.image) restoreUpdates[`partners[${i}].loaded`] = true })
-        this.data.filteredPartners.forEach((p, i) => { if (p.image) restoreUpdates[`filteredPartners[${i}].loaded`] = true })
-        this.setData(restoreUpdates)
-      }, 50)
-    }
   },
 
   calculateStats() {
@@ -384,6 +370,19 @@ Page({
     }, 30000)
   },
 
+  // 海报按钮点击处理
+  onPosterBtnTap() {
+    if (!this.data.allImagesLoaded) {
+      wx.showToast({
+        title: '头像加载中...',
+        icon: 'loading',
+        duration: 1500
+      })
+    } else {
+      this.onGeneratePoster()
+    }
+  },
+
   // 联合创始人：生成团队海报
   onGeneratePoster() {
     const app = getApp()
@@ -403,6 +402,16 @@ Page({
   },
 
   onHidePoster() {
-    this.setData({ showPoster: false })
+    this.setData({
+      showPoster: false,
+      posterImage: ''
+    })
+  },
+
+  // 海报按钮logo加载完成
+  onPosterBtnLogoLoad() {
+    this.setData({
+      posterBtnLogoLoaded: true
+    })
   }
 })

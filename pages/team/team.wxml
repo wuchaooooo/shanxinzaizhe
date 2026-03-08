@@ -17,17 +17,25 @@
 
   <!-- 团队统计 -->
   <view class="team-stats-section">
-    <view class="team-stat-item">
-      <text class="team-stat-number">{{teamCount}}</text>
-      <text class="team-stat-label">联合创始人</text>
+    <view class="team-stats-content">
+      <view class="team-stat-item">
+        <text class="team-stat-number">{{teamCount}}</text>
+        <text class="team-stat-label">联合创始人</text>
+      </view>
+      <view class="team-stat-item team-stat-border">
+        <text class="team-stat-number">{{totalBadges}}</text>
+        <text class="team-stat-label">荣誉徽章</text>
+      </view>
+      <view class="team-stat-item">
+        <text class="team-stat-number">{{uniqueSkills}}</text>
+        <text class="team-stat-label">专业技能</text>
+      </view>
     </view>
-    <view class="team-stat-item team-stat-border">
-      <text class="team-stat-number">{{totalBadges}}</text>
-      <text class="team-stat-label">荣誉徽章</text>
-    </view>
-    <view class="team-stat-item">
-      <text class="team-stat-number">{{uniqueSkills}}</text>
-      <text class="team-stat-label">专业技能</text>
+    <view class="team-stats-poster-btn {{!isCofounder || !posterBtnLogoLoaded ? 'team-stats-poster-btn-hidden' : ''}}" catchtap="{{isCofounder ? 'onPosterBtnTap' : ''}}">
+      <view class="poster-btn-icon">
+        <image class="poster-btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit" bindload="onPosterBtnLogoLoad"></image>
+      </view>
+      <text class="poster-btn-text">{{allImagesLoaded ? '生成团队海报' : '头像加载中...'}}</text>
     </view>
   </view>
 
@@ -51,19 +59,20 @@
     </view>
   </view>
 
-  <!-- 加入团队 -->
-  <view class="join-section">
-    <view class="join-icon">
+  <!-- 团队宣言 -->
+  <view class="team-motto-section">
+    <view class="motto-icon">
       <text class="iconfont">🤝</text>
     </view>
-    <text class="join-title">善心浙里与您共创丰盛未来！</text>
-    <text class="join-desc">以合作互助的态度实现伙伴完美人生</text>
-    <text class="join-desc">以专业用心的态度锁住客户幸福生活</text>
-    <view class="join-btn {{(isCofounder && !allImagesLoaded) ? 'join-btn-disabled' : ''}}" catchtap="{{(isCofounder && !allImagesLoaded) ? '' : (isCofounder ? 'onGeneratePoster' : 'onApplyPartner')}}">
-      <view class="btn-icon-wrapper" wx:if="{{isCofounder}}">
-        <image class="btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit"></image>
-      </view>
-      <text class="btn-text">{{isCofounder ? (allImagesLoaded ? '生成团队海报' : '图片加载中...') : '申请加入团队'}}</text>
+    <text class="motto-title">善心浙里与您共创丰盛未来！</text>
+    <text class="motto-desc">以合作互助的态度实现伙伴完美人生</text>
+    <text class="motto-desc">以专业用心的态度锁住客户幸福生活</text>
+  </view>
+
+  <!-- 加入团队按钮（仅非合伙人可见） -->
+  <view class="join-btn-section" wx:if="{{!isCofounder}}">
+    <view class="join-btn" catchtap="onApplyPartner">
+      <text class="btn-text">申请加入团队</text>
     </view>
   </view>
 </view>
@@ -75,11 +84,18 @@
       <text class="poster-modal-title">团队海报</text>
       <text class="poster-modal-close" bindtap="onHidePoster">✕</text>
     </view>
-    <scroll-view class="poster-scroll-view" scroll-y>
+    <scroll-view class="poster-scroll-view" scroll-y scroll-into-view="{{posterImage ? '' : 'poster-bottom'}}">
       <view class="poster-image-wrapper">
-        <image class="poster-image" src="{{posterImage}}" mode="widthFix" show-menu-by-longpress="{{true}}"></image>
-        <text class="poster-tip">长按图片保存到相册</text>
+        <!-- 骨架屏 -->
+        <view class="poster-skeleton {{posterImage ? 'poster-skeleton-hide' : ''}}">
+          <view class="poster-skeleton-shimmer"></view>
+        </view>
+        <!-- 真实海报 -->
+        <image class="poster-image {{posterImage ? 'poster-image-show' : ''}}" src="{{posterImage}}" mode="widthFix" show-menu-by-longpress="{{true}}"></image>
+        <!-- 提示文字（仅在图片显示后出现） -->
+        <text class="poster-tip poster-tip-show" wx:if="{{posterImage}}">长按图片保存到相册</text>
       </view>
+      <view id="poster-bottom"></view>
     </scroll-view>
   </view>
 </view>
