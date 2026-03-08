@@ -5,6 +5,12 @@ const { fetchFeishuAssets, getAssetsFromCache } = require('./utils/assets-loader
 
 App({
   async onLaunch() {
+    // 初始化云开发环境
+    wx.cloud.init({
+      env: 'shanxinzaizhe-1g0sxfo695003783',
+      traceUser: true
+    })
+
     // 如果使用飞书数据源，先从本地缓存恢复数据（立即可用），再异步拉取最新
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
       // 优先加载静态资源（logo、banner等）
@@ -23,6 +29,9 @@ App({
       }
       await this.preloadFeishuData()
     }
+
+    // 获取 openid 并与飞书联合创始人数据比对身份
+    this.fetchOpenidAndMatchUser()
 
     // 小程序启动时执行
     console.log('AIA Excellence 小程序启动')
@@ -59,6 +68,11 @@ App({
 
       // 始终更新引用，保证图片路径的修改（p.image = path）能同步到 globalData
       this.globalData.partnersData = partners
+
+      // 飞书数据更新后，若已有 openid，重新比对身份
+      if (this.globalData.openid) {
+        this._matchCurrentUser(this.globalData.openid)
+      }
 
       // 始终通知页面刷新（确保统计数字等信息更新）
       this.globalData.partnersDataListeners.forEach(cb => cb(partners))
@@ -97,6 +111,32 @@ App({
     }
   },
 
+  // 获取当前登录用户的 openid，并与飞书联合创始人数据比对身份
+  fetchOpenidAndMatchUser() {
+    wx.cloud.callFunction({
+      name: 'getOpenid',
+      success: (r) => {
+        const openid = r.result && r.result.openid
+        if (!openid) return
+        this.globalData.openid = openid
+        this._matchCurrentUser(openid)
+      },
+      fail: (err) => {
+        console.error('获取 openid 失败:', err)
+      }
+    })
+  },
+
+  // 根据 openid 查找对应的联合创始人记录
+  _matchCurrentUser(openid) {
+    const partners = this.globalData.partnersData
+    if (!partners || partners.length === 0) return
+    const matched = partners.find(p => p.wxOpenid && p.wxOpenid === openid) || null
+    this.globalData.currentUser = matched
+    console.log('身份识别结果:', matched ? `联合创始人 ${matched.name}` : '普通用户')
+    this.globalData.currentUserListeners.forEach(cb => cb(matched))
+  },
+
   async onShow() {
     // 每次显示时重新拉取飞书数据，优先加载静态资源
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
@@ -112,6 +152,9 @@ App({
   globalData: {
     systemInfo: null,
     userInfo: null,
+    openid: null,                // 当前登录用户的微信 openid
+    currentUser: null,           // 匹配到的联合创始人对象，null 表示普通用户
+    currentUserListeners: [],    // 身份识别完成回调列表
     partnersData: null,          // 飞书数据缓存
     imageReadyListeners: [],     // 头像下载完成回调列表，team/profile 页面注册
     partnersDataListeners: [],   // 文本数据刷新回调列表，home/team 页面注册

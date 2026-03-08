@@ -84,3 +84,26 @@
     </view>
   </view>
 </view>
+
+<!-- 开发者面板（仅 logo 连点 3 次触发） -->
+<view class="dev-panel-mask {{showDevPanel ? 'dev-panel-mask-show' : ''}}" bindtap="onCloseDevPanel">
+  <view class="dev-panel-sheet {{showDevPanel ? 'dev-panel-sheet-show' : ''}}" catchtap="">
+    <view class="dev-panel-header">
+      <text class="dev-panel-title">开发者面板</text>
+      <text class="dev-panel-close" bindtap="onCloseDevPanel">✕</text>
+    </view>
+    <view class="dev-panel-body">
+      <view class="dev-panel-row">
+        <text class="dev-panel-label">身份</text>
+        <text class="dev-panel-val">{{devRole}}</text>
+      </view>
+      <view class="dev-panel-row">
+        <text class="dev-panel-label">OpenID</text>
+        <view class="dev-panel-val-row">
+          <text class="dev-panel-val dev-panel-mono" selectable="true">{{devOpenid || '获取中...'}}</text>
+          <text wx:if="{{devOpenid && devOpenid !== '获取中...'}}" class="dev-panel-copy-inline" bindtap="onCopyDevOpenid">复制</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

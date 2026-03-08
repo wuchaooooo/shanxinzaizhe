@@ -4,8 +4,7 @@
     "pages/team/team",
     "pages/events/events",
     "pages/profile/profile",
-    "pages/about-aia/about-aia",
-    "pages/developer/developer"
+    "pages/about-aia/about-aia"
   ],
   "window": {
     "backgroundTextStyle": "dark",

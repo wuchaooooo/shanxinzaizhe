@@ -1,6 +1,8 @@
 // pages/team/team.js
 const { getPartnersDataSync, fetchFeishuPartnersText, downloadImagesBackground } = require('../../utils/partners-data-loader.js')
+const { getAssetPath } = require('../../utils/assets-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
+const { generateTeamPoster } = require('../../utils/poster-generator.js')
 
 // 将包含符号的文本拆分成数组
 function splitBySymbols(text) {
@@ -56,10 +58,18 @@ Page({
     uniqueSkills: 0,
     searchPlaceholder: '搜索善心浙里联合创始人',
     isApplyMode: false,
-    loading: false
+    isCofounder: false,  // 当前用户是否为联合创始人
+    loading: false,
+    shanxinLogoUrl: '' // 善心logo
   },
 
   onLoad() {
+    // 加载善心 logo（代码：shanxinzheli）
+    const shanxinLogoPath = getAssetPath('shanxinzheli')
+    if (shanxinLogoPath) {
+      this.setData({ shanxinLogoUrl: shanxinLogoPath })
+    }
+
     const partnersData = getPartnersDataSync()
 
     if (partnersData.length > 0) {
@@ -103,6 +113,16 @@ Page({
       this.calculateStats()
     }
     app.globalData.partnersDataListeners.push(this._partnersDataCb)
+
+    // 注册身份识别回调，更新底部按钮
+    this._currentUserCb = (user) => {
+      this.setData({ isCofounder: !!user })
+    }
+    app.globalData.currentUserListeners.push(this._currentUserCb)
+    // 立即应用已有结果
+    if (app.globalData.openid) {
+      this.setData({ isCofounder: !!app.globalData.currentUser })
+    }
   },
 
   onUnload() {
@@ -111,6 +131,8 @@ Page({
     this._imageReadyCb = null
     app.globalData.partnersDataListeners = app.globalData.partnersDataListeners.filter(cb => cb !== this._partnersDataCb)
     this._partnersDataCb = null
+    app.globalData.currentUserListeners = app.globalData.currentUserListeners.filter(cb => cb !== this._currentUserCb)
+    this._currentUserCb = null
     if (this._animateTimer) {
       clearInterval(this._animateTimer)
       this._animateTimer = null
@@ -203,8 +225,8 @@ Page({
       // 根据姓名、学校或职位过滤
       const filtered = this.data.partners.filter(partner => {
         return partner.name.toLowerCase().includes(query) ||
-               partner.school.toLowerCase().includes(query) ||
-               partner.title.toLowerCase().includes(query)
+          partner.school.toLowerCase().includes(query) ||
+          partner.title.toLowerCase().includes(query)
       })
       this.setData({
         filteredPartners: filtered
@@ -266,5 +288,19 @@ Page({
       path: '/pages/team/team',
       imageUrl: ''
     }
+  },
+
+  // 联合创始人：生成团队海报
+  onGeneratePoster() {
+    const app = getApp()
+    const currentUser = app.globalData.currentUser
+    if (!currentUser) return
+
+    // 生成海报
+    generateTeamPoster(this, 'posterCanvas', currentUser)
+  },
+
+  onHidePoster() {
+    this.setData({ showPoster: false })
   }
 })

@@ -372,6 +372,7 @@ function transformFeishuRecord(record) {
     customersServed: fields[mapping.customersServed] || '',
     bio: fields[mapping.bio] || '',
     isInstructor: parseIsInstructor(fields[mapping.isInstructor]),
+    wxOpenid: fields[mapping.wxOpenid] || '', // 微信小程序 openid，用于身份识别
     // 使用飞书 Base 返回的 url 字段（已验证可用）
     imageUrl: fields[mapping.image] ? fields[mapping.image][0]?.url : '',
     qrcodeUrl: fields[mapping.qrcode] ? fields[mapping.qrcode][0]?.url : '',
@@ -808,7 +809,7 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
 
                 // 二维码下载完成，不触发回调（team页面不需要二维码通知）
               })
-              .catch(() => {})
+              .catch(() => { })
           )
         }
       }

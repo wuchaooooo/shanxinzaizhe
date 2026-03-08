@@ -222,7 +222,7 @@
         <image class="qrcode-image" src="{{qrcodeImage}}" mode="aspectFill" show-menu-by-longpress="{{true}}"></image>
         <text class="qrcode-tip">长按识别二维码添加微信</text>
       </view>
-      <view class="generate-poster-wrapper">
+      <view class="generate-poster-wrapper" wx:if="{{!isCofounder}}">
         <view class="generate-poster-btn" catchtap="onGeneratePoster">
           <view class="btn-icon-wrapper">
             <image class="btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit"></image>

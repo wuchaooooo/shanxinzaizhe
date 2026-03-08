@@ -12,6 +12,10 @@ Page({
     teamCount: 0,
     totalCustomers: '0+',
     instructorCount: 0,
+    // 开发者面板
+    showDevPanel: false,
+    devOpenid: '',
+    devRole: '识别中...',
     values: [
       {
         icon: '🚩',
@@ -73,6 +77,16 @@ Page({
     this._assetsDataCb = () => this.loadAssetsFromFeishu()
     app.globalData.assetsDataListeners.push(this._assetsDataCb)
 
+    // 注册身份识别回调（用于开发者面板）
+    this._currentUserCb = (user) => {
+      this._updateDevRole(user)
+    }
+    app.globalData.currentUserListeners.push(this._currentUserCb)
+    // 如果已有结果，立即更新
+    if (app.globalData.openid) {
+      this._updateDevRole(app.globalData.currentUser)
+    }
+
     // 从飞书 base 加载静态资源(立即加载一次,后续通过监听器更新)
     this.loadAssetsFromFeishu()
   },
@@ -125,8 +139,10 @@ Page({
     const app = getApp()
     app.globalData.partnersDataListeners = app.globalData.partnersDataListeners.filter(cb => cb !== this._partnersDataCb)
     app.globalData.assetsDataListeners = app.globalData.assetsDataListeners.filter(cb => cb !== this._assetsDataCb)
+    app.globalData.currentUserListeners = app.globalData.currentUserListeners.filter(cb => cb !== this._currentUserCb)
     this._partnersDataCb = null
     this._assetsDataCb = null
+    this._currentUserCb = null
     if (this._animateTimer) {
       clearInterval(this._animateTimer)
       this._animateTimer = null
@@ -167,6 +183,56 @@ Page({
   onLearnMore() {
     wx.navigateTo({
       url: '/pages/about-aia/about-aia'
+    })
+  },
+
+  // 连续点击 Logo 3 次，显示开发者面板
+  onLogoTap() {
+    const now = Date.now()
+    if (!this._logoTaps) this._logoTaps = []
+    this._logoTaps.push(now)
+    // 只保留最近的 3 次点击记录
+    if (this._logoTaps.length > 3) this._logoTaps.shift()
+    if (
+      this._logoTaps.length === 3 &&
+      now - this._logoTaps[0] < 1500
+    ) {
+      this._logoTaps = []
+      const app = getApp()
+      this.setData({
+        showDevPanel: true,
+        devOpenid: app.globalData.openid || '获取中...',
+      })
+      this._updateDevRole(app.globalData.currentUser)
+    }
+  },
+
+  // 关闭开发者面板
+  onCloseDevPanel() {
+    this.setData({ showDevPanel: false })
+  },
+
+  // 复制 openid
+  onCopyDevOpenid() {
+    const openid = this.data.devOpenid
+    if (!openid || openid === '获取中...') return
+    wx.setClipboardData({
+      data: openid,
+      success: () => wx.showToast({ title: '已复制', icon: 'success' })
+    })
+  },
+
+  // 更新开发者面板中的身份角色
+  _updateDevRole(currentUser) {
+    const app = getApp()
+    const openid = app.globalData.openid
+    if (!openid) {
+      this.setData({ devRole: '识别中...' })
+      return
+    }
+    this.setData({
+      devOpenid: openid,
+      devRole: currentUser ? `联合创始人（${currentUser.name}）` : '普通用户'
     })
   },
 

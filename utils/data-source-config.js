@@ -29,7 +29,8 @@ const DATA_SOURCE_CONFIG = {
     activities: '最近动态',  // 最近动态
     skills: '个人涉及的专业领域',  // 专业领域
     isInstructor: '是否为善心浙江讲师',  // 是否为讲师（用于首页统计）
-    lastModifiedDate: 'Last Modified Date'  // 飞书系统字段，用于检测记录是否有变更
+    lastModifiedDate: 'Last Modified Date',  // 飞书系统字段，用于检测记录是否有变更
+    wxOpenid: 'wx_miniprogram_shanxinzaizhe_openid'  // 微信小程序 openid，用于身份识别
   }
 }
 
