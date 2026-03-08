@@ -1,0 +1,96 @@
+<!--pages/about-aia/about-aia.wxml-->
+<view class="about-container">
+  <!-- 头部横幅 -->
+  <view class="hero-banner">
+    <image class="hero-image" src="{{heroImage}}" mode="aspectFill"></image>
+    <view class="hero-overlay">
+      <text class="hero-title">{{heroTitle}}</text>
+    </view>
+  </view>
+
+  <!-- 关键数据 -->
+  <view class="key-figures">
+    <view class="key-figure-item" wx:for="{{keyFigures}}" wx:key="label">
+      <text class="key-figure-number">{{item.number}}</text>
+      <text class="key-figure-label">{{item.label}}</text>
+    </view>
+  </view>
+
+  <!-- 公司简介 -->
+  <view class="section">
+    <view class="section-title">
+      <text class="title-text">关于友邦</text>
+    </view>
+    <view class="content-card">
+      <text class="content-text">{{companyIntro}}</text>
+    </view>
+  </view>
+
+  <!-- 历史里程碑 -->
+  <view class="section">
+    <view class="section-title">
+      <text class="title-text">百年历程</text>
+    </view>
+    <view class="timeline">
+      <view class="timeline-item" wx:for="{{milestones}}" wx:key="year">
+        <view class="timeline-dot"></view>
+        <view class="timeline-content">
+          <text class="timeline-year">{{item.year}}</text>
+          <text class="timeline-desc">{{item.desc}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 核心优势 -->
+  <view class="section">
+    <view class="section-title">
+      <text class="title-text">核心优势</text>
+    </view>
+    <view class="advantages-grid">
+      <view class="advantage-card" wx:for="{{advantages}}" wx:key="title">
+        <text class="advantage-icon">{{item.icon}}</text>
+        <text class="advantage-title">{{item.title}}</text>
+        <text class="advantage-desc">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 社会责任 -->
+  <view class="section">
+    <view class="section-title">
+      <text class="title-text">社会责任</text>
+    </view>
+    <view class="social-grid">
+      <view class="social-card" wx:for="{{socialResponsibility}}" wx:key="title">
+        <text class="social-icon">{{item.icon}}</text>
+        <text class="social-title">{{item.title}}</text>
+        <text class="social-desc">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 业务范围 -->
+  <view class="section">
+    <view class="section-title">
+      <text class="title-text">业务范围</text>
+    </view>
+    <view class="business-list">
+      <view class="business-item" wx:for="{{businessScope}}" wx:key="name">
+        <text class="business-icon">{{item.icon}}</text>
+        <text class="business-name">{{item.name}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 联系我们 -->
+  <view class="section contact-section">
+    <view class="section-title">
+      <text class="title-text">了解更多</text>
+    </view>
+    <view class="contact-card">
+      <text class="contact-text">想了解更多友邦保险的产品和服务？</text>
+      <button class="contact-btn" bindtap="onContact">联系我们</button>
+    </view>
+  </view>
+</view>

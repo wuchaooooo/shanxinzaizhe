@@ -1,0 +1,298 @@
+/* pages/about-aia/about-aia.wxss */
+.about-container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding-bottom: 60rpx;
+}
+
+/* 头部横幅 */
+.hero-banner {
+  position: relative;
+  width: 100%;
+  height: 400rpx;
+  overflow: hidden;
+}
+
+.hero-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(226, 29, 39, 0.6), rgba(226, 29, 39, 0.8));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 48rpx;
+}
+
+.hero-title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #ffffff;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* 关键数据 */
+.key-figures {
+  background-color: #ffffff;
+  padding: 48rpx 32rpx;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32rpx;
+  margin: -60rpx 32rpx 32rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 10;
+}
+
+.key-figure-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.key-figure-number {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #ED1C24;
+  margin-bottom: 8rpx;
+}
+
+.key-figure-label {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+/* 通用区块 */
+.section {
+  margin: 32rpx 32rpx;
+}
+
+.section-title {
+  margin-bottom: 24rpx;
+}
+
+.title-text {
+  font-size: 36rpx;
+  font-weight: bold;
+  border-left: 8rpx solid #ED1C24;
+  padding-left: 24rpx;
+}
+
+/* 内容卡片 */
+.content-card {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+}
+
+.content-text {
+  display: block;
+  font-size: 28rpx;
+  line-height: 1.8;
+  color: #334155;
+}
+
+/* 时间线 */
+.timeline {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+}
+
+.timeline-item {
+  display: flex;
+  padding: 24rpx 0;
+  position: relative;
+}
+
+.timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 15rpx;
+  top: 60rpx;
+  bottom: -24rpx;
+  width: 2rpx;
+  background-color: #e2e8f0;
+}
+
+.timeline-dot {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background-color: #E21D27;
+  flex-shrink: 0;
+  margin-right: 24rpx;
+  margin-top: 8rpx;
+}
+
+.timeline-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-year {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #E21D27;
+  margin-bottom: 8rpx;
+}
+
+.timeline-desc {
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+/* 优势网格 */
+.advantages-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+}
+
+.advantage-card {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.advantage-icon {
+  font-size: 64rpx;
+  margin-bottom: 16rpx;
+}
+
+.advantage-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #0f172a;
+  margin-bottom: 12rpx;
+}
+
+.advantage-desc {
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+/* 社会责任网格 */
+.social-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+}
+
+.social-card {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.social-icon {
+  font-size: 56rpx;
+  margin-bottom: 12rpx;
+}
+
+.social-title {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #0f172a;
+  margin-bottom: 8rpx;
+}
+
+.social-desc {
+  font-size: 20rpx;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+/* 业务列表 */
+.business-list {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 16rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+}
+
+.business-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background-color: #f8fafc;
+}
+
+.business-icon {
+  font-size: 48rpx;
+  margin-bottom: 12rpx;
+}
+
+.business-name {
+  font-size: 24rpx;
+  color: #334155;
+  font-weight: 500;
+}
+
+/* 联系卡片 */
+.contact-section {
+  margin-bottom: 60rpx;
+}
+
+.contact-card {
+  background: linear-gradient(135deg, #E21D27 0%, #B81820 100%);
+  border-radius: 24rpx;
+  padding: 48rpx;
+  box-shadow: 0 8rpx 32rpx rgba(226, 29, 39, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.contact-text {
+  font-size: 28rpx;
+  color: #ffffff;
+  margin-bottom: 32rpx;
+  text-align: center;
+}
+
+.contact-btn {
+  background-color: #ffffff;
+  color: #E21D27;
+  padding: 20rpx 64rpx;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+
+.contact-btn::after {
+  border: none;
+}

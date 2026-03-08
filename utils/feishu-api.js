@@ -1,0 +1,248 @@
+// utils/feishu-api.js
+// 飞书开放平台API封装
+
+const FEISHU_CONFIG = {
+  appId: 'cli_a92cddc066e15bd3',
+  appSecret: 'BwAhbWxODX67QifoTjl0ydMpM0F2aD4K',
+  // 联合创始人 base
+  partnersAppToken: 'KeZIbpY9ka7lpfs12KNcoXwenCc',
+  partnersTableId: 'tblt44wzHpZlXPBT',
+  // 静态资源 base（新建）
+  assetsAppToken: 'Ijtdb7F4VaXiPwsUAZCchFzUndb',
+  assetsTableId: 'tblJQN5VgacsKNNo'
+}
+
+// 缓存 tenant_access_token
+let cachedToken = null
+let tokenExpireTime = 0
+
+/**
+ * 获取 tenant_access_token
+ */
+function getTenantAccessToken() {
+  return new Promise((resolve, reject) => {
+    // 如果缓存的 token 还有效（提前5分钟过期），直接返回
+    if (cachedToken && Date.now() < tokenExpireTime - 5 * 60 * 1000) {
+      resolve(cachedToken)
+      return
+    }
+
+    wx.request({
+      url: 'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json'
+      },
+      data: {
+        app_id: FEISHU_CONFIG.appId,
+        app_secret: FEISHU_CONFIG.appSecret
+      },
+      success: (res) => {
+        if (res.statusCode === 200 && res.data.code === 0) {
+          cachedToken = res.data.tenant_access_token
+          // token 有效期 2 小时
+          tokenExpireTime = Date.now() + res.data.expire * 1000
+          console.log('获取 tenant_access_token 成功')
+          resolve(cachedToken)
+        } else {
+          console.error('获取 tenant_access_token 失败:', res.data)
+          reject(res.data)
+        }
+      },
+      fail: (err) => {
+        console.error('获取 tenant_access_token 网络请求失败:', err)
+        reject(err)
+      }
+    })
+  })
+}
+
+/**
+ * 飞书API请求封装
+ */
+async function feishuRequest(url, options = {}) {
+  // 先获取 token
+  const token = await getTenantAccessToken()
+
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: `https://open.feishu.cn${url}`,
+      method: options.method || 'GET',
+      header: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.header
+      },
+      data: options.data,
+      success: (res) => {
+        if (res.statusCode === 200 && res.data.code === 0) {
+          resolve(res.data.data)
+        } else {
+          console.error('飞书API请求失败:', res.data)
+          reject(res.data)
+        }
+      },
+      fail: (err) => {
+        console.error('飞书API网络请求失败:', err)
+        reject(err)
+      }
+    })
+  })
+}
+
+/**
+ * 查询多维表格记录列表
+ * @param {Object} params - 查询参数
+ * @param {number} params.page_size - 每页记录数，默认20，最大500
+ * @param {string} params.page_token - 分页标记
+ * @param {string} params.filter - 筛选条件
+ * @param {string} params.sort - 排序规则
+ * @param {string} params.appToken - base token，默认使用partnersAppToken
+ * @param {string} params.tableId - 表格ID，默认使用partnersTableId
+ */
+function getRecords(params = {}) {
+  const {
+    page_size = 100,
+    page_token,
+    filter,
+    sort,
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+
+  // 手动构建查询字符串（微信小程序不支持URLSearchParams）
+  const queryParts = [`page_size=${page_size}`]
+
+  if (page_token) queryParts.push(`page_token=${encodeURIComponent(page_token)}`)
+  if (filter) queryParts.push(`filter=${encodeURIComponent(filter)}`)
+  if (sort) queryParts.push(`sort=${encodeURIComponent(sort)}`)
+
+  const queryString = queryParts.join('&')
+  const url = `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records?${queryString}`
+
+  return feishuRequest(url)
+}
+
+/**
+ * 获取所有记录（自动处理分页）
+ * @param {Object} params - 查询参数
+ * @param {string} params.appToken - base token，默认使用partnersAppToken
+ * @param {string} params.tableId - 表格ID，默认使用partnersTableId
+ */
+async function getAllRecords(params = {}) {
+  const {
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+
+  let allRecords = []
+  let hasMore = true
+  let pageToken = null
+
+  while (hasMore) {
+    try {
+      const result = await getRecords({
+        page_size: 500,
+        page_token: pageToken,
+        appToken,
+        tableId
+      })
+
+      if (result.items && result.items.length > 0) {
+        allRecords = allRecords.concat(result.items)
+      }
+
+      hasMore = result.has_more
+      pageToken = result.page_token
+    } catch (error) {
+      console.error('获取记录失败:', error)
+      break
+    }
+  }
+
+  return allRecords
+}
+
+/**
+ * 根据记录ID获取单条记录
+ * @param {string} recordId - 记录ID
+ * @param {Object} params - 查询参数
+ * @param {string} params.appToken - base token，默认使用partnersAppToken
+ * @param {string} params.tableId - 表格ID，默认使用partnersTableId
+ */
+function getRecord(recordId, params = {}) {
+  const {
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+  const url = `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`
+  return feishuRequest(url)
+}
+
+/**
+ * 创建记录
+ * @param {Object} fields - 记录字段数据
+ * @param {Object} params - 查询参数
+ * @param {string} params.appToken - base token，默认使用partnersAppToken
+ * @param {string} params.tableId - 表格ID，默认使用partnersTableId
+ */
+function createRecord(fields, params = {}) {
+  const {
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+  const url = `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records`
+  return feishuRequest(url, {
+    method: 'POST',
+    data: { fields }
+  })
+}
+
+/**
+ * 更新记录
+ * @param {string} recordId - 记录ID
+ * @param {Object} fields - 要更新的字段数据
+ * @param {Object} params - 查询参数
+ * @param {string} params.appToken - base token，默认使用partnersAppToken
+ * @param {string} params.tableId - 表格ID，默认使用partnersTableId
+ */
+function updateRecord(recordId, fields, params = {}) {
+  const {
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+  const url = `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`
+  return feishuRequest(url, {
+    method: 'PUT',
+    data: { fields }
+  })
+}
+
+/**
+ * 删除记录
+ * @param {string} recordId - 记录ID
+ * @param {Object} params - 查询参数
+ * @param {string} params.appToken - base token，默认使用partnersAppToken
+ * @param {string} params.tableId - 表格ID，默认使用partnersTableId
+ */
+function deleteRecord(recordId, params = {}) {
+  const {
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+  const url = `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records/${recordId}`
+  return feishuRequest(url, {
+    method: 'DELETE'
+  })
+}
+
+module.exports = {
+  getRecords,
+  getAllRecords,
+  getRecord,
+  createRecord,
+  updateRecord,
+  deleteRecord,
+  getTenantAccessToken,
+  FEISHU_CONFIG
+}

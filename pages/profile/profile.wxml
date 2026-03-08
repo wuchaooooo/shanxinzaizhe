@@ -1,0 +1,254 @@
+<!--pages/profile/profile.wxml-->
+<view class="profile-container">
+  <!-- 顶部导航 -->
+  <view class="top-nav">
+    <view class="nav-btn" bindtap="onBack">
+      <text class="iconfont">‹</text>
+    </view>
+  </view>
+
+  <scroll-view class="profile-scroll" scroll-y bindscroll="onScroll">
+    <!-- 封面 -->
+    <view class="profile-header" style="clip-path: {{headerClipPath}};">
+      <image class="cover-image" src="{{coverImage}}" mode="aspectFill"></image>
+      <view class="cover-overlay"></view>
+    </view>
+
+    <!-- 头像 -->
+    <view class="avatar-container" style="top: {{avatarTop}}rpx;">
+      <view class="avatar-wrapper" style="transform: scale({{avatarScale}}); transform-origin: center;" bindtap="onShowQRCode">
+        <view class="avatar">
+          <view class="avatar-img-wrapper">
+            <image class="avatar-img" src="{{avatar}}" mode="aspectFill"></image>
+          </view>
+        </view>
+        <view class="verified-badge" catchtap="onShowQRCode">
+          <text class="chat-icon-badge">💬</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 占位符，为固定的背景图腾出空间 -->
+    <view style="height: 512rpx;"></view>
+
+    <!-- 个人信息 -->
+    <view class="profile-info">
+      <text class="profile-name">{{name}}</text>
+      <view class="profile-tags">
+        <view class="profile-title-container">
+          <text class="tag tag-primary" wx:for="{{titleLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
+        </view>
+        <view class="profile-school-container">
+          <text class="tag tag-secondary" wx:for="{{schoolLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
+        </view>
+      </view>
+      <view class="profile-stats">
+        <view class="stat-item">
+          <text class="stat-number">{{tenure}}</text>
+          <text class="stat-label">司龄</text>
+        </view>
+        <view class="stat-item">
+          <text class="stat-number">{{customersServed}}</text>
+          <text class="stat-label">服务客户</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 标签页 -->
+    <view class="tabs-section">
+      <view class="tabs">
+        <view
+          class="tab {{activeTab === item ? 'tab-active' : ''}}"
+          wx:for="{{tabs}}"
+          wx:key="index"
+          bindtap="onTabChange"
+          data-tab="{{item}}"
+        >
+          <text class="tab-text">{{item}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 标签页内容 -->
+    <view class="tab-content">
+      <!-- 成就荣誉 -->
+      <view wx:if="{{activeTab === '成就荣誉'}}">
+        <view class="section">
+          <view class="section-header">
+            <text class="section-title">荣誉徽章</text>
+          </view>
+          <view class="badges-grid" wx:if="{{badges.length > 0}}">
+            <!-- 前3个：有查看更多时只展示标题，无查看更多时同时展示副标题 -->
+            <view class="badge-card" wx:for="{{badges}}" wx:key="index" wx:if="{{index < 3}}">
+              <view class="badge-icon badge-icon-{{item.color}}">
+                <text>{{item.icon}}</text>
+              </view>
+              <view class="badge-info">
+                <text class="badge-title">{{item.title}}</text>
+                <text class="badge-desc" wx:if="{{item.desc && badges.length < 4}}">{{item.desc}}</text>
+              </view>
+            </view>
+            <!-- 第4个：查看全部（仅在有4个及以上时显示） -->
+            <view class="badge-card badge-more" wx:if="{{badges.length >= 4}}" bindtap="onShowBadgesModal">
+              <view class="badge-icon badge-icon-more">
+                <text class="badge-more-count">+{{badges.length - 3}}</text>
+              </view>
+              <view class="badge-info">
+                <text class="badge-title badge-more-title">点击查看全部</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="section">
+          <view class="section-header">
+            <text class="section-title">成长足迹</text>
+          </view>
+          <view class="timeline">
+            <view class="timeline-item" wx:for="{{timeline}}" wx:key="index">
+              <view class="timeline-dot {{item.isNewMonth ? 'timeline-dot-' + item.color : 'timeline-dot-plain'}}">
+                <text class="dot-icon">{{item.icon}}</text>
+              </view>
+              <view class="timeline-content">
+                <view class="timeline-header">
+                  <text class="timeline-title">{{item.title}}</text>
+                  <text class="timeline-time">{{item.time}}</text>
+                </view>
+                <text class="timeline-desc">{{item.desc}}</text>
+                <image wx:if="{{item.image}}" class="timeline-image" src="{{item.image}}" mode="aspectFill"></image>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 最近动态 -->
+      <view wx:if="{{activeTab === '最近动态'}}">
+        <view class="section">
+          <view class="timeline">
+            <view class="timeline-item" wx:for="{{activities}}" wx:key="index">
+              <view class="timeline-dot {{item.isNewMonth ? 'timeline-dot-' + item.color : 'timeline-dot-plain'}}">
+                <text class="dot-icon">{{item.icon}}</text>
+              </view>
+              <view class="timeline-content">
+                <view class="timeline-header">
+                  <text class="timeline-title">{{item.title}}</text>
+                  <text class="timeline-time">{{item.time}}</text>
+                </view>
+                <text class="timeline-desc">{{item.desc}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 个人概览 -->
+      <view wx:if="{{activeTab === '个人概览'}}">
+        <view class="overview-section">
+          <view class="overview-card">
+            <view class="card-header">
+              <text class="card-icon">✨</text>
+              <text class="card-title">个人简介</text>
+            </view>
+            <text class="card-content">{{bio}}</text>
+          </view>
+
+          <view class="overview-card">
+            <view class="card-header">
+              <text class="card-icon">🏆</text>
+              <text class="card-title">专业领域</text>
+            </view>
+            <view class="skills-tags">
+              <text class="skill-tag" wx:for="{{skills}}" wx:key="index">{{item}}</text>
+            </view>
+          </view>
+
+          <!-- 联系信息模块已隐藏
+          <view class="overview-card">
+            <view class="card-header">
+              <text class="card-icon">📞</text>
+              <text class="card-title">联系信息</text>
+            </view>
+            <view class="contact-list">
+              <view class="contact-item" wx:for="{{contacts}}" wx:key="index">
+                <view class="contact-left">
+                  <view class="contact-icon contact-icon-{{item.color}}">
+                    <text class="icon">{{item.icon}}</text>
+                  </view>
+                  <view class="contact-info">
+                    <text class="contact-label">{{item.label}}</text>
+                    <text class="contact-value">{{item.value}}</text>
+                  </view>
+                </view>
+                <button class="contact-btn">{{item.action}}</button>
+              </view>
+            </view>
+          </view>
+          -->
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 荣誉徽章弹窗 -->
+  <view class="badges-modal {{showBadgesModal ? 'badges-modal-show' : ''}}" bindtap="onHideBadgesModal">
+    <view class="badges-modal-content {{showBadgesModal ? 'badges-modal-content-show' : ''}}" catchtap="onStopPropagation">
+      <view class="badges-modal-header">
+        <text class="badges-modal-title">全部荣誉</text>
+        <text class="badges-modal-close" bindtap="onHideBadgesModal">✕</text>
+      </view>
+      <scroll-view class="badges-modal-scroll" scroll-y>
+        <view class="badges-modal-grid">
+          <view class="badges-modal-item" wx:for="{{badges}}" wx:key="index">
+            <view class="badges-modal-icon badge-icon-{{item.color}}">
+              <text>{{item.icon}}</text>
+            </view>
+            <text class="badges-modal-item-title">{{item.title}}</text>
+            <text class="badges-modal-item-desc" wx:if="{{item.desc}}">{{item.desc}}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 二维码弹窗 -->
+  <view class="qrcode-modal {{showQRCode ? 'qrcode-modal-show' : ''}}" bindtap="onHideQRCode">
+    <view class="qrcode-content {{showQRCode ? 'qrcode-content-show' : ''}}" catchtap="onStopPropagation">
+      <view class="qrcode-modal-header">
+        <text class="qrcode-modal-title">微信二维码</text>
+        <text class="qrcode-modal-close" bindtap="onHideQRCode">✕</text>
+      </view>
+      <view class="qrcode-image-wrapper">
+        <image class="qrcode-image" src="{{qrcodeImage}}" mode="aspectFill" show-menu-by-longpress="{{true}}"></image>
+        <text class="qrcode-tip">长按识别二维码添加微信</text>
+      </view>
+      <view class="generate-poster-wrapper">
+        <view class="generate-poster-btn" catchtap="onGeneratePoster">
+          <view class="btn-icon-wrapper">
+            <image class="btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit"></image>
+          </view>
+          <text class="btn-text">生成团队海报</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 团队海报弹窗 -->
+  <view class="poster-modal {{showPoster ? 'poster-modal-show' : ''}}" bindtap="onHidePoster">
+    <view class="poster-content {{showPoster ? 'poster-content-show' : ''}}" catchtap="onStopPropagation">
+      <view class="poster-modal-header">
+        <text class="poster-modal-title">团队海报</text>
+        <text class="poster-modal-close" bindtap="onHidePoster">✕</text>
+      </view>
+      <scroll-view class="poster-scroll-view" scroll-y>
+        <view class="poster-image-wrapper">
+          <image class="poster-image" src="{{posterImage}}" mode="widthFix" show-menu-by-longpress="{{true}}"></image>
+          <text class="poster-tip">长按图片保存到相册</text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- Canvas 用于生成海报 -->
+  <canvas canvas-id="posterCanvas" class="poster-canvas" style="width: 750px; height: {{canvasHeight}}px;"></canvas>
+</view>

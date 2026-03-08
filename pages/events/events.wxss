@@ -1,0 +1,391 @@
+/* pages/events/events.wxss */
+.events-container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding-bottom: 120rpx;
+}
+
+/* 头部横幅 */
+.events-banner {
+  position: relative;
+  width: 100%;
+  height: 400rpx;
+  background: linear-gradient(135deg, #E21D27 0%, #B81820 100%);
+  overflow: hidden;
+}
+
+.banner-overlay {
+  position: relative;
+  z-index: 10;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.banner-icon {
+  font-size: 120rpx;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20rpx);
+  }
+}
+
+.banner-title {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.banner-subtitle {
+  font-size: 28rpx;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 近期上线卡片 */
+.coming-soon-card {
+  margin: -60rpx 32rpx 32rpx;
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 48rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  position: relative;
+  z-index: 10;
+}
+
+.card-icon {
+  font-size: 96rpx;
+  margin-bottom: 8rpx;
+}
+
+.card-title {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #0f172a;
+}
+
+.card-desc {
+  font-size: 28rpx;
+  color: #64748b;
+  text-align: center;
+}
+
+/* 功能预告 */
+.features-section {
+  margin: 32rpx;
+}
+
+.section-title {
+  margin-bottom: 24rpx;
+}
+
+.title-text {
+  font-size: 36rpx;
+  font-weight: bold;
+  border-left: 8rpx solid #E21D27;
+  padding-left: 24rpx;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24rpx;
+}
+
+.feature-item {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 48rpx 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  transition: transform 0.3s ease;
+}
+
+.feature-item:active {
+  transform: scale(0.95);
+}
+
+.feature-icon {
+  font-size: 64rpx;
+}
+
+.feature-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+/* 联系我们 */
+.contact-section {
+  margin: 32rpx;
+}
+
+.contact-card {
+  background: linear-gradient(135deg, #E21D27 0%, #B81820 100%);
+  border-radius: 24rpx;
+  padding: 48rpx;
+  box-shadow: 0 8rpx 32rpx rgba(226, 29, 39, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32rpx;
+}
+
+.contact-text {
+  font-size: 28rpx;
+  color: #ffffff;
+  text-align: center;
+}
+
+.contact-btn {
+  background-color: #ffffff;
+  color: #E21D27;
+  padding: 20rpx 64rpx;
+  border-radius: 48rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+
+.contact-btn::after {
+  border: none;
+}
+
+/* 以下样式将在未来版本重新上线 */
+/*
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20rpx);
+  padding: 32rpx;
+  border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
+}
+
+.back-btn {
+  width: 80rpx;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0f172a;
+}
+
+.back-btn .iconfont {
+  font-size: 64rpx;
+}
+
+.header-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  flex: 1;
+  text-align: center;
+}
+
+.placeholder {
+  width: 80rpx;
+}
+
+.tabs-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background-color: #ffffff;
+  padding: 39rpx 32rpx;
+  border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
+}
+
+.tabs {
+  display: flex;
+  gap: 64rpx;
+  overflow-x: auto;
+}
+
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 16rpx;
+  border-bottom: 6rpx solid transparent;
+  transition: all 0.3s;
+}
+
+.tab-active {
+  border-bottom-color: #c20000;
+}
+
+.tab-text {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.tab-active .tab-text {
+  color: #0f172a;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  padding: 32rpx;
+  margin-top: 140rpx;
+}
+
+.event-card {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  border: 1rpx solid rgba(194, 0, 0, 0.05);
+}
+
+.event-card:last-child {
+  opacity: 0.8;
+}
+
+.event-image {
+  width: 100%;
+  height: 400rpx;
+}
+
+.event-card:last-child .event-image {
+  filter: grayscale(100%);
+}
+
+.event-content {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.event-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.event-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  color: #0f172a;
+  flex: 1;
+}
+
+.event-badge {
+  padding: 8rpx 20rpx;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  font-weight: 500;
+}
+
+.event-badge-active {
+  background-color: rgba(34, 197, 94, 0.1);
+}
+
+.event-badge-active .badge-text {
+  color: #16a34a;
+}
+
+.event-badge-upcoming {
+  background-color: rgba(194, 0, 0, 0.1);
+}
+
+.event-badge-upcoming .badge-text {
+  color: #c20000;
+}
+
+.event-badge-ended {
+  background-color: #e2e8f0;
+}
+
+.event-badge-ended .badge-text {
+  color: #64748b;
+}
+
+.event-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  color: #64748b;
+  font-size: 28rpx;
+}
+
+.info-icon {
+  font-size: 28rpx;
+}
+
+.event-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 16rpx;
+  border-top: 1rpx solid rgba(194, 0, 0, 0.05);
+}
+
+.event-desc {
+  font-size: 24rpx;
+  color: #c20000;
+  font-weight: 500;
+}
+
+.event-card:last-child .event-desc {
+  color: #94a3b8;
+}
+
+.event-btn {
+  padding: 16rpx 48rpx;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+
+.event-btn::after {
+  border: none;
+}
+
+.event-btn-active {
+  background-color: #c20000;
+  color: #ffffff;
+}
+
+.event-btn-upcoming {
+  background-color: rgba(194, 0, 0, 0.1);
+  color: #c20000;
+}
+
+.event-btn-ended {
+  background-color: #f1f5f9;
+  color: #64748b;
+}
+*/

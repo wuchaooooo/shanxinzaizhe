@@ -1,0 +1,379 @@
+/* pages/home/home.wxss */
+.home-container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding-bottom: 120rpx;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* 头部 */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20rpx);
+  border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
+  padding: 24rpx 16rpx 24rpx 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left {
+  flex-shrink: 0;
+}
+
+.header-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-right {
+  flex-shrink: 0;
+  width: 180rpx;
+}
+
+.logos-container {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.logo-image {
+  height: 80rpx;
+  min-width: 80rpx;
+  max-width: 180rpx;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.logo-visible {
+  opacity: 1;
+}
+
+.logo-heartbeat {
+  animation: heartbeat 1.2s ease-in-out;
+}
+
+@keyframes heartbeat {
+  0%   { transform: scale(1); }
+  15%  { transform: scale(1.12); }
+  30%  { transform: scale(1); }
+  45%  { transform: scale(1.08); }
+  60%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+
+.company-name {
+  font-size: 36rpx;
+  font-weight: bold;
+  line-height: 1.2;
+}
+
+.company-subtitle {
+  font-size: 20rpx;
+  color: #c20000;
+  font-weight: bold;
+  letter-spacing: 2rpx;
+}
+
+.header-right {
+  display: flex;
+  gap: 24rpx;
+}
+
+.icon-btn {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  position: relative;
+}
+
+.icon-btn:active {
+  background-color: #f1f5f9;
+}
+
+.iconfont {
+  font-size: 48rpx;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  width: 16rpx;
+  height: 16rpx;
+  background-color: #c20000;
+  border-radius: 50%;
+  border: 4rpx solid #ffffff;
+}
+
+/* 欢迎横幅 */
+.welcome-banner {
+  margin: 48rpx 32rpx;
+  margin-top: 176rpx;
+  position: relative;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background-color: #c20000;
+  padding: 48rpx;
+  box-shadow: 0 8rpx 32rpx rgba(194, 0, 0, 0.2);
+}
+
+.banner-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+.banner-title {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #ffffff;
+  margin-bottom: 16rpx;
+}
+
+.banner-desc {
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 32rpx;
+}
+
+.banner-btn {
+  background-color: #ffffff;
+  color: #c20000;
+  padding: 16rpx 48rpx;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+  width: fit-content;
+  min-width: 240rpx;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+  animation: button-breathing 2s ease-in-out infinite;
+}
+
+@keyframes button-breathing {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 8rpx 24rpx rgba(194, 0, 0, 0.3);
+  }
+}
+
+.banner-decoration {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40rpx);
+}
+
+.banner-decoration-1 {
+  top: 0;
+  right: 0;
+  width: 256rpx;
+  height: 256rpx;
+  background-color: rgba(255, 255, 255, 0.1);
+  margin-top: -128rpx;
+  margin-right: -128rpx;
+}
+
+.banner-decoration-2 {
+  bottom: 0;
+  left: 0;
+  width: 192rpx;
+  height: 192rpx;
+  background-color: rgba(0, 0, 0, 0.1);
+  margin-bottom: -96rpx;
+  margin-left: -96rpx;
+}
+
+/* 关于友邦保险 */
+.about-card {
+  margin: 0 32rpx 32rpx;
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1rpx solid #f1f5f9;
+}
+
+.about-left {
+  display: flex;
+  align-items: center;
+  gap: 32rpx;
+}
+
+.about-icon {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 16rpx;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60rpx;
+  overflow: hidden;
+}
+
+.about-icon-image {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+.about-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.about-title {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #0f172a;
+}
+
+.about-subtitle {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.about-right {
+  display: flex;
+  align-items: center;
+  color: #c20000;
+}
+
+.about-link {
+  font-size: 24rpx;
+  font-weight: bold;
+}
+
+/* 核心价值 */
+.values-section {
+  padding: 16rpx 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 32rpx 32rpx;
+}
+
+.section-title {
+  font-size: 36rpx;
+  font-weight: bold;
+  border-left: 8rpx solid #c20000;
+  padding-left: 24rpx;
+}
+
+.section-link {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.values-scroll {
+  white-space: nowrap;
+  padding: 0 32rpx;
+  overflow-x: scroll;
+  overflow-y: hidden;
+}
+
+.value-card {
+  display: inline-block;
+  width: 560rpx;
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+  margin-right: 32rpx;
+  border: 1rpx solid #f1f5f9;
+  vertical-align: top;
+}
+
+.value-image {
+  width: 100%;
+  height: 256rpx;
+  object-fit: cover;
+}
+
+.value-content {
+  padding: 32rpx;
+  min-height: 200rpx;
+}
+
+.value-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.value-icon {
+  font-size: 40rpx;
+  color: #c20000;
+}
+
+.value-title {
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.value-desc {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 1.8;
+  display: block;
+  white-space: pre-line;
+  word-wrap: break-word;
+}
+
+/* 统计数据 */
+.stats-section {
+  padding: 32rpx 32rpx;
+  display: flex;
+  justify-content: space-between;
+  text-align: center;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.stat-item-border {
+  border-left: 1rpx solid #e2e8f0;
+  border-right: 1rpx solid #e2e8f0;
+}
+
+.stat-number {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #c20000;
+}
+
+.stat-label {
+  font-size: 20rpx;
+  color: #64748b;
+  margin-top: 8rpx;
+}

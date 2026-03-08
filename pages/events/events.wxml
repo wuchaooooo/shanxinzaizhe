@@ -1,0 +1,101 @@
+<!--pages/events/events.wxml-->
+<view class="events-container">
+  <!-- 头部横幅 -->
+  <view class="events-banner">
+    <view class="banner-overlay">
+      <text class="banner-icon">🎉</text>
+      <text class="banner-title">精彩活动</text>
+      <text class="banner-subtitle">即将与您见面</text>
+    </view>
+  </view>
+
+  <!-- 近期上线卡片 -->
+  <view class="coming-soon-card">
+    <view class="card-icon">🚀</view>
+    <text class="card-title">近期上线</text>
+    <text class="card-desc">我们正在精心筹备精彩活动</text>
+    <text class="card-desc">敬请期待</text>
+  </view>
+
+  <!-- 功能预告 -->
+  <view class="features-section">
+    <view class="section-title">
+      <text class="title-text">即将推出</text>
+    </view>
+    <view class="features-grid">
+      <view class="feature-item">
+        <text class="feature-icon">📅</text>
+        <text class="feature-name">活动日历</text>
+      </view>
+      <view class="feature-item">
+        <text class="feature-icon">🎯</text>
+        <text class="feature-name">在线报名</text>
+      </view>
+      <view class="feature-item">
+        <text class="feature-icon">📸</text>
+        <text class="feature-name">精彩回顾</text>
+      </view>
+      <view class="feature-item">
+        <text class="feature-icon">🏆</text>
+        <text class="feature-name">活动奖励</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 联系我们 -->
+  <view class="contact-section">
+    <view class="contact-card">
+      <text class="contact-text">想了解更多活动信息？</text>
+      <button class="contact-btn" bindtap="onContact">联系我们</button>
+    </view>
+  </view>
+</view>
+
+<!-- 以下代码将在未来版本重新上线 -->
+<!--
+<view class="events-container">
+  标签页
+  <view class="tabs-container">
+    <view class="tabs">
+      <view
+        class="tab-item {{activeTab === item ? 'tab-active' : ''}}"
+        wx:for="{{tabs}}"
+        wx:key="index"
+        bindtap="onTabChange"
+        data-tab="{{item}}"
+      >
+        <text class="tab-text">{{item}}</text>
+      </view>
+    </view>
+  </view>
+
+  活动列表
+  <view class="events-list">
+    <view class="event-card" wx:for="{{events}}" wx:key="index">
+      <image class="event-image" src="{{item.image}}" mode="aspectFill"></image>
+      <view class="event-content">
+        <view class="event-header">
+          <text class="event-title">{{item.title}}</text>
+          <view class="event-badge event-badge-{{item.status}}">
+            <text class="badge-text">{{item.statusText}}</text>
+          </view>
+        </view>
+        <view class="event-info">
+          <view class="info-item">
+            <text class="info-icon">📅</text>
+            <text class="info-text">{{item.date}}</text>
+          </view>
+          <view class="info-item">
+            <text class="info-icon">📍</text>
+            <text class="info-text">{{item.location}}</text>
+          </view>
+        </view>
+        <view class="event-footer">
+          <text class="event-desc">{{item.desc}}</text>
+          <button class="event-btn event-btn-{{item.status}}">{{item.btnText}}</button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
+-->

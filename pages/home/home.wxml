@@ -1,0 +1,86 @@
+<!--pages/home/home.wxml-->
+<view class="home-container">
+  <!-- 头部 -->
+  <view class="header">
+    <view class="header-left">
+      <view class="logos-container" bindtap="onLogoTap">
+        <image class="logo-image {{logoLoaded ? 'logo-visible' : ''}} {{logoAnimate ? 'logo-heartbeat' : ''}}" src="{{shanxinzheliLogoUrl}}" mode="aspectFit"></image>
+      </view>
+    </view>
+    <view class="header-center">
+      <text class="company-name">善心浙里</text>
+      <text class="company-subtitle">AIA AGENCY</text>
+    </view>
+    <view class="header-right"></view>
+  </view>
+
+  <!-- 欢迎横幅 -->
+  <view class="welcome-banner">
+    <view class="banner-content">
+      <text class="banner-title">欢迎你，未来的保险企业家</text>
+      <text class="banner-desc">以专业诚信与爱，助力家庭和企业健康长久好生活</text>
+      <button class="banner-btn" bindtap="onConsult">加入团队</button>
+    </view>
+    <view class="banner-decoration banner-decoration-1"></view>
+    <view class="banner-decoration banner-decoration-2"></view>
+  </view>
+
+  <!-- 统计数据 -->
+  <view class="stats-section">
+    <view class="stat-item">
+      <text class="stat-number">{{totalCustomers}}</text>
+      <text class="stat-label">服务客户</text>
+    </view>
+    <view class="stat-item stat-item-border">
+      <text class="stat-number">{{teamCount}}</text>
+      <text class="stat-label">联合创始人</text>
+    </view>
+    <view class="stat-item">
+      <text class="stat-number">{{instructorCount}}</text>
+      <text class="stat-label">专业讲师</text>
+    </view>
+  </view>
+
+  <!-- 核心价值 -->
+  <view class="values-section">
+    <view class="section-header">
+      <text class="section-title">核心价值</text>
+    </view>
+    <scroll-view class="values-scroll" scroll-x>
+      <view class="value-card" wx:for="{{values}}" wx:key="index">
+        <image class="value-image" src="{{item.image}}" mode="aspectFill"></image>
+        <view class="value-content">
+          <view class="value-header">
+            <text class="value-icon">{{item.icon}}</text>
+            <text class="value-title">{{item.title}}</text>
+          </view>
+          <text class="value-desc">{{item.desc}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 更多 -->
+  <view class="values-section">
+    <view class="section-header">
+      <text class="section-title">更多</text>
+    </view>
+  </view>
+
+  <!-- 关于友邦保险 -->
+  <view class="about-card">
+    <view class="about-left">
+      <view class="about-icon">
+        <image class="about-icon-image" src="{{aiaLogoUrl}}" mode="aspectFit"></image>
+      </view>
+      <view class="about-text">
+        <text class="about-title">了解友邦保险</text>
+        <text class="about-subtitle">百年基业 值得信赖</text>
+      </view>
+    </view>
+    <view class="about-right" bindtap="onLearnMore">
+      <text class="about-link">了解更多</text>
+      <text class="iconfont">›</text>
+    </view>
+  </view>
+</view>
