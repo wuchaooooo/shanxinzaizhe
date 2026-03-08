@@ -372,7 +372,7 @@ function transformFeishuRecord(record) {
     customersServed: fields[mapping.customersServed] || '',
     bio: fields[mapping.bio] || '',
     isInstructor: parseIsInstructor(fields[mapping.isInstructor]),
-    wxOpenid: fields[mapping.wxOpenid] || '', // 微信小程序 openid，用于身份识别
+    wxOpenid: (fields[mapping.wxOpenid] || '').trim(), // 微信小程序 openid，用于身份识别
     // 使用飞书 Base 返回的 url 字段（已验证可用）
     imageUrl: fields[mapping.image] ? fields[mapping.image][0]?.url : '',
     qrcodeUrl: fields[mapping.qrcode] ? fields[mapping.qrcode][0]?.url : '',
@@ -429,9 +429,23 @@ function downloadImageWithAuth(url, token, employeeId = '', type = 'avatar') {
       },
       success: (res) => {
         if (res.statusCode === 200) {
-          // 直接使用临时路径，不持久化保存
-          console.log(`[${employeeId}] ${type} 下载成功（临时路径）:`, res.tempFilePath)
-          resolve(res.tempFilePath)
+          const fs = wx.getFileSystemManager()
+          // 生成持久化路径
+          const fileName = `${type}_${employeeId}_${Date.now()}.png`
+          const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
+
+          fs.saveFile({
+            tempFilePath: res.tempFilePath,
+            filePath: filePath,
+            success: (saveRes) => {
+              console.log(`[${employeeId}] ${type} 持久化成功:`, saveRes.savedFilePath)
+              resolve(saveRes.savedFilePath)
+            },
+            fail: (saveErr) => {
+              console.error(`[${employeeId}] ${type} 持久化失败,使用临时路径:`, saveErr)
+              resolve(res.tempFilePath)
+            }
+          })
         } else {
           console.error('下载图片HTTP状态码错误:', {
             url: url,
@@ -532,6 +546,9 @@ function getPartnersFromCache() {
       // 既没有 imagePath 也没有 data.image，设为空
       partner.image = ''
       console.log(`[${partner.name}] 没有头像路径`)
+    } else if (partner.image && partner.image.includes('tmp')) {
+      console.warn(`[${partner.name}] 清除无效的临时头像路径: ${partner.image}`)
+      partner.image = ''
     } else {
       console.log(`[${partner.name}] 从 data.image 保留头像: ${partner.image}`)
     }
@@ -547,6 +564,9 @@ function getPartnersFromCache() {
       }
     } else if (!partner.qrcode) {
       // 既没有 qrcodePath 也没有 data.qrcode，设为空
+      partner.qrcode = ''
+    } else if (partner.qrcode && partner.qrcode.includes('tmp')) {
+      console.warn(`[${partner.name}] 清除无效的临时二维码路径: ${partner.qrcode}`)
       partner.qrcode = ''
     }
 
@@ -593,8 +613,26 @@ async function fetchFeishuPartnersText() {
       // 优先用营销员工号作为缓存 key，退而用 record_id
       const cacheKey = String(fields[mapping.employeeId] || record.record_id || '')
       const lastModified = String(fields[mapping.lastModifiedDate] || '')
+      const fs = wx.getFileSystemManager()
 
+      // 检查缓存是否有效（时间匹配 且 文件路径存在）
+      let isCacheValid = false
       if (cacheKey && cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
+        const cachedPath = cache[cacheKey].data.image
+        if (cachedPath) {
+          try {
+            fs.accessSync(cachedPath)
+            isCacheValid = true
+          } catch (e) {
+            console.warn(`[${cacheKey}] 缓存路径失效,准备重新下载:`, cachedPath)
+          }
+        } else {
+          // 没有头像的记录，时间匹配即认为有效
+          isCacheValid = true
+        }
+      }
+
+      if (isCacheValid) {
         // 未变更：复用缓存数据，优先使用内存中的图片路径，否则尝试从缓存的 imagePath 恢复
         newCache[cacheKey] = cache[cacheKey]
         const existing = currentMap[cacheKey]

@@ -33,19 +33,19 @@
 
   <!-- 合伙人网格 -->
   <view class="partners-grid">
-    <view class="partner-item" wx:for="{{filteredPartners}}" wx:key="name" bindtap="onPartnerTap" data-name="{{item.name}}">
+    <view class="partner-item" wx:for="{{filteredPartners}}" wx:key="employeeId" bindtap="onPartnerTap" data-name="{{item.name}}">
       <view class="partner-avatar {{!item.loaded ? 'partner-avatar-loading' : 'partner-avatar-loaded'}}">
         <view class="partner-avatar-img-wrapper">
           <image class="partner-avatar-img {{item.loaded ? 'partner-avatar-img-show' : ''}}" src="{{item.image}}" mode="aspectFill"></image>
         </view>
       </view>
       <view class="partner-info">
-        <text class="partner-name">{{item.name}}</text>
+        <text class="partner-name {{!item.loaded ? 'skeleton-text' : ''}}">{{item.name}}</text>
         <view class="partner-school-container">
-          <text class="partner-school" wx:for="{{item.schoolLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
+          <text class="partner-school {{!item.loaded ? 'skeleton-text' : ''}}" wx:for="{{item.schoolLines}}" wx:key="*this" wx:for-item="line">{{line || '占位'}}</text>
         </view>
         <view class="partner-title-container">
-          <text class="partner-title" wx:for="{{item.titleLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
+          <text class="partner-title {{!item.loaded ? 'skeleton-text' : ''}}" wx:for="{{item.titleLines}}" wx:key="*this" wx:for-item="line">{{line || '占位'}}</text>
         </view>
       </view>
     </view>
@@ -59,11 +59,11 @@
     <text class="join-title">善心浙里与您共创丰盛未来！</text>
     <text class="join-desc">以合作互助的态度实现伙伴完美人生</text>
     <text class="join-desc">以专业用心的态度锁住客户幸福生活</text>
-    <view class="join-btn" catchtap="{{isCofounder ? 'onGeneratePoster' : 'onApplyPartner'}}">
+    <view class="join-btn {{(isCofounder && !allImagesLoaded) ? 'join-btn-disabled' : ''}}" catchtap="{{(isCofounder && !allImagesLoaded) ? '' : (isCofounder ? 'onGeneratePoster' : 'onApplyPartner')}}">
       <view class="btn-icon-wrapper" wx:if="{{isCofounder}}">
         <image class="btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit"></image>
       </view>
-      <text class="btn-text">{{isCofounder ? '生成团队海报' : '申请加入团队'}}</text>
+      <text class="btn-text">{{isCofounder ? (allImagesLoaded ? '生成团队海报' : '图片加载中...') : '申请加入团队'}}</text>
     </view>
   </view>
 </view>

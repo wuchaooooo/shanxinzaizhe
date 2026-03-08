@@ -11,6 +11,9 @@ App({
       traceUser: true
     })
 
+    // 获取 openid 并与飞书联合创始人数据比对身份（尽早发起网络请求）
+    this.fetchOpenidAndMatchUser()
+
     // 如果使用飞书数据源，先从本地缓存恢复数据（立即可用），再异步拉取最新
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
       // 优先加载静态资源（logo、banner等）
@@ -29,9 +32,6 @@ App({
       }
       await this.preloadFeishuData()
     }
-
-    // 获取 openid 并与飞书联合创始人数据比对身份
-    this.fetchOpenidAndMatchUser()
 
     // 小程序启动时执行
     console.log('AIA Excellence 小程序启动')
@@ -131,7 +131,7 @@ App({
   _matchCurrentUser(openid) {
     const partners = this.globalData.partnersData
     if (!partners || partners.length === 0) return
-    const matched = partners.find(p => p.wxOpenid && p.wxOpenid === openid) || null
+    const matched = partners.find(p => p.wxOpenid && p.wxOpenid.trim() === openid.trim()) || null
     this.globalData.currentUser = matched
     console.log('身份识别结果:', matched ? `联合创始人 ${matched.name}` : '普通用户')
     this.globalData.currentUserListeners.forEach(cb => cb(matched))

@@ -45,9 +45,23 @@ function downloadImageWithAuth(url, token, code, ext) {
       },
       success: (res) => {
         if (res.statusCode === 200) {
-          // 直接使用临时路径，不持久化保存
-          console.log(`[${code}] 下载成功（临时路径）:`, res.tempFilePath)
-          resolve(res.tempFilePath)
+          const fs = wx.getFileSystemManager()
+          // 生成持久化路径
+          const fileName = `asset_${code}_${Date.now()}${ext || ''}`
+          const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
+
+          fs.saveFile({
+            tempFilePath: res.tempFilePath,
+            filePath: filePath,
+            success: (saveRes) => {
+              console.log(`[${code}] 资源持久化成功:`, saveRes.savedFilePath)
+              resolve(saveRes.savedFilePath)
+            },
+            fail: (saveErr) => {
+              console.error(`[${code}] 资源持久化失败,退而使用临时路径:`, saveErr)
+              resolve(res.tempFilePath)
+            }
+          })
         } else {
           console.error('下载资源HTTP状态码错误:', {
             url: url,
@@ -230,14 +244,25 @@ async function fetchFeishuAssets(onAssetReady) {
     // 检查哪些资源需要下载
     const cache = loadAssetsCache()
     const needDownload = []
+    const fs = wx.getFileSystemManager()
 
     assets.forEach(asset => {
       const cached = cache[asset.code]
       const lastModified = asset.lastModified
 
-      // 使用 lastModified 判断文件是否变化（和合伙人数据保持一致）
-      if (!cached || cached.lastModified !== lastModified) {
-        // 新资源或文件已更新
+      // 检查缓存是否有效（时间匹配 且 文件路径存在）
+      let isCacheValid = false
+      if (cached && cached.lastModified === lastModified && cached.path) {
+        try {
+          fs.accessSync(cached.path)
+          isCacheValid = true
+        } catch (e) {
+          console.warn(`[${asset.code}] 静态资源文件丢失,准备重新下载:`, cached.path)
+        }
+      }
+
+      if (!isCacheValid) {
+        // 新资源或文件已更新/丢失
         needDownload.push(asset)
       }
     })

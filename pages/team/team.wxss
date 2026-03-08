@@ -224,6 +224,48 @@
   }
 }
 
+/* 骨架屏文字占位符 */
+.skeleton-text {
+  color: transparent !important;
+  background: linear-gradient(90deg,
+    rgba(194, 0, 0, 0.08) 25%,
+    rgba(194, 0, 0, 0.15) 50%,
+    rgba(194, 0, 0, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 8rpx;
+  user-select: none;
+  display: inline-block;
+  overflow: hidden;
+}
+
+.partner-name.skeleton-text {
+  width: 120rpx;
+  height: 26rpx;
+}
+
+.partner-school.skeleton-text {
+  width: 120rpx;
+  height: 20rpx;
+}
+
+.partner-title.skeleton-text {
+  width: 96rpx;
+  height: 18rpx;
+  padding: 6rpx 12rpx;
+  box-sizing: content-box;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 .partner-info {
   display: flex;
   flex-direction: column;
@@ -328,6 +370,13 @@
   align-items: center;
   justify-content: center;
   gap: 16rpx;
+  transition: all 0.3s ease;
+}
+
+.join-btn-disabled {
+  background-color: #ccc;
+  box-shadow: none;
+  opacity: 0.8;
 }
 
 .btn-icon-wrapper {

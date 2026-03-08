@@ -123,6 +123,15 @@ Page({
       this.setData({ shanxinLogoUrl: shanxinLogoPath })
     }
 
+    // 注册静态资源下载完成回调
+    this._assetsDataCb = (assets) => {
+      if (assets && assets['shanxinzheli']) {
+        const path = typeof assets['shanxinzheli'] === 'string' ? assets['shanxinzheli'] : assets['shanxinzheli'].path
+        this.setData({ shanxinLogoUrl: path })
+      }
+    }
+    app.globalData.assetsDataListeners.push(this._assetsDataCb)
+
     await this.loadFeishuPartner(options)
   },
 
@@ -240,14 +249,20 @@ Page({
 
   onUnload() {
     const app = getApp()
-    if (this._imageReadyCb) {
-      app.globalData.imageReadyListeners = app.globalData.imageReadyListeners.filter(cb => cb !== this._imageReadyCb)
-      this._imageReadyCb = null
-    }
-    if (this._partnersDataCb) {
-      app.globalData.partnersDataListeners = app.globalData.partnersDataListeners.filter(cb => cb !== this._partnersDataCb)
-      this._partnersDataCb = null
-    }
+
+    // 清理监听器
+    const listeners = [
+      { list: 'imageReadyListeners', cb: '_imageReadyCb' },
+      { list: 'partnersDataListeners', cb: '_partnersDataCb' },
+      { list: 'assetsDataListeners', cb: '_assetsDataCb' }
+    ]
+
+    listeners.forEach(({ list, cb }) => {
+      if (this[cb]) {
+        app.globalData[list] = app.globalData[list].filter(callback => callback !== this[cb])
+        this[cb] = null
+      }
+    })
   },
 
   onBack() {
@@ -298,20 +313,24 @@ Page({
   },
 
   onGeneratePoster() {
-    let partners = getPartnersDataSync()
-    let currentPartner
-    if (this.useEmployeeId) {
-      const currentPartnerIndex = partners.findIndex(p => p.employeeId === this.partnerId)
-      currentPartner = currentPartnerIndex >= 0 ? partners[currentPartnerIndex] : null
-    } else {
-      const currentPartnerIndex = this.partnerId
-      currentPartner = partners[currentPartnerIndex] || partners[0]
+    const partners = getPartnersDataSync()
+
+    // 查找当前合伙人
+    const currentPartnerIndex = this.useEmployeeId
+      ? partners.findIndex(p => p.employeeId === this.partnerId)
+      : this.partnerId
+
+    const currentPartner = this.useEmployeeId
+      ? (currentPartnerIndex >= 0 ? partners[currentPartnerIndex] : null)
+      : (partners[currentPartnerIndex] || partners[0])
+
+    // 同步页面中已加载的图片路径
+    if (currentPartner) {
+      if (this.data.avatar) currentPartner.image = this.data.avatar
+      if (this.data.qrcodeImage) currentPartner.qrcode = this.data.qrcodeImage
     }
 
-    // 先显示弹窗状态，然后生成海报
-    // this.setData({ showPoster: true })
-    // 这里因为原来逻辑是先生成才展示，所以还是等生成完毕由生成函数控制setData为true比较好。
-    generateTeamPoster(this, 'posterCanvas', currentPartner)
+    generateTeamPoster(this, 'posterCanvas', currentPartner, partners)
   },
 
   onHidePoster() {

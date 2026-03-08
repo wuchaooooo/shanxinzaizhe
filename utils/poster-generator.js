@@ -2,18 +2,20 @@
 // 团队海报生成逻辑，供 profile 和 team 页面共用
 const { getPartnersDataSync } = require('./partners-data-loader.js')
 const { getAssetPath } = require('./assets-loader.js')
+const feishuApi = require('./feishu-api.js')
 
 /**
  * 生成团队海报
  * @param {Object} page         - 调用页面的 this（用于 createCanvasContext / setData）
  * @param {string} canvasId     - 页面内 canvas 的 canvas-id
  * @param {Object|null} currentPartner - 需要排在第一的联合创始人，null 则不置顶
+ * @param {Array|null} partnersData - 合伙人数据数组，如果不传则使用 getPartnersDataSync()
  */
-async function generateTeamPoster(page, canvasId, currentPartner) {
+async function generateTeamPoster(page, canvasId, currentPartner, partnersData = null) {
     try {
         wx.showLoading({ title: '生成中...' })
 
-        let partners = getPartnersDataSync()
+        let partners = partnersData || getPartnersDataSync()
 
         // 将当前合伙人移到第一个位置
         if (currentPartner) {
@@ -93,16 +95,30 @@ async function generateTeamPoster(page, canvasId, currentPartner) {
             } catch (e) { console.error('绘制头部图片失败:', e) }
         }
 
-        // 批量获取头像信息
+        // 批量获取头像信息 (限制并发数为5)
         const avatarInfoMap = new Map()
-        await Promise.all(partners.map(async (partner) => {
-            if (partner.image) {
+        const executing = []
+        for (const partner of partners) {
+            if (!partner.image) continue
+
+            const promise = (async () => {
                 try {
                     const info = await wx.getImageInfo({ src: partner.image })
                     avatarInfoMap.set(partner.image, { width: info.width, height: info.height, ratio: info.width / info.height })
-                } catch (e) { console.error('获取头像信息失败:', partner.name, e) }
+                } catch (e) {
+                    console.error('获取头像信息失败:', partner.name, partner.image, e)
+                }
+            })()
+
+            // 包装 promise 以便完成后从执行队列移除自己
+            const p = promise.then(() => executing.splice(executing.indexOf(p), 1))
+            executing.push(p)
+
+            if (executing.length >= 5) {
+                await Promise.race(executing)
             }
-        }))
+        }
+        await Promise.all(executing)
 
         // 绘制成员网格
         for (let i = 0; i < partners.length; i++) {
@@ -118,7 +134,7 @@ async function generateTeamPoster(page, canvasId, currentPartner) {
             ctx.fill()
 
             if (partner.image) {
-                const avatarInfo = avatarInfoMap.get(partner.image)
+                const avatarInfo = avatarInfoMap.get(partner.image) || { ratio: 1 } // 添加容错兜底
                 if (avatarInfo) {
                     try {
                         const imgRatio = avatarInfo.ratio
@@ -241,12 +257,38 @@ async function generateTeamPoster(page, canvasId, currentPartner) {
                 ctx.drawImage(qrcodeImageUrl, qrStartX, qrY, qrSize, qrSize)
             } catch (e) { console.error('绘制团队二维码失败:', e) }
         }
-        if (personalQRCode) {
+
+        // 确保个人二维码已下载
+        let finalPersonalQRCode = personalQRCode;
+        if (!finalPersonalQRCode && currentPartner && currentPartner.qrcodeUrl) {
+            try {
+                // 获取飞书 token 并临时下载二维码
+                const token = await feishuApi.getTenantAccessToken()
+                const res = await new Promise((resolve, reject) => {
+                    wx.downloadFile({
+                        url: currentPartner.qrcodeUrl,
+                        header: {
+                            'Authorization': `Bearer ${token}`
+                        },
+                        success: (r) => {
+                            if (r.statusCode === 200) resolve(r.tempFilePath)
+                            else reject(new Error(`HTTP ${r.statusCode}`))
+                        },
+                        fail: reject
+                    })
+                })
+                finalPersonalQRCode = res;
+            } catch (e) {
+                console.error('临时下载个人二维码失败:', e)
+            }
+        }
+
+        if (finalPersonalQRCode) {
             try {
                 const personalQrX = qrStartX + qrSize + qrGap
                 ctx.setFillStyle('#ffffff')
                 ctx.fillRect(personalQrX - 5, qrY - 5, qrSize + 10, qrSize + 10)
-                ctx.drawImage(personalQRCode, personalQrX, qrY, qrSize, qrSize)
+                ctx.drawImage(finalPersonalQRCode, personalQrX, qrY, qrSize, qrSize)
             } catch (e) { console.error('绘制个人二维码失败:', e) }
         }
 

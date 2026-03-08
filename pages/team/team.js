@@ -41,11 +41,30 @@ function processPartnerData(partner) {
   }
 }
 
-function getInitialPartners() {
-  return getPartnersDataSync().map(partner => processPartnerData({
-    ...partner,
-    loaded: !!partner.image
+// 生成占位符数据（用于首次加载时显示骨架屏）
+function generatePlaceholders(count = 15) {
+  return Array.from({ length: count }, (_, i) => ({
+    name: `加载中...`,
+    school: '',
+    title: '',
+    image: '',
+    loaded: false,
+    schoolLines: [''],
+    titleLines: [''],
+    employeeId: `placeholder_${i}`
   }))
+}
+
+function getInitialPartners() {
+  const cached = getPartnersDataSync()
+  if (cached.length > 0) {
+    return cached.map(partner => processPartnerData({
+      ...partner,
+      loaded: !!partner.image
+    }))
+  }
+  // 如果没有缓存数据，返回占位符
+  return generatePlaceholders()
 }
 
 Page({
@@ -60,7 +79,13 @@ Page({
     isApplyMode: false,
     isCofounder: false,  // 当前用户是否为联合创始人
     loading: false,
+    allImagesLoaded: false, // 是否所有合伙人头像已加载完成
     shanxinLogoUrl: '' // 善心logo
+  },
+
+  checkAllImagesLoaded(partners) {
+    if (!partners || partners.length === 0) return false
+    return partners.every(p => p.loaded)
   },
 
   onLoad() {
@@ -70,6 +95,16 @@ Page({
       this.setData({ shanxinLogoUrl: shanxinLogoPath })
     }
 
+    const app = getApp()
+    // 注册静态资源下载完成回调
+    this._assetsDataCb = (assets) => {
+      if (assets && assets['shanxinzheli']) {
+        const path = typeof assets['shanxinzheli'] === 'string' ? assets['shanxinzheli'] : assets['shanxinzheli'].path
+        this.setData({ shanxinLogoUrl: path })
+      }
+    }
+    app.globalData.assetsDataListeners.push(this._assetsDataCb)
+
     const partnersData = getPartnersDataSync()
 
     if (partnersData.length > 0) {
@@ -77,14 +112,17 @@ Page({
         ...partner,
         loaded: !!partner.image
       }))
-      this.setData({ partners, filteredPartners: partners })
+      this.setData({
+        partners,
+        filteredPartners: partners,
+        allImagesLoaded: this.checkAllImagesLoaded(partners)
+      })
       this.calculateStats()
     } else {
       this.loadFeishuData()
     }
 
     // 注册头像下载完成回调，每下载好一张就更新对应卡片（只处理头像，不处理二维码）
-    const app = getApp()
     this._imageReadyCb = (name, path) => {
       const partners = this.data.partners
       const idx = partners.findIndex(p => p.name === name)
@@ -99,7 +137,10 @@ Page({
         updates[`filteredPartners[${fidx}].image`] = path
         updates[`filteredPartners[${fidx}].loaded`] = true
       }
-      this.setData(updates)
+
+      this.setData(updates, () => {
+        this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
+      })
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
 
@@ -109,7 +150,12 @@ Page({
         ...partner,
         loaded: !!partner.image
       }))
-      this.setData({ partners, filteredPartners: partners, searchQuery: '' })
+      this.setData({
+        partners,
+        filteredPartners: partners,
+        searchQuery: '',
+        allImagesLoaded: this.checkAllImagesLoaded(partners)
+      })
       this.calculateStats()
     }
     app.globalData.partnersDataListeners.push(this._partnersDataCb)
@@ -127,16 +173,39 @@ Page({
 
   onUnload() {
     const app = getApp()
-    app.globalData.imageReadyListeners = app.globalData.imageReadyListeners.filter(cb => cb !== this._imageReadyCb)
-    this._imageReadyCb = null
-    app.globalData.partnersDataListeners = app.globalData.partnersDataListeners.filter(cb => cb !== this._partnersDataCb)
-    this._partnersDataCb = null
-    app.globalData.currentUserListeners = app.globalData.currentUserListeners.filter(cb => cb !== this._currentUserCb)
-    this._currentUserCb = null
-    if (this._animateTimer) {
-      clearInterval(this._animateTimer)
-      this._animateTimer = null
-    }
+
+    // 清理监听器
+    const listeners = [
+      { list: 'imageReadyListeners', cb: '_imageReadyCb' },
+      { list: 'partnersDataListeners', cb: '_partnersDataCb' },
+      { list: 'currentUserListeners', cb: '_currentUserCb' },
+      { list: 'assetsDataListeners', cb: '_assetsDataCb' }
+    ]
+
+    listeners.forEach(({ list, cb }) => {
+      if (this[cb]) {
+        app.globalData[list] = app.globalData[list].filter(callback => callback !== this[cb])
+        this[cb] = null
+      }
+    })
+
+    // 清理定时器
+    const timers = ['_animateTimer', '_posterCheckInterval']
+    const timeouts = ['_posterTimeout']
+
+    timers.forEach(timer => {
+      if (this[timer]) {
+        clearInterval(this[timer])
+        this[timer] = null
+      }
+    })
+
+    timeouts.forEach(timeout => {
+      if (this[timeout]) {
+        clearTimeout(this[timeout])
+        this[timeout] = null
+      }
+    })
   },
 
   // 加载飞书数据（缓存为空时的冷启动路径）
@@ -290,14 +359,47 @@ Page({
     }
   },
 
+  // 等待所有头像加载完成
+  waitForImagesLoaded(callback) {
+    wx.showLoading({ title: '等待头像加载...' })
+
+    this._posterCheckInterval = setInterval(() => {
+      if (this.checkAllImagesLoaded(this.data.partners)) {
+        clearInterval(this._posterCheckInterval)
+        this._posterCheckInterval = null
+        wx.hideLoading()
+        callback()
+      }
+    }, 300)
+
+    // 设置超时（30秒后强制执行）
+    this._posterTimeout = setTimeout(() => {
+      if (this._posterCheckInterval) {
+        clearInterval(this._posterCheckInterval)
+        this._posterCheckInterval = null
+      }
+      wx.hideLoading()
+      wx.showToast({ title: '部分头像未加载完成', icon: 'none', duration: 2000 })
+      setTimeout(callback, 2000)
+    }, 30000)
+  },
+
   // 联合创始人：生成团队海报
   onGeneratePoster() {
     const app = getApp()
     const currentUser = app.globalData.currentUser
     if (!currentUser) return
 
-    // 生成海报
-    generateTeamPoster(this, 'posterCanvas', currentUser)
+    const generatePoster = () => {
+      generateTeamPoster(this, 'posterCanvas', currentUser, this.data.partners)
+    }
+
+    // 检查是否所有头像都已加载
+    if (!this.data.allImagesLoaded) {
+      this.waitForImagesLoaded(generatePoster)
+    } else {
+      generatePoster()
+    }
   },
 
   onHidePoster() {
