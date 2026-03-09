@@ -1,0 +1,138 @@
+/* pages/timeline-item-edit/timeline-item-edit.wxss */
+.container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding: 32rpx;
+  padding-bottom: 160rpx;
+}
+
+.form-card {
+  background-color: #ffffff;
+  border-radius: 24rpx;
+  padding: 32rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+}
+
+.form-row {
+  padding: 20rpx 0 12rpx;
+}
+
+.form-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.required {
+  color: #E21D27;
+  margin-left: 4rpx;
+}
+
+.picker-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 80rpx;
+  padding: 0 24rpx;
+  background-color: #f5f5f5;
+  border-radius: 16rpx;
+  margin-top: 8rpx;
+}
+
+.picker-value {
+  font-size: 28rpx;
+  color: #0f172a;
+}
+
+.picker-placeholder {
+  font-size: 28rpx;
+  color: #94a3b8;
+}
+
+.picker-arrow {
+  font-size: 32rpx;
+  color: #94a3b8;
+}
+
+.row-divider {
+  height: 1rpx;
+  background-color: #e5e7eb;
+  margin: 12rpx 0;
+}
+
+.row-divider-light {
+  height: 16rpx;
+}
+
+.form-input {
+  width: 100%;
+  height: 88rpx;
+  padding: 0 24rpx;
+  background-color: #f5f5f5;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: #0f172a;
+  box-sizing: border-box;
+  margin-bottom: 16rpx;
+}
+
+.form-textarea {
+  width: 100%;
+  min-height: 120rpx;
+  padding: 24rpx;
+  background-color: #f5f5f5;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  color: #0f172a;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+
+.actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 32rpx;
+  background-color: #ffffff;
+  border-top: 1rpx solid rgba(226, 29, 39, 0.1);
+  box-shadow: 0 -2rpx 8rpx rgba(0, 0, 0, 0.05);
+  display: flex;
+  gap: 16rpx;
+}
+
+.save-btn {
+  flex: 1;
+  height: 88rpx;
+  background: linear-gradient(135deg, #E21D27 0%, #B81820 100%);
+  color: #ffffff;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 16rpx rgba(226, 29, 39, 0.3);
+}
+
+.save-btn::after {
+  border: none;
+}
+
+.delete-btn {
+  width: 160rpx;
+  height: 88rpx;
+  background-color: #ffffff;
+  color: #ef4444;
+  border: 2rpx solid #ef4444;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-btn::after {
+  border: none;
+}

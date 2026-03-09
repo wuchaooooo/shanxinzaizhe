@@ -6,6 +6,9 @@
     "pages/event-detail/event-detail",
     "pages/event-edit/event-edit",
     "pages/profile/profile",
+    "pages/profile-edit/profile-edit",
+    "pages/timeline-item-edit/timeline-item-edit",
+    "pages/badge-select/badge-select",
     "pages/about-aia/about-aia"
   ],
   "window": {

@@ -13,6 +13,13 @@ const DATA_SOURCE_CONFIG = {
   // 图片下载并发数（降低并发数可以避免飞书限流）
   imageConcurrency: 2,
 
+  // 自助编辑功能开关（false = 原有逻辑完全不变，true = 详情页从新表读取数据并显示编辑按钮）
+  useNewProfileTable: true,
+
+  // 自助编辑新表配置
+  profileEditAppToken: 'RCQKb4Gb5aTxSFstU8NccgiDn1g',
+  profileEditTableId: 'tblvPv0CTmePIHge',
+
   // 飞书数据字段映射配置
   feishuFieldMapping: {
     name: '姓名',
@@ -21,8 +28,8 @@ const DATA_SOURCE_CONFIG = {
     joinDate: '入司时间',
     customersServed: '截止到目前服务客户数',
     bio: '个人介绍',     // 飞书用的是"个人介绍"而不是"个人简介"
-    image: '个人头像',   // 飞书用的是"个人头像"而不是"头像"
-    qrcode: '个人微信二维码',  // 飞书用的是"个人微信二维码"
+    imageKey: '头像链接_飞书_image_key',   // 新表图片字段
+    qrcodeKey: '个人微信二维码链接_飞书_image_key',  // 新表二维码字段
     employeeId: '营销员工号',  // 唯一标识
     badges: '荣誉勋章',  // 飞书用的是"荣誉勋章"
     timeline: '在友邦浙江的成长足迹',  // 成长足迹

@@ -1,17 +1,13 @@
 <!--pages/profile/profile.wxml-->
 <view class="profile-container">
-  <!-- 顶部导航 -->
-  <view class="top-nav">
-    <view class="nav-btn" bindtap="onBack">
-      <text class="iconfont">‹</text>
-    </view>
-  </view>
-
   <scroll-view class="profile-scroll" scroll-y bindscroll="onScroll">
     <!-- 封面 -->
     <view class="profile-header" style="clip-path: {{headerClipPath}};">
-      <image class="cover-image" src="{{coverImage}}" mode="aspectFill"></image>
+      <image class="cover-image" src="{{coverImage}}" mode="aspectFill" binderror="onAvatarError"></image>
       <view class="cover-overlay"></view>
+      <view wx:if="{{canEdit}}" class="cover-more-btn" bindtap="onShowActionSheet">
+        <text class="cover-more-icon">⋯</text>
+      </view>
     </view>
 
     <!-- 头像 -->
@@ -19,7 +15,7 @@
       <view class="avatar-wrapper" style="transform: scale({{avatarScale}}); transform-origin: center;" bindtap="onShowQRCode">
         <view class="avatar">
           <view class="avatar-img-wrapper">
-            <image class="avatar-img" src="{{avatar}}" mode="aspectFill"></image>
+            <image class="avatar-img" src="{{avatar}}" mode="aspectFill" binderror="onAvatarError"></image>
           </view>
         </view>
         <view class="verified-badge" catchtap="onShowQRCode">
@@ -219,16 +215,8 @@
         <text class="qrcode-modal-close" bindtap="onHideQRCode">✕</text>
       </view>
       <view class="qrcode-image-wrapper">
-        <image class="qrcode-image" src="{{qrcodeImage}}" mode="aspectFill" show-menu-by-longpress="{{true}}"></image>
+        <image class="qrcode-image" src="{{qrcodeImage}}" mode="aspectFill" show-menu-by-longpress="{{true}}" binderror="onQrcodeError"></image>
         <text class="qrcode-tip">长按识别二维码添加微信</text>
-      </view>
-      <view class="generate-poster-wrapper" wx:if="{{!isCofounder}}">
-        <view class="generate-poster-btn" catchtap="onGeneratePoster">
-          <view class="btn-icon-wrapper">
-            <image class="btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit"></image>
-          </view>
-          <text class="btn-text">生成团队海报</text>
-        </view>
       </view>
     </view>
   </view>
@@ -256,4 +244,25 @@
 
   <!-- Canvas 用于生成海报 -->
   <canvas canvas-id="posterCanvas" class="poster-canvas" style="width: 750px; height: {{canvasHeight}}px;"></canvas>
+</view>
+
+<!-- 更多操作弹窗遮罩 -->
+<view class="action-sheet-mask {{showActionSheet ? 'action-sheet-mask-show' : ''}}" bindtap="onHideActionSheet"></view>
+
+<!-- 更多操作弹窗 -->
+<view class="profile-action-sheet {{showActionSheet ? 'action-sheet-show' : ''}}">
+  <view class="action-sheet-header">
+    <text class="action-sheet-title">更多操作</text>
+    <text class="action-sheet-close" bindtap="onHideActionSheet">✕</text>
+  </view>
+  <view class="action-sheet-body">
+    <view class="action-icons-row">
+      <view class="action-icon-item" bindtap="onEditProfile">
+        <view class="action-icon-circle">
+          <text class="action-icon-emoji">✏️</text>
+        </view>
+        <text class="action-icon-label">编辑资料</text>
+      </view>
+    </view>
+  </view>
 </view>

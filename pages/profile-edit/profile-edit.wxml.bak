@@ -1,0 +1,196 @@
+<!--pages/profile-edit/profile-edit.wxml-->
+<view class="edit-container">
+
+  <!-- 图片区 -->
+  <view class="edit-card">
+    <view class="section-title-row">
+      <text class="section-title">图片</text>
+    </view>
+    <view class="image-row">
+      <view class="image-col" bindtap="onChooseAvatar">
+        <view class="image-picker-box">
+          <image wx:if="{{formData.avatarImage}}" src="{{formData.avatarImage.path}}" class="image-preview" mode="aspectFill"/>
+          <view wx:else class="image-placeholder">
+            <text class="upload-icon">📷</text>
+            <text class="upload-text">点击上传</text>
+          </view>
+        </view>
+        <text class="image-col-label">个人头像</text>
+      </view>
+      <view class="image-col-divider"></view>
+      <view class="image-col" bindtap="onChooseQrcode">
+        <view class="image-picker-box">
+          <image wx:if="{{formData.qrcodeImage}}" src="{{formData.qrcodeImage.path}}" class="image-preview" mode="aspectFill"/>
+          <view wx:else class="image-placeholder">
+            <text class="upload-icon">📷</text>
+            <text class="upload-text">点击上传</text>
+          </view>
+        </view>
+        <text class="image-col-label">微信二维码</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 基本信息 -->
+  <view class="edit-card">
+    <view class="section-title-row">
+      <text class="section-title">基本信息</text>
+    </view>
+    <view class="info-row">
+      <view class="info-label">
+        <text class="info-icon">👤</text>
+        <text class="info-label-text">姓名<text class="required">*</text></text>
+      </view>
+      <input class="row-input" value="{{formData.name}}" data-field="name" bindinput="onInput" placeholder="请输入"/>
+    </view>
+    <view class="row-divider"></view>
+    <view class="info-col-row">
+      <view class="info-label">
+        <text class="info-icon">🎓</text>
+        <text class="info-label-text">毕业院校</text>
+      </view>
+      <view class="tags-list" wx:if="{{formData.schoolList.length > 0}}">
+        <view class="skill-chip" wx:for="{{formData.schoolList}}" wx:key="index">
+          <text class="chip-text">{{item}}</text>
+          <text class="chip-delete" data-index="{{index}}" catchtap="onDeleteSchool">×</text>
+        </view>
+      </view>
+      <view class="add-skill-row">
+        <input class="tag-input" value="{{newSchool}}" bindinput="onNewSchoolInput" placeholder="输入院校后点添加" confirm-type="done" bindconfirm="onAddSchool"/>
+        <view class="tag-add-btn" catchtap="onAddSchool">添加</view>
+      </view>
+    </view>
+    <view class="row-divider"></view>
+    <view class="info-col-row">
+      <view class="info-label">
+        <text class="info-icon">💼</text>
+        <text class="info-label-text">前职工作</text>
+      </view>
+      <view class="tags-list" wx:if="{{formData.titleList.length > 0}}">
+        <view class="skill-chip" wx:for="{{formData.titleList}}" wx:key="index">
+          <text class="chip-text">{{item}}</text>
+          <text class="chip-delete" data-index="{{index}}" catchtap="onDeleteTitle">×</text>
+        </view>
+      </view>
+      <view class="add-skill-row">
+        <input class="tag-input" value="{{newTitle}}" bindinput="onNewTitleInput" placeholder="输入职位后点添加" confirm-type="done" bindconfirm="onAddTitle"/>
+        <view class="tag-add-btn" catchtap="onAddTitle">添加</view>
+      </view>
+    </view>
+    <view class="row-divider"></view>
+    <view class="info-row">
+      <view class="info-label">
+        <text class="info-icon">📅</text>
+        <text class="info-label-text">入司时间</text>
+      </view>
+      <picker mode="date" value="{{formData.joinDate || ''}}" start="2000-01-01" end="2030-12-31" bindchange="onJoinDateChange">
+        <view class="row-picker">
+          <text class="{{formData.joinDate ? 'row-picker-value' : 'row-picker-placeholder'}}">{{formData.joinDate || '请选择'}}</text>
+          <text class="row-picker-arrow">›</text>
+        </view>
+      </picker>
+    </view>
+    <view class="row-divider"></view>
+    <view class="info-row">
+      <view class="info-label">
+        <text class="info-icon">👥</text>
+        <text class="info-label-text">服务客户数</text>
+      </view>
+      <input class="row-input" type="number" value="{{formData.customersServed}}" data-field="customersServed" bindinput="onInput" placeholder="请输入"/>
+    </view>
+    <view class="row-divider"></view>
+    <view class="info-col-row">
+      <view class="info-label">
+        <text class="info-icon">✍️</text>
+        <text class="info-label-text">个人介绍</text>
+      </view>
+      <textarea class="col-textarea" value="{{formData.bio}}" data-field="bio" bindinput="onInput" placeholder="请输入个人介绍" auto-height maxlength="500"/>
+    </view>
+  </view>
+
+  <!-- 专业领域 -->
+  <view class="form-section">
+    <view class="section-title-row">
+      <text class="section-title">专业领域</text>
+    </view>
+    <view class="tags-list" wx:if="{{formData.skillsList.length > 0}}">
+      <view class="skill-chip" wx:for="{{formData.skillsList}}" wx:key="index">
+        <text class="chip-text">{{item}}</text>
+        <text class="chip-delete" data-index="{{index}}" catchtap="onDeleteSkill">×</text>
+      </view>
+    </view>
+    <view class="add-skill-row">
+      <input class="tag-input" value="{{newSkill}}" bindinput="onNewSkillInput" placeholder="输入领域名称后点添加" confirm-type="done" bindconfirm="onAddSkill"/>
+      <view class="tag-add-btn" catchtap="onAddSkill">添加</view>
+    </view>
+  </view>
+
+  <!-- 荣誉勋章 -->
+  <view class="form-section">
+    <view class="section-title-row">
+      <text class="section-title">荣誉勋章</text>
+      <view class="section-edit-btn" bindtap="onEditBadges">编辑</view>
+    </view>
+    <view wx:if="{{formData.badgesList.length > 0}}" class="selected-badges-list">
+      <view class="selected-badge-item" wx:for="{{formData.badgesList}}" wx:key="index">
+        <text class="selected-badge-title">{{item.title}}</text>
+        <text class="selected-badge-desc">{{item.desc}}</text>
+      </view>
+    </view>
+    <text wx:else class="empty-section-hint">暂无勋章，点击编辑添加</text>
+  </view>
+
+  <!-- 成长足迹 -->
+  <view class="form-section">
+    <view class="section-title-row">
+      <text class="section-title">成长足迹</text>
+      <view class="section-edit-btn" data-type="timeline" bindtap="onAddItem">添加</view>
+    </view>
+    <view class="summary-list" id="timeline-list">
+      <view class="summary-item timeline-summary-item {{drag.active && drag.type=='timeline' && drag.toIndex==index ? 'drag-over' : ''}} {{drag.active && drag.type=='timeline' && drag.fromIndex==index ? 'drag-source' : ''}}" wx:for="{{formData.timelineList}}" wx:key="index">
+        <view class="drag-handle" data-type="timeline" data-index="{{index}}" bindtouchstart="onDragStart" bindtouchmove="onDragMove" bindtouchend="onDragEnd">
+          <text class="drag-icon">⋮⋮</text>
+        </view>
+        <view class="summary-body">
+          <text class="summary-time">{{item.timeDisplay || '—'}}</text>
+          <text class="summary-title">{{item.title || '（未填标题）'}}</text>
+        </view>
+        <view class="summary-actions">
+          <text class="summary-edit" data-type="timeline" data-index="{{index}}" catchtap="onEditItem">编辑</text>
+          <text class="summary-delete" data-type="timeline" data-index="{{index}}" catchtap="onDeleteTimeline">删除</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 最近动态 -->
+  <view class="form-section">
+    <view class="section-title-row">
+      <text class="section-title">最近动态</text>
+      <view class="section-edit-btn" data-type="activities" bindtap="onAddItem">添加</view>
+    </view>
+    <view class="summary-list" id="activities-list">
+      <view class="summary-item activities-summary-item {{drag.active && drag.type=='activities' && drag.toIndex==index ? 'drag-over' : ''}} {{drag.active && drag.type=='activities' && drag.fromIndex==index ? 'drag-source' : ''}}" wx:for="{{formData.activitiesList}}" wx:key="index">
+        <view class="drag-handle" data-type="activities" data-index="{{index}}" bindtouchstart="onDragStart" bindtouchmove="onDragMove" bindtouchend="onDragEnd">
+          <text class="drag-icon">⋮⋮</text>
+        </view>
+        <view class="summary-body">
+          <text class="summary-time">{{item.timeDisplay || '—'}}</text>
+          <text class="summary-title">{{item.title || '（未填标题）'}}</text>
+        </view>
+        <view class="summary-actions">
+          <text class="summary-edit" data-type="activities" data-index="{{index}}" catchtap="onEditItem">编辑</text>
+          <text class="summary-delete" data-type="activities" data-index="{{index}}" catchtap="onDeleteActivity">删除</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 保存按钮 -->
+  <view class="actions-section">
+    <button class="save-btn" bindtap="onSave" disabled="{{saving}}">
+      {{saving ? '保存中...' : '保存资料'}}
+    </button>
+  </view>
+
+</view>

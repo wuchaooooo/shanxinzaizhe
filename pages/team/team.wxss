@@ -87,6 +87,7 @@
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   overflow: hidden;
   position: relative;
+  transition: all 0.3s ease;
 }
 
 .team-stats-content {
@@ -94,6 +95,7 @@
   display: flex;
   justify-content: space-between;
   text-align: center;
+  transition: padding 0.3s ease;
 }
 
 .team-stat-item {
@@ -138,9 +140,7 @@
 }
 
 .team-stats-poster-btn-hidden {
-  opacity: 0;
-  pointer-events: none;
-  animation: none;
+  display: none;
 }
 
 .team-stats-poster-btn:active {
@@ -672,4 +672,32 @@
   position: fixed;
   left: -9999px;
   top: 0;
+}
+
+/* 未完善资料的占位项样式 */
+.partner-item-incomplete {
+  opacity: 0.9;
+}
+
+.partner-avatar-incomplete {
+  background: linear-gradient(135deg, rgba(194, 0, 0, 0.1) 0%, rgba(194, 0, 0, 0.05) 100%);
+  border: 3rpx dashed rgba(194, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.partner-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-icon {
+  font-size: 80rpx;
+  color: rgba(194, 0, 0, 0.6);
+  font-weight: 300;
+  line-height: 1;
 }

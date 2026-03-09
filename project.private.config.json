@@ -15,11 +15,18 @@
     "miniprogram": {
       "list": [
         {
+          "name": "pages/profile/profile",
+          "pathName": "pages/profile/profile",
+          "query": "employeeId=190005889",
+          "scene": null,
+          "launchMode": "default"
+        },
+        {
           "name": "team",
           "pathName": "pages/team/team",
           "query": "shareFrom=190005889",
-          "scene": null,
-          "launchMode": "default"
+          "launchMode": "default",
+          "scene": null
         },
         {
           "name": "home",

@@ -1,0 +1,54 @@
+<!--pages/timeline-item-edit/timeline-item-edit.wxml-->
+<view class="container">
+
+  <view class="form-card">
+
+    <!-- 开始时间 -->
+    <view class="form-row">
+      <text class="form-label">开始时间<text class="required">*</text></text>
+      <picker mode="date" value="{{item.timeStart || ''}}" start="2000-01-01" end="2035-12-31" bindchange="onTimeStartChange">
+        <view class="picker-box">
+          <text class="{{item.timeStart ? 'picker-value' : 'picker-placeholder'}}">{{item.timeStart || '选择日期'}}</text>
+          <text class="picker-arrow">›</text>
+        </view>
+      </picker>
+    </view>
+
+    <view class="row-divider"></view>
+
+    <!-- 结束时间 -->
+    <view class="form-row">
+      <text class="form-label">结束时间（可选）</text>
+      <picker mode="date" fields="month" value="{{item.timeEnd || ''}}" start="2000-01" end="2035-12" bindchange="onTimeEndChange">
+        <view class="picker-box">
+          <text class="{{item.timeEnd ? 'picker-value' : 'picker-placeholder'}}">{{item.timeEnd || '选择年月'}}</text>
+          <text class="picker-arrow">›</text>
+        </view>
+      </picker>
+    </view>
+
+    <view class="row-divider"></view>
+
+    <!-- 主标题 -->
+    <view class="form-row">
+      <text class="form-label">主标题<text class="required">*</text></text>
+    </view>
+    <input class="form-input" value="{{item.title}}" bindinput="onTitleInput" placeholder="请输入主标题"/>
+
+    <view class="row-divider-light"></view>
+
+    <!-- 副标题 -->
+    <view class="form-row">
+      <text class="form-label">副标题</text>
+    </view>
+    <textarea class="form-textarea" value="{{item.desc}}" bindinput="onDescInput" placeholder="请输入副标题（可选）" auto-height maxlength="200"/>
+
+  </view>
+
+  <!-- 保存和删除 -->
+  <view class="actions">
+    <button class="save-btn" bindtap="onSave">保存</button>
+    <button wx:if="{{mode === 'edit'}}" class="delete-btn" bindtap="onDelete">删除</button>
+  </view>
+
+</view>

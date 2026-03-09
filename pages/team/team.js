@@ -1,44 +1,42 @@
 // pages/team/team.js
-const { getPartnersDataSync, fetchFeishuPartnersText, downloadImagesBackground } = require('../../utils/partners-data-loader.js')
+const { loadAllProfilesText, downloadAllProfileImages } = require('../../utils/profile-loader.js')
 const { getAssetPath } = require('../../utils/assets-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
 const { generateTeamPoster, generateShareImage } = require('../../utils/poster-generator.js')
 
-// 将包含符号的文本拆分成数组
-function splitBySymbols(text) {
-  if (!text) return [text]
-
-  // 常见的中文分隔符号
-  const chineseSymbols = /[、，；]/
-
-  // 如果包含中文符号,按这些符号拆分
-  if (chineseSymbols.test(text)) {
-    return text.split(chineseSymbols).filter(item => item.trim())
-  }
-
-  // 检查是否包含中文字符
-  const hasChinese = /[\u4e00-\u9fa5]/.test(text)
-
-  // 如果包含中文且有空格,按空格拆分(中文之间的空格)
-  if (hasChinese && /\s/.test(text)) {
-    return text.split(/\s+/).filter(item => item.trim())
-  }
-
-  // 其他情况(纯英文、英文空格等),不拆分
-  return [text]
-}
-
-// 处理合伙人数据,将school和title拆分成数组
-// team页面只显示第一个
+// 处理合伙人数据
+// team页面只显示第一个学校和职位
 function processPartnerData(partner) {
-  const schoolLines = splitBySymbols(partner.school)
-  const titleLines = splitBySymbols(partner.title)
+  // school 和 title 现在是数组
+  const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school || '']
+  const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title || '']
 
   return {
     ...partner,
-    schoolLines: schoolLines.length > 0 ? [schoolLines[0]] : [''],
-    titleLines: titleLines.length > 0 ? [titleLines[0]] : ['']
+    schoolLines: schoolArray.length > 0 ? [schoolArray[0]] : [''],
+    titleLines: titleArray.length > 0 ? [titleArray[0]] : ['']
   }
+}
+
+// 按入司时间倒序排序（最新的在前）
+function sortByJoinDate(partners) {
+  return partners.sort((a, b) => {
+    const dateA = a.joinDate || ''
+    const dateB = b.joinDate || ''
+    // 倒序：dateB > dateA 时返回正数
+    return dateB.localeCompare(dateA)
+  })
+}
+
+// 检测是否有未完善的资料（有 openid 但没有 employeeId）
+function checkIncompleteProfile(partners) {
+  const incomplete = partners.find(p => p.wxOpenid && !p.employeeId)
+  return incomplete ? incomplete.wxOpenid : null
+}
+
+// 过滤掉未完善的资料（用于正常显示）
+function filterCompleteProfiles(partners) {
+  return partners.filter(p => p.employeeId)
 }
 
 // 生成占位符数据（用于首次加载时显示骨架屏）
@@ -56,9 +54,12 @@ function generatePlaceholders(count = 15) {
 }
 
 function getInitialPartners() {
-  const cached = getPartnersDataSync()
+  const app = getApp()
+  const cached = app.globalData.partnersData || []
   if (cached.length > 0) {
-    return cached.map(partner => processPartnerData({
+    // 过滤掉未完善的资料，只显示有 employeeId 的
+    const completeProfiles = filterCompleteProfiles(cached)
+    return completeProfiles.map(partner => processPartnerData({
       ...partner,
       loaded: false  // 初始设为 false，等待图片实际加载完成后再设为 true
     }))
@@ -83,7 +84,9 @@ Page({
     shanxinLogoUrl: '', // 善心logo
     posterBtnLogoLoaded: false, // 海报按钮logo是否加载完成
     posterScrollReady: true, // 控制scroll-view的渲染，用于重置滚动位置
-    shareImageUrl: '' // 分享图片路径
+    shareImageUrl: '', // 分享图片路径
+    hasIncompleteProfile: false, // 是否有未完善的资料（有openid但无employeeId）
+    incompleteProfileOpenid: '' // 未完善资料的openid
   },
 
   checkAllImagesLoaded(partners) {
@@ -108,17 +111,29 @@ Page({
     }
     app.globalData.assetsDataListeners.push(this._assetsDataCb)
 
-    const partnersData = getPartnersDataSync()
+    const partnersData = app.globalData.partnersData || []
 
     if (partnersData.length > 0) {
-      const partners = partnersData.map(partner => processPartnerData({
+      // 检测是否有未完善的资料
+      const incompleteOpenid = checkIncompleteProfile(partnersData)
+      
+      // 只有当前用户的 openID 和未完善资料的 openID 一致时，才显示占位项
+      const currentOpenid = app.globalData.openid || ''
+      const shouldShowIncomplete = incompleteOpenid && currentOpenid && incompleteOpenid === currentOpenid
+      
+      // 过滤掉未完善的资料，只显示有 employeeId 的
+      const completeProfiles = filterCompleteProfiles(partnersData)
+      const sortedData = sortByJoinDate([...completeProfiles])
+      const partners = sortedData.map(partner => processPartnerData({
         ...partner,
-        loaded: false  // 初始设为 false，等待图片实际加载完成
+        loaded: !!partner.image  // 如果已有图片路径则标记为已加载
       }))
       this.setData({
         partners,
         filteredPartners: partners,
-        allImagesLoaded: false
+        allImagesLoaded: this.checkAllImagesLoaded(partners),
+        hasIncompleteProfile: shouldShowIncomplete,
+        incompleteProfileOpenid: incompleteOpenid || ''
       })
       this.calculateStats()
     } else {
@@ -163,7 +178,17 @@ Page({
 
     // 注册文本数据刷新回调，飞书数据更新时重建列表
     this._partnersDataCb = (partnersData) => {
-      const partners = partnersData.map(partner => processPartnerData({
+      // 检测是否有未完善的资料
+      const incompleteOpenid = checkIncompleteProfile(partnersData)
+      
+      // 只有当前用户的 openID 和未完善资料的 openID 一致时，才显示占位项
+      const currentOpenid = app.globalData.openid || ''
+      const shouldShowIncomplete = incompleteOpenid && currentOpenid && incompleteOpenid === currentOpenid
+      
+      // 过滤掉未完善的资料，只显示有 employeeId 的
+      const completeProfiles = filterCompleteProfiles(partnersData)
+      const sortedData = sortByJoinDate([...completeProfiles])
+      const partners = sortedData.map(partner => processPartnerData({
         ...partner,
         loaded: !!partner.image
       }))
@@ -171,7 +196,9 @@ Page({
         partners,
         filteredPartners: partners,
         searchQuery: '',
-        allImagesLoaded: this.checkAllImagesLoaded(partners)
+        allImagesLoaded: this.checkAllImagesLoaded(partners),
+        hasIncompleteProfile: shouldShowIncomplete,
+        incompleteProfileOpenid: incompleteOpenid || ''
       })
       this.calculateStats()
     }
@@ -232,21 +259,40 @@ Page({
     this.setData({ loading: true })
     try {
       // 阶段一：先拿文本数据，立即展示
-      const { partners: partnersData, changedIds } = await fetchFeishuPartnersText()
+      const partnersData = await loadAllProfilesText()
       const app = getApp()
       app.globalData.partnersData = partnersData
 
-      const partners = partnersData.map(partner => processPartnerData({
+      // 检测是否有未完善的资料
+      const incompleteOpenid = checkIncompleteProfile(partnersData)
+      
+      // 只有当前用户的 openID 和未完善资料的 openID 一致时，才显示占位项
+      const currentOpenid = app.globalData.openid || ''
+      const shouldShowIncomplete = incompleteOpenid && currentOpenid && incompleteOpenid === currentOpenid
+
+      // 过滤掉未完善的资料，只显示有 employeeId 的
+      const completeProfiles = filterCompleteProfiles(partnersData)
+      const sortedData = sortByJoinDate([...completeProfiles])
+      const partners = sortedData.map(partner => processPartnerData({
         ...partner,
         loaded: false  // 图片还没下载
       }))
-      this.setData({ partners, filteredPartners: partners, loading: false })
+      this.setData({ 
+        partners, 
+        filteredPartners: partners, 
+        loading: false,
+        hasIncompleteProfile: shouldShowIncomplete,
+        incompleteProfileOpenid: incompleteOpenid || ''
+      })
       this.calculateStats()
 
-      // 阶段二：后台下载图片，只对有变更的合伙人触发重渲染
-      downloadImagesBackground(partnersData, (name, path) => {
-        app.globalData.imageReadyListeners.forEach(cb => cb(name, path))
-      }, changedIds)
+      // 阶段二：后台下载图片
+      downloadAllProfileImages(partnersData, (type, path, employeeId, name) => {
+        if (type === 'avatar') {
+          // 通知所有监听器
+          app.globalData.imageReadyListeners.forEach(cb => cb(name, path))
+        }
+      }, 2)
     } catch (error) {
       console.error('加载飞书数据失败:', error)
       this.setData({ loading: false })
@@ -317,12 +363,24 @@ Page({
     } else {
       // 根据姓名、学校或职位过滤
       const filtered = this.data.partners.filter(partner => {
-        return partner.name.toLowerCase().includes(query) ||
-          partner.school.toLowerCase().includes(query) ||
-          partner.title.toLowerCase().includes(query)
+        const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school || '']
+        const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title || '']
+        const schoolMatch = schoolArray.some(s => s.toLowerCase().includes(query))
+        const titleMatch = titleArray.some(t => t.toLowerCase().includes(query))
+        return partner.name.toLowerCase().includes(query) || schoolMatch || titleMatch
       })
       this.setData({
         filteredPartners: filtered
+      })
+    }
+  },
+
+  // 点击未完善资料的占位项
+  onIncompleteProfileTap() {
+    const openid = this.data.incompleteProfileOpenid
+    if (openid) {
+      wx.navigateTo({
+        url: `/pages/profile-edit/profile-edit?openid=${openid}`
       })
     }
   },
@@ -506,8 +564,39 @@ Page({
   // 图片加载失败
   onImageError(e) {
     const name = e.currentTarget.dataset.name
-    console.log('图片加载失败:', name)
-    // 图片加载失败时，保持 loaded: false，继续显示骨架屏
-    // 后台的 imageReadyListeners 会重新下载图片
+    console.log('图片加载失败（可能是临时缓存已清理）:', name)
+
+    const app = getApp()
+    const partners = this.data.partners
+    const idx = partners.findIndex(p => p.name === name)
+
+    if (idx !== -1) {
+      // 清除失效的图片路径，标记为未加载
+      const updates = {
+        [`partners[${idx}].image`]: '',
+        [`partners[${idx}].loaded`]: false
+      }
+      const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
+      if (fidx !== -1) {
+        updates[`filteredPartners[${fidx}].image`] = ''
+        updates[`filteredPartners[${fidx}].loaded`] = false
+      }
+      this.setData(updates)
+
+      // 同步更新 globalData
+      const globalPartners = app.globalData.partnersData || []
+      const globalIdx = globalPartners.findIndex(p => p.name === name)
+      if (globalIdx !== -1) {
+        globalPartners[globalIdx].image = ''
+        globalPartners[globalIdx].loaded = false
+        console.log(`清除 ${name} 的失效图片路径，将触发重新下载`)
+
+        // 触发 app.js 重新检查并下载缺失的图片
+        // 通过调用 preloadFeishuData，它会检测到图片缺失并重新下载
+        setTimeout(() => {
+          app.preloadFeishuData()
+        }, 100)
+      }
+    }
   }
 })

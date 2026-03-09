@@ -1,9 +1,12 @@
 // app.js
 const { DATA_SOURCE_CONFIG } = require('./utils/data-source-config.js')
-const { fetchFeishuPartnersText, downloadImagesBackground, getPartnersFromCache } = require('./utils/partners-data-loader.js')
+const { loadAllProfilesText, downloadAllProfileImages } = require('./utils/profile-loader.js')
 const { fetchFeishuAssets, getAssetsFromCache } = require('./utils/assets-loader.js')
 const { fetchFeishuEventsText, downloadEventImagesBackground, getEventsFromCache } = require('./utils/events-data-loader.js')
 const { updateShareTracking } = require('./utils/feishu-api.js')
+
+// 缓存键
+const PROFILES_CACHE_KEY = 'profiles_cache_v1'
 
 App({
   async onLaunch(options) {
@@ -36,8 +39,8 @@ App({
       // 等待静态资源下载完成后再下载头像,确保首页图片优先展示
       await this.preloadFeishuAssets()
 
-      // 然后加载联合创始人数据和头像
-      const cached = getPartnersFromCache()
+      // 然后加载联合创始人数据和头像（从新表）
+      const cached = this.getProfilesFromCache()
       if (cached.length > 0) {
         this.globalData.partnersData = cached
       }
@@ -75,17 +78,60 @@ App({
     }
   },
 
-  // 预加载飞书数据（两阶段：文本数据先返回，图片后台下载）
+  // 从缓存获取合伙人数据
+  getProfilesFromCache() {
+    try {
+      const cached = wx.getStorageSync(PROFILES_CACHE_KEY)
+      if (cached && Array.isArray(cached)) {
+        console.log(`从缓存加载 ${cached.length} 条合伙人记录`)
+        return cached
+      }
+    } catch (e) {
+      console.error('读取合伙人缓存失败:', e)
+    }
+    return []
+  },
+
+  // 保存合伙人数据到缓存
+  saveProfilesToCache(profiles) {
+    try {
+      wx.setStorageSync(PROFILES_CACHE_KEY, profiles)
+      console.log(`缓存 ${profiles.length} 条合伙人记录`)
+    } catch (e) {
+      console.error('保存合伙人缓存失败:', e)
+    }
+  },
+
+  // 预加载飞书数据（从新表加载：文本数据先返回，图片后台下载）
   async preloadFeishuData() {
     if (this._fetchingFeishuData) return
     this._fetchingFeishuData = true
     try {
-      console.log('开始预加载飞书数据...')
+      console.log('开始预加载飞书数据（从新表）...')
 
-      const { partners, changedIds } = await fetchFeishuPartnersText()
+      // 加载文本数据
+      const profiles = await loadAllProfilesText()
+      console.log(`加载了 ${profiles.length} 条合伙人记录`)
 
-      // 始终更新引用，保证图片路径的修改（p.image = path）能同步到 globalData
-      this.globalData.partnersData = partners
+      // 保留旧数据中已下载的图片路径
+      const oldData = this.globalData.partnersData || []
+      if (oldData.length > 0) {
+        profiles.forEach(newProfile => {
+          const oldProfile = oldData.find(p => p.employeeId === newProfile.employeeId)
+          if (oldProfile) {
+            // 保留已下载的图片路径
+            if (oldProfile.image) newProfile.image = oldProfile.image
+            if (oldProfile.qrcode) newProfile.qrcode = oldProfile.qrcode
+            if (oldProfile.loaded) newProfile.loaded = oldProfile.loaded
+          }
+        })
+      }
+
+      // 始终更新引用，保证图片路径的修改能同步到 globalData
+      this.globalData.partnersData = profiles
+
+      // 保存到缓存
+      this.saveProfilesToCache(profiles)
 
       // 飞书数据更新后，若已有 openid，重新比对身份
       if (this.globalData.openid) {
@@ -93,12 +139,30 @@ App({
       }
 
       // 始终通知页面刷新（确保统计数字等信息更新）
-      this.globalData.partnersDataListeners.forEach(cb => cb(partners))
+      this.globalData.partnersDataListeners.forEach(cb => cb(profiles))
 
-      // 等待头像和二维码下载完成
-      await downloadImagesBackground(partners, (name, path) => {
-        this.globalData.imageReadyListeners.forEach(cb => cb(name, path))
-      }, changedIds)
+      // 只下载还没有图片的合伙人的图片
+      const needDownload = profiles.filter(p => !p.image || !p.qrcode)
+      if (needDownload.length > 0) {
+        console.log(`需要下载 ${needDownload.length} 个合伙人的图片`)
+        downloadAllProfileImages(needDownload, (type, path, employeeId, name) => {
+          // 更新 globalData 中对应的记录
+          const profile = profiles.find(p => p.employeeId === employeeId)
+          if (profile) {
+            if (type === 'avatar') {
+              profile.image = path
+              profile.loaded = true
+              // 只在头像下载完成时通知监听器（用于 team 页面更新头像）
+              this.globalData.imageReadyListeners.forEach(cb => cb(name, path))
+            } else if (type === 'qrcode') {
+              profile.qrcode = path
+            }
+          }
+        }, DATA_SOURCE_CONFIG.imageConcurrency || 2)
+      } else {
+        console.log('所有合伙人图片已缓存，无需重新下载')
+      }
+
     } catch (error) {
       console.error('预加载飞书数据失败:', error)
     } finally {
@@ -239,7 +303,7 @@ App({
       // 如果 partnersData 还没加载，先从缓存加载
       let partnersData = this.globalData.partnersData
       if (!partnersData || partnersData.length === 0) {
-        partnersData = getPartnersFromCache()
+        partnersData = this.getProfilesFromCache()
       }
 
       // 从合伙人数据中查找对应的姓名

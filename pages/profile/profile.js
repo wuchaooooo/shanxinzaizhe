@@ -1,5 +1,4 @@
 // pages/profile/profile.js
-const { getPartnersDataSync, fetchFeishuPartnersText, downloadImagesBackground } = require('../../utils/partners-data-loader.js')
 const { getAssetPath } = require('../../utils/assets-loader.js')
 const { generateTeamPoster } = require('../../utils/poster-generator.js')
 
@@ -14,36 +13,116 @@ function extractYearMonth(timeStr) {
 // 给时间线数组每一项标记 isNewMonth（月份切换时为 true）
 function markNewMonths(items) {
   let lastMonth = null
-  return (items || []).map(item => {
+  return (items || []).map((item, index) => {
     const month = extractYearMonth(item.time)
     const isNewMonth = month !== lastMonth
     if (isNewMonth) lastMonth = month
-    return Object.assign({}, item, { isNewMonth })
+
+    // 如果没有 icon，随机分配一个
+    const icon = item.icon || getIcon(index)
+    const color = item.color || (index % 2 === 0 ? 'blue' : 'green')
+
+    return Object.assign({}, item, { isNewMonth, icon, color })
   })
 }
 
-// 将包含符号的文本拆分成数组
-function splitBySymbols(text) {
-  if (!text) return [text]
+const ICON_POOL = ['🏆', '⭐', '🎯', '💎', '🔥', '✨', '🌟', '💫', '🎖️', '🏅', '👑', '🎓']
+function getIcon(index) { return ICON_POOL[index % ICON_POOL.length] }
 
-  // 常见的中文分隔符号
-  const chineseSymbols = /[、，；]/
+// 解析徽章字符串：兼容 JSON 和旧 $ 格式
+function parseBadges(data) {
+  if (!data || typeof data !== 'string') return []
+  try {
+    const parsed = JSON.parse(data)
+    if (Array.isArray(parsed)) {
+      return parsed.map((item, index) => ({
+        icon: getIcon(index),
+        title: item.title || '',
+        desc: item.desc || '',
+        color: index % 2 === 0 ? 'amber' : 'blue'
+      }))
+    }
+  } catch (e) {}
+  // 旧格式
+  if (!data.includes('$')) return []
+  const badges = []
+  data.split('&').filter(item => item.trim()).forEach((item, index) => {
+    const parts = item.split('$').filter(p => p.trim())
+    if (parts.length > 0) {
+      badges.push({ icon: getIcon(index), title: parts[0].trim(), desc: parts.length > 1 ? parts[1].trim() : '', color: index % 2 === 0 ? 'amber' : 'blue' })
+    }
+  })
+  return badges
+}
 
-  // 如果包含中文符号,按这些符号拆分
-  if (chineseSymbols.test(text)) {
-    return text.split(chineseSymbols).filter(item => item.trim())
-  }
+// 解析时间线/动态字符串：兼容 JSON 和旧 $ 格式
+function parseTimeline(data) {
+  if (!data || typeof data !== 'string') return []
+  try {
+    const parsed = JSON.parse(data)
+    if (Array.isArray(parsed)) {
+      const items = parsed.map((item, index) => {
+        const timeStart = item.timeStart || ''
+        const timeEnd = item.timeEnd || ''
+        let timeDisplay
+        if (timeEnd) {
+          timeDisplay = timeStart.slice(0, 7) + ' ~ ' + timeEnd.slice(0, 7)
+        } else {
+          timeDisplay = timeStart
+        }
+        return {
+          time: timeDisplay,
+          _sortKey: timeStart,
+          title: item.title || '',
+          desc: item.desc || '',
+          icon: getIcon(index),
+          color: index % 2 === 0 ? 'blue' : 'green'
+        }
+      })
+      items.sort((a, b) => (!a._sortKey || !b._sortKey) ? 0 : b._sortKey.localeCompare(a._sortKey))
+      return items
+    }
+  } catch (e) {}
+  // 旧格式
+  if (!data.includes('$')) return []
+  const items = []
+  data.split(/[\n]/).filter(line => line.trim()).forEach((line, index) => {
+    const parts = line.split('$').filter(p => p.trim())
+    if (parts.length > 0) {
+      const rawTime = parts[0].trim()
+      const tildeIdx = rawTime.indexOf('~')
+      let timeDisplay, sortKey
+      if (tildeIdx >= 0) {
+        const start = rawTime.slice(0, tildeIdx).trim()
+        const end = rawTime.slice(tildeIdx + 1).trim()
+        timeDisplay = start.slice(0, 7) + ' ~ ' + end.slice(0, 7)
+        sortKey = start
+      } else {
+        timeDisplay = rawTime
+        sortKey = rawTime
+      }
+      items.push({
+        time: timeDisplay,
+        _sortKey: sortKey,
+        title: parts.length > 1 ? parts[1].trim() : '',
+        desc: parts.length > 2 ? parts[2].trim() : '',
+        icon: getIcon(index),
+        color: index % 2 === 0 ? 'blue' : 'green'
+      })
+    }
+  })
+  items.sort((a, b) => (!a._sortKey || !b._sortKey) ? 0 : b._sortKey.localeCompare(a._sortKey))
+  return items
+}
 
-  // 检查是否包含中文字符
-  const hasChinese = /[\u4e00-\u9fa5]/.test(text)
-
-  // 如果包含中文且有空格,按空格拆分(中文之间的空格)
-  if (hasChinese && /\s/.test(text)) {
-    return text.split(/\s+/).filter(item => item.trim())
-  }
-
-  // 其他情况(纯英文、英文空格等),不拆分
-  return [text]
+// 解析专业领域字符串：兼容 JSON 和旧 $ 格式
+function parseSkills(data) {
+  if (!data || typeof data !== 'string') return []
+  try {
+    const parsed = JSON.parse(data)
+    return Array.isArray(parsed) ? parsed : []
+  } catch (e) {}
+  return data.split('$').map(s => s.trim()).filter(s => s)
 }
 
 Page({
@@ -74,7 +153,9 @@ Page({
     customersServed: '', // 服务客户
     bio: '', // 个人简介
     shanxinLogoUrl: '', // 善心logo
-    posterScrollReady: true // 控制scroll-view的渲染，用于重置滚动位置
+    posterScrollReady: true, // 控制scroll-view的渲染，用于重置滚动位置
+    canEdit: false, // 是否显示编辑按钮（开关开启且为本人时为 true）
+    showActionSheet: false
   },
 
   // 计算司龄
@@ -115,9 +196,17 @@ Page({
     this.options = options
     const app = getApp()
 
+
+
     // 注册身份识别回调
     this._currentUserCb = (user) => {
       this.setData({ isCofounder: !!user })
+      const { DATA_SOURCE_CONFIG } = require('../../utils/data-source-config.js')
+      if (DATA_SOURCE_CONFIG.useNewProfileTable && this._currentPartnerEmployeeId) {
+        // 只有当前用户是联合创始人且查看的是自己的页面时才能编辑
+        const canEdit = !!user && user.employeeId === this._currentPartnerEmployeeId
+        this.setData({ canEdit })
+      }
     }
     app.globalData.currentUserListeners.push(this._currentUserCb)
 
@@ -149,19 +238,13 @@ Page({
     try {
       const app = getApp()
 
-      // 先用同步缓存，有就立即展示（图片可能还未下载）
-      let partnersData = getPartnersDataSync()
+      // 使用 globalData 中的合伙人数据
+      let partnersData = app.globalData.partnersData || []
 
       if (!partnersData.length) {
-        // 冷启动：快速拉取文本数据
-        const { partners, changedIds } = await fetchFeishuPartnersText()
-        partnersData = partners
-        app.globalData.partnersData = partnersData
-
-        // 触发后台图片下载，只对有变更的合伙人触发重渲染
-        downloadImagesBackground(partnersData, (name, path) => {
-          app.globalData.imageReadyListeners.forEach(cb => cb(name, path))
-        }, changedIds)
+        // 如果 globalData 为空，显示错误
+        wx.showToast({ title: '加载数据失败', icon: 'error' })
+        return
       }
 
       // 查找当前合伙人
@@ -180,14 +263,17 @@ Page({
 
       // 立即展示文本数据（图片有则展示，无则空白等待）
       const badges = partner.badges || []
+      const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school || '']
+      const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title || '']
+
       this.setData({
         avatar: partner.image || '',
         coverImage: partner.image || '',
         name: partner.name,
         school: partner.school,
         title: partner.title,
-        schoolLines: splitBySymbols(partner.school),
-        titleLines: splitBySymbols(partner.title),
+        schoolLines: schoolArray,
+        titleLines: titleArray,
         badges,
         timeline: markNewMonths(partner.timeline),
         activities: markNewMonths(partner.activities),
@@ -229,12 +315,16 @@ Page({
           updated = partnersData[this.partnerId] || partnersData[0]
         }
         if (!updated) return
+
+        const schoolArray = Array.isArray(updated.school) ? updated.school : [updated.school || '']
+        const titleArray = Array.isArray(updated.title) ? updated.title : [updated.title || '']
+
         this.setData({
           name: updated.name,
           school: updated.school,
           title: updated.title,
-          schoolLines: splitBySymbols(updated.school),
-          titleLines: splitBySymbols(updated.title),
+          schoolLines: schoolArray,
+          titleLines: titleArray,
           badges: updated.badges || [],
           timeline: markNewMonths(updated.timeline),
           activities: markNewMonths(updated.activities),
@@ -246,6 +336,14 @@ Page({
         })
       }
       app.globalData.partnersDataListeners.push(this._partnersDataCb)
+
+      // 新表功能：存储当前合伙人 employeeId，设置 canEdit
+      this._currentPartnerEmployeeId = partner.employeeId
+
+      // 只有当前用户是联合创始人且查看的是自己的页面时才能编辑
+      const currentUser = app.globalData.currentUser
+      const canEdit = !!currentUser && currentUser.employeeId === partner.employeeId
+      this.setData({ canEdit })
     } catch (error) {
       console.error('加载飞书合伙人数据失败:', error)
       wx.showToast({ title: '加载数据失败', icon: 'error' })
@@ -254,6 +352,21 @@ Page({
 
   onShow() {
     getApp().preloadFeishuData()
+  },
+
+  onShowActionSheet() {
+    this.setData({ showActionSheet: true })
+  },
+
+  onHideActionSheet() {
+    this.setData({ showActionSheet: false })
+  },
+
+  onEditProfile() {
+    this.setData({ showActionSheet: false })
+    wx.navigateTo({
+      url: `/pages/profile-edit/profile-edit?employeeId=${this._currentPartnerEmployeeId}`
+    })
   },
 
   onUnload() {
@@ -323,7 +436,8 @@ Page({
   },
 
   onGeneratePoster() {
-    const partners = getPartnersDataSync()
+    const app = getApp()
+    const partners = app.globalData.partnersData || []
 
     // 查找当前合伙人
     const currentPartnerIndex = this.useEmployeeId
@@ -371,8 +485,12 @@ Page({
 
     const path = `${basePath}&shareFrom=${shareFrom}`
 
+    // school 和 title 现在是数组，取第一个元素用于分享标题
+    const schoolText = Array.isArray(this.data.school) ? (this.data.school[0] || '') : (this.data.school || '')
+    const titleText = Array.isArray(this.data.title) ? (this.data.title[0] || '') : (this.data.title || '')
+
     return {
-      title: `${this.data.name} - ${this.data.school} - ${this.data.title}`,
+      title: `${this.data.name} - ${schoolText} - ${titleText}`,
       path: path,
       imageUrl: this.data.avatar || ''
     }
@@ -414,5 +532,60 @@ Page({
       avatarScale: avatarScale,
       avatarTop: avatarTop
     })
+  },
+
+  // 头像/封面图片加载失败
+  onAvatarError() {
+    console.log('头像加载失败（可能是临时缓存已清理）')
+    const app = getApp()
+    const partnersData = app.globalData.partnersData || []
+
+    // 找到当前合伙人
+    let partner
+    if (this.useEmployeeId) {
+      partner = partnersData.find(p => p.employeeId === this.partnerId)
+    } else {
+      partner = partnersData[this.partnerId]
+    }
+
+    if (partner) {
+      // 清除失效的图片路径
+      partner.image = ''
+      partner.loaded = false
+      this.setData({ avatar: '', coverImage: '' })
+      console.log('清除失效的头像路径，将触发重新下载')
+
+      // 触发重新下载
+      setTimeout(() => {
+        app.preloadFeishuData()
+      }, 100)
+    }
+  },
+
+  // 二维码图片加载失败
+  onQrcodeError() {
+    console.log('二维码加载失败（可能是临时缓存已清理）')
+    const app = getApp()
+    const partnersData = app.globalData.partnersData || []
+
+    // 找到当前合伙人
+    let partner
+    if (this.useEmployeeId) {
+      partner = partnersData.find(p => p.employeeId === this.partnerId)
+    } else {
+      partner = partnersData[this.partnerId]
+    }
+
+    if (partner) {
+      // 清除失效的二维码路径
+      partner.qrcode = ''
+      this.setData({ qrcodeImage: '' })
+      console.log('清除失效的二维码路径，将触发重新下载')
+
+      // 触发重新下载
+      setTimeout(() => {
+        app.preloadFeishuData()
+      }, 100)
+    }
   }
 })

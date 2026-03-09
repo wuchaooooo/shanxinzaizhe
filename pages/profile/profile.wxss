@@ -5,35 +5,131 @@
   background-color: #f5f5f5;
 }
 
-/* 顶部导航 */
-.top-nav {
+/* 封面更多按钮 */
+.cover-more-btn {
+  position: absolute;
+  top: 32rpx;
+  right: 32rpx;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10rpx);
+  -webkit-backdrop-filter: blur(10rpx);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.cover-more-icon {
+  font-size: 32rpx;
+  color: #0f172a;
+  font-weight: bold;
+  line-height: 1;
+}
+
+/* 操作菜单遮罩 */
+.action-sheet-mask {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 30;
-  padding: 32rpx;
-  padding-top: 96rpx;
-  display: flex;
-  justify-content: space-between;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0);
+  z-index: 999;
+  transition: background-color 0.3s;
   pointer-events: none;
 }
 
-.nav-btn {
-  width: 80rpx;
-  height: 80rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(20rpx);
-  border-radius: 50%;
-  color: #ffffff;
+.action-sheet-mask-show {
+  background-color: rgba(0, 0, 0, 0.5);
   pointer-events: auto;
 }
 
-.nav-btn .iconfont {
-  font-size: 48rpx;
+/* 操作菜单弹窗 */
+.profile-action-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ffffff;
+  border-radius: 32rpx 32rpx 0 0;
+  z-index: 1000;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 32rpx);
+}
+
+.action-sheet-show {
+  transform: translateY(0);
+}
+
+.action-sheet-header {
+  padding: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1rpx solid #e2e8f0;
+  border-radius: 32rpx 32rpx 0 0;
+}
+
+.action-sheet-title {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.action-sheet-close {
+  font-size: 40rpx;
+  color: #94a3b8;
+  line-height: 1;
+  padding: 8rpx;
+}
+
+.action-sheet-body {
+  padding: 48rpx 32rpx;
+}
+
+.action-icons-row {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 32rpx;
+}
+
+.action-icon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.action-icon-circle {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background-color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.action-icon-circle:active {
+  background-color: #e2e8f0;
+  transform: scale(0.95);
+}
+
+.action-icon-emoji {
+  font-size: 40rpx;
+}
+
+.action-icon-label {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 500;
 }
 
 /* 滚动容器 */

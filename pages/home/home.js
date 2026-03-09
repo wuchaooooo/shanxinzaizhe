@@ -1,5 +1,4 @@
 // pages/home/home.js
-const { getPartnersDataSync } = require('../../utils/partners-data-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
 const { getAssetPath } = require('../../utils/assets-loader.js')
 
@@ -42,13 +41,16 @@ Page({
   },
 
   calculateStats() {
-    const partnersData = getPartnersDataSync()
+    const app = getApp()
+    const partnersData = app.globalData.partnersData || []
     if (!partnersData.length) return
 
-    const teamCount = partnersData.length
+    // 只统计有营销员工号的完整资料
+    const completeProfiles = partnersData.filter(p => p.employeeId)
+    const teamCount = completeProfiles.length
 
     let totalCustomersCount = 0
-    partnersData.forEach(partner => {
+    completeProfiles.forEach(partner => {
       if (partner.customersServed) {
         const match = partner.customersServed.match(/\d+/)
         if (match) totalCustomersCount += parseInt(match[0])
@@ -56,7 +58,7 @@ Page({
     })
     const roundedCustomers = Math.floor(totalCustomersCount / 100) * 100
 
-    const instructorCount = partnersData.filter(p => p.isInstructor).length
+    const instructorCount = completeProfiles.filter(p => p.isInstructor).length
 
     animateNumbers(this, {
       teamCount: { to: teamCount },

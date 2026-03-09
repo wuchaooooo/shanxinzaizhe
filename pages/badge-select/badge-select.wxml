@@ -1,0 +1,20 @@
+<!--pages/badge-select/badge-select.wxml-->
+<view class="container">
+
+  <view class="badge-list">
+    <view class="badge-option" wx:for="{{badgeOptions}}" wx:key="index" data-index="{{index}}" bindtap="onToggle">
+      <view class="badge-checkbox {{item.checked ? 'badge-checkbox-checked' : ''}}">
+        <text wx:if="{{item.checked}}" class="badge-check-icon">✓</text>
+      </view>
+      <view class="badge-body">
+        <text class="badge-title">{{item.title}}</text>
+        <text class="badge-desc">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="actions">
+    <button class="save-btn" bindtap="onSave">确认</button>
+  </view>
+
+</view>

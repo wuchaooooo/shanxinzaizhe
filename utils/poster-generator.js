@@ -219,19 +219,19 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
 
             const infoStartY = y + avatarBgSize + 30
             if (partner.school) {
-                const schoolLines = partner.school.split(/[、，；\n]/).filter(s => s.trim())
-                if (schoolLines.length > 0) {
+                const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school]
+                if (schoolArray.length > 0 && schoolArray[0]) {
                     ctx.setFillStyle('#E9AE73'); ctx.setFontSize(16)
                     ctx.font = 'normal 16px sans-serif'; ctx.setTextAlign('center')
-                    ctx.fillText(truncateText(schoolLines[0], maxTextWidth, 16), x + itemWidth / 2, infoStartY)
+                    ctx.fillText(truncateText(schoolArray[0], maxTextWidth, 16), x + itemWidth / 2, infoStartY)
                 }
             }
             if (partner.title) {
-                const titleLines = partner.title.split(/[、，；\n]/).filter(s => s.trim())
-                if (titleLines.length > 0) {
+                const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title]
+                if (titleArray.length > 0 && titleArray[0]) {
                     ctx.setFillStyle('#E9AE73'); ctx.setFontSize(16)
                     ctx.font = 'normal 16px sans-serif'; ctx.setTextAlign('center')
-                    ctx.fillText(truncateText(titleLines[0], maxTextWidth, 16), x + itemWidth / 2, infoStartY + 25)
+                    ctx.fillText(truncateText(titleArray[0], maxTextWidth, 16), x + itemWidth / 2, infoStartY + 25)
                 }
             }
         }
@@ -505,22 +505,22 @@ async function generateShareImage(page, canvasId, stats, partners) {
 
             // 绘制学校（只显示第一个）
             if (partner.school) {
-                const schoolLines = partner.school.split(/[、，；\n]/).filter(s => s.trim())
-                if (schoolLines.length > 0) {
+                const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school]
+                if (schoolArray.length > 0 && schoolArray[0]) {
                     ctx.setFillStyle('#666666')
                     ctx.setFontSize(22)
-                    const schoolText = schoolLines[0].length > 10 ? schoolLines[0].substring(0, 10) + '...' : schoolLines[0]
+                    const schoolText = schoolArray[0].length > 10 ? schoolArray[0].substring(0, 10) + '...' : schoolArray[0]
                     ctx.fillText(schoolText, x + itemWidth / 2, avatarY + avatarSize + 75)
                 }
             }
 
             // 绘制职位（只显示第一个）
             if (partner.title) {
-                const titleLines = partner.title.split(/[、，；\n]/).filter(s => s.trim())
-                if (titleLines.length > 0) {
+                const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title]
+                if (titleArray.length > 0 && titleArray[0]) {
                     ctx.setFillStyle('#999999')
                     ctx.setFontSize(20)
-                    const titleText = titleLines[0].length > 10 ? titleLines[0].substring(0, 10) + '...' : titleLines[0]
+                    const titleText = titleArray[0].length > 10 ? titleArray[0].substring(0, 10) + '...' : titleArray[0]
                     ctx.fillText(titleText, x + itemWidth / 2, avatarY + avatarSize + 105)
                 }
             }

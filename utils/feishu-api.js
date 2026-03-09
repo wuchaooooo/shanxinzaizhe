@@ -327,6 +327,32 @@ async function getTableFields(params = {}) {
 }
 
 /**
+ * 从飞书 IM 下载图片到本地临时文件
+ * @param {string} imageKey - IM image_key
+ * @returns {Promise<string>} - 本地文件路径
+ */
+async function downloadFeishuImage(imageKey) {
+  const token = await getTenantAccessToken()
+  return new Promise((resolve, reject) => {
+    wx.downloadFile({
+      url: `https://open.feishu.cn/open-apis/im/v1/images/${imageKey}`,
+      header: { Authorization: `Bearer ${token}` },
+      success: (res) => {
+        if (res.statusCode === 200) {
+          resolve(res.tempFilePath)
+        } else {
+          reject(new Error(`下载图片失败: ${res.statusCode}`))
+        }
+      },
+      fail: (err) => {
+        console.error('下载飞书图片失败:', err)
+        reject(err)
+      }
+    })
+  })
+}
+
+/**
  * 查询分享统计记录
  * @param {string} employeeId - 营销员工号
  */
@@ -424,6 +450,7 @@ module.exports = {
   getTenantAccessToken,
   clearTokenCache,
   uploadImage,
+  downloadFeishuImage,
   getTableFields,
   findShareRecord,
   updateShareTracking,
