@@ -79,23 +79,39 @@ Page({
       })
     }
 
+    // 确保 images 数组存在（兼容性处理）
+    if (!event.images || event.images.length === 0) {
+      event.images = event.image ? [event.image] : []
+    }
+
     this.setData({
       event: event,
       canEdit: canEdit,
       markers: markers
     })
+
+    console.log('详情页最终数据:', {
+      images: event.images,
+      imagesLength: event.images?.length
+    })
   },
 
   // 预览活动图片
-  onImageTap() {
+  onImageTap(e) {
     const { event } = this.data
-    if (event && (event.imageUrl || event.image)) {
-      // 优先使用原始 URL，因为 wx.previewImage 需要可访问的 URL
-      const imageUrl = event.imageUrl || event.image
-      console.log('预览图片:', imageUrl)
+    if (!event) return
+
+    // 获取当前点击的图片索引
+    const index = e.currentTarget.dataset.index || 0
+
+    // 获取所有图片 URL
+    const images = event.images || (event.image ? [event.image] : [])
+
+    if (images.length > 0) {
+      console.log('预览图片:', { images, currentIndex: index })
       wx.previewImage({
-        urls: [imageUrl],
-        current: imageUrl
+        urls: images,
+        current: images[index]
       })
     }
   },

@@ -249,19 +249,31 @@ function getEventsFromCache() {
   return Object.values(cache).map(entry => {
     const event = { ...entry.data }
 
-    if (entry.imagePath) {
-      try {
-        fs.accessSync(entry.imagePath)
-        event.image = entry.imagePath
-      } catch (e) {
-        console.warn(`[${event.name}] imagePath 文件不存在:`, entry.imagePath)
-        event.image = ''
+    // 处理多张图片的路径（兼容性处理）
+    const imagePaths = entry.imagePaths || (entry.imagePath ? [entry.imagePath] : [])
+    const validImages = []
+
+    // 验证每张图片路径是否有效
+    imagePaths.forEach(path => {
+      if (path) {
+        try {
+          fs.accessSync(path)
+          validImages.push(path)
+        } catch (e) {
+          console.warn(`[${event.name}] 图片路径文件不存在:`, path)
+        }
       }
-    } else if (!event.image) {
-      event.image = ''
-    } else if (event.image && event.image.includes('tmp')) {
+    })
+
+    // 设置 images 数组和第一张图片
+    event.images = validImages
+    event.image = validImages[0] || ''
+
+    // 清除无效的临时图片路径
+    if (event.image && event.image.includes('tmp')) {
       console.warn(`[${event.name}] 清除无效的临时图片路径: ${event.image}`)
       event.image = ''
+      event.images = []
     }
 
     return event
@@ -488,10 +500,98 @@ async function downloadEventImagesBackground(eventsData, onImageReady, changedId
 
       console.log(`[${event.name}] ===== 检查图片 =====`)
       console.log(`[${event.name}] isChanged: ${isChanged}`)
-      console.log(`[${event.name}] hasImage: ${!!event.image}`)
-      console.log(`[${event.name}] imageKey: ${event.imageKey || '无'}`)
+      console.log(`[${event.name}] imageKeys:`, event.imageKeys)
 
-      if (event.imageKey) {
+      // 处理多张图片下载
+      if (event.imageKeys && event.imageKeys.length > 0) {
+        const cachedImagePaths = cache[event.id]?.imagePaths || []
+        const cachedImageKeys = cache[event.id]?.imageKeys || []
+        const downloadedPaths = []
+
+        // 遍历每个 imageKey
+        for (let i = 0; i < event.imageKeys.length; i++) {
+          const imageKey = event.imageKeys[i]
+          const cachedPath = cachedImagePaths[i]
+          const cachedKey = cachedImageKeys[i]
+
+          let cacheExists = false
+
+          // 检查缓存文件是否存在
+          if (cachedPath) {
+            try {
+              const fs = wx.getFileSystemManager()
+              fs.accessSync(cachedPath)
+              cacheExists = true
+              downloadedPaths.push(cachedPath)
+              console.log(`[${event.name}] 图片 ${i + 1} 缓存存在: ${cachedPath}`)
+            } catch (e) {
+              console.log(`[${event.name}] 图片 ${i + 1} 缓存不存在`)
+            }
+          }
+
+          // 判断是否需要下载
+          const imageKeyChanged = cachedKey && cachedKey !== imageKey
+          const needDownload = !cacheExists || imageKeyChanged
+
+          if (!isChanged && cacheExists) {
+            console.log(`[${event.name}] 图片 ${i + 1} ⏭️ 跳过下载: 数据未变更且缓存存在`)
+          } else if (isChanged && !imageKeyChanged && cacheExists) {
+            console.log(`[${event.name}] 图片 ${i + 1} ⏭️ 跳过下载: imageKey 未变化且缓存存在`)
+          } else if (needDownload) {
+            const needNotify = isChanged || downloadedPaths.length === 0
+            console.log(`[${event.name}] 图片 ${i + 1} ✅ 需要下载`)
+
+            imageTasks.push(async () => {
+              try {
+                console.log(`[${event.name}] 图片 ${i + 1} 📥 开始下载...`)
+                const downloadUrl = getImageDownloadUrl(imageKey)
+                const path = await downloadWithRetry(downloadUrl, token, `${event.id}_${i}`)
+                console.log(`[${event.name}] 图片 ${i + 1} ✅ 下载成功:`, path)
+
+                // 删除旧文件
+                if (cachedPath && cachedPath !== path) {
+                  try {
+                    const fs = wx.getFileSystemManager()
+                    fs.unlinkSync(cachedPath)
+                    console.log(`[${event.name}] 图片 ${i + 1} 🗑️ 已删除旧图片`)
+                  } catch (e) {
+                    console.warn(`[${event.name}] 图片 ${i + 1} ⚠️ 删除旧图片失败`)
+                  }
+                }
+
+                // 更新下载路径数组
+                downloadedPaths[i] = path
+
+                // 更新缓存
+                if (!cache[event.id]) {
+                  cache[event.id] = { data: event }
+                }
+                cache[event.id].imagePaths = downloadedPaths
+                cache[event.id].imageKeys = event.imageKeys
+                cache[event.id].data = { ...event, images: downloadedPaths, image: downloadedPaths[0] }
+                saveEventsCache(cache)
+
+                // 更新 event 对象
+                event.images = downloadedPaths
+                event.image = downloadedPaths[0]
+
+                if (needNotify && onImageReady && i === 0) {
+                  console.log(`[${event.name}] 📢 触发图片就绪回调`)
+                  onImageReady(event.name, downloadedPaths[0])
+                }
+              } catch (err) {
+                console.error(`[${event.name}] 图片 ${i + 1} ❌ 下载失败:`, err)
+              }
+            })
+          }
+        }
+
+        // 如果所有图片都从缓存加载，更新 event 对象
+        if (downloadedPaths.length === event.imageKeys.length) {
+          event.images = downloadedPaths
+          event.image = downloadedPaths[0]
+        }
+      } else if (event.imageKey) {
         const cachedImagePath = cache[event.id]?.imagePath
         const cachedImageKey = cache[event.id]?.imageKey
         let cacheExists = false
