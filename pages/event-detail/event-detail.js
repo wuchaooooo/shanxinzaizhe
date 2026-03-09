@@ -461,10 +461,14 @@ Page({
 
   // 分享功能
   onShareAppMessage() {
+    const app = getApp()
+    const currentUser = app.globalData.currentUser
+    const shareFrom = currentUser ? currentUser.employeeId : (app.globalData.initialShareFrom || 'guest')
+
     const { event } = this.data
     return {
       title: `${event.type} - ${event.organizer || '精彩活动'}`,
-      path: `/pages/event-detail/event-detail?eventId=${event.id}&type=${event.type}`,
+      path: `/pages/event-detail/event-detail?eventId=${event.id}&type=${event.type}&shareFrom=${shareFrom}`,
       imageUrl: event.image || ''
     }
   }

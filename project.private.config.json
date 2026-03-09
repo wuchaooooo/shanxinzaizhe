@@ -15,15 +15,15 @@
     "miniprogram": {
       "list": [
         {
-          "name": "home",
-          "pathName": "pages/home/home",
-          "query": "",
+          "name": "team",
+          "pathName": "pages/team/team",
+          "query": "shareFrom=190005889",
           "scene": null,
           "launchMode": "default"
         },
         {
-          "name": "team",
-          "pathName": "pages/team/team",
+          "name": "home",
+          "pathName": "pages/home/home",
           "query": "",
           "launchMode": "default",
           "scene": null

@@ -376,9 +376,13 @@ Page({
 
   // 分享功能
   onShareAppMessage() {
+    const app = getApp()
+    const currentUser = app.globalData.currentUser
+    const shareFrom = currentUser ? currentUser.employeeId : (app.globalData.initialShareFrom || 'guest')
+
     return {
       title: `善心浙里-${this.data.teamCount}位联合创始人`,
-      path: '/pages/team/team',
+      path: `/pages/team/team?shareFrom=${shareFrom}`,
       imageUrl: this.data.shareImageUrl || this.data.shanxinLogoUrl || ''
     }
   },

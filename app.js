@@ -3,14 +3,24 @@ const { DATA_SOURCE_CONFIG } = require('./utils/data-source-config.js')
 const { fetchFeishuPartnersText, downloadImagesBackground, getPartnersFromCache } = require('./utils/partners-data-loader.js')
 const { fetchFeishuAssets, getAssetsFromCache } = require('./utils/assets-loader.js')
 const { fetchFeishuEventsText, downloadEventImagesBackground, getEventsFromCache } = require('./utils/events-data-loader.js')
+const { updateShareTracking } = require('./utils/feishu-api.js')
 
 App({
-  async onLaunch() {
+  async onLaunch(options) {
     // 初始化云开发环境
     wx.cloud.init({
       env: 'shanxinzaizhe-1g0sxfo695003783',
       traceUser: true
     })
+
+    // 解析分享来源参数
+    const shareParams = this.parseShareParams(options)
+    if (shareParams.shareFrom) {
+      this.globalData.initialShareFrom = shareParams.shareFrom
+      console.log('分享来源:', shareParams.shareFrom)
+      // 调用统计接口
+      this.trackShare(shareParams)
+    }
 
     // 获取 openid 并与飞书联合创始人数据比对身份（尽早发起网络请求）
     this.fetchOpenidAndMatchUser()
@@ -175,12 +185,76 @@ App({
     this.globalData.currentUserListeners.forEach(cb => cb(matched))
   },
 
-  async onShow() {
+  async onShow(options) {
+    // 解析分享来源参数（从后台切换回来时）
+    if (options) {
+      const shareParams = this.parseShareParams(options)
+      if (shareParams.shareFrom && shareParams.shareFrom !== this.globalData.lastTrackedShareFrom) {
+        this.globalData.initialShareFrom = shareParams.shareFrom
+        console.log('分享来源（onShow）:', shareParams.shareFrom)
+        // 调用统计接口
+        this.trackShare(shareParams)
+      }
+    }
+
     // 每次显示时重新拉取飞书数据，优先加载静态资源
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
       await this.preloadFeishuAssets()
       await this.preloadFeishuData()
       await this.preloadFeishuEvents()
+    }
+  },
+
+  // 解析分享参数
+  parseShareParams(options) {
+    let shareFrom = null
+    let targetPage = options.path || ''
+
+    // 场景1：分享链接（query参数）
+    if (options.query && options.query.shareFrom) {
+      shareFrom = options.query.shareFrom
+    }
+
+    // 场景2：小程序码（scene参数）
+    if (options.scene) {
+      const sceneStr = decodeURIComponent(options.scene)
+      if (sceneStr.startsWith('e')) {
+        shareFrom = sceneStr.slice(1) // e12345 -> 12345
+      }
+    }
+
+    return { shareFrom, targetPage, scene: options.scene || '' }
+  },
+
+  // 调用分享统计接口
+  async trackShare(shareParams) {
+    const { shareFrom } = shareParams
+
+    // 记录最近一次统计的分享来源，避免重复统计
+    this.globalData.lastTrackedShareFrom = shareFrom
+
+    // 确定分享者姓名
+    let shareFromName = '普通用户'
+    if (shareFrom && shareFrom !== 'guest') {
+      // 如果 partnersData 还没加载，先从缓存加载
+      let partnersData = this.globalData.partnersData
+      if (!partnersData || partnersData.length === 0) {
+        partnersData = getPartnersFromCache()
+      }
+
+      // 从合伙人数据中查找对应的姓名
+      const partner = partnersData.find(p => p.employeeId === shareFrom)
+      if (partner) {
+        shareFromName = partner.name
+      }
+    }
+
+    // 直接调用飞书 API 更新统计
+    try {
+      const result = await updateShareTracking(shareFrom, shareFromName)
+      console.log('分享统计成功:', result)
+    } catch (error) {
+      console.error('分享统计失败:', error)
     }
   },
 
@@ -201,6 +275,8 @@ App({
     assetsDataListeners: [],     // 静态资源刷新回调列表
     eventsData: null,            // 活动数据缓存
     eventsImageReadyListeners: [], // 活动图片下载完成回调列表
-    eventsDataListeners: []      // 活动数据刷新回调列表
+    eventsDataListeners: [],     // 活动数据刷新回调列表
+    initialShareFrom: null,      // 小程序启动时的分享来源
+    lastTrackedShareFrom: null   // 最近一次统计的分享来源（避免重复统计）
   }
 })

@@ -2,6 +2,7 @@
 // 活动分享海报生成逻辑
 
 const { getAssetPath } = require('./assets-loader.js')
+const { generateMiniProgramCode } = require('./qrcode-generator.js')
 
 /**
  * 生成活动分享海报
@@ -26,8 +27,19 @@ async function generateEventPoster(page, canvasId, event) {
     const organizer = partnersData.find(p => p.name === event.organizer)
     const organizerBadges = organizer?.badges || []
 
-    // 获取小程序码和用户二维码
-    const qrcodeImageUrl = getAssetPath('mini_program_qr_code')
+    // 生成动态小程序码（如果是联合创始人）
+    let qrcodeImageUrl = null
+    if (currentUser && currentUser.employeeId) {
+      wx.showLoading({ title: '生成小程序码...', mask: true })
+      qrcodeImageUrl = await generateMiniProgramCode(currentUser.employeeId)
+      wx.hideLoading()
+    }
+
+    // 如果动态生成失败，降级到静态小程序码
+    if (!qrcodeImageUrl) {
+      qrcodeImageUrl = getAssetPath('mini_program_qr_code')
+    }
+
     const userQRCode = currentUser?.qrcode || ''
 
     if (!qrcodeImageUrl) {

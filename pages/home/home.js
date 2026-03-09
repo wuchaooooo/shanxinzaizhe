@@ -238,9 +238,13 @@ Page({
 
   // 分享功能
   onShareAppMessage() {
+    const app = getApp()
+    const currentUser = app.globalData.currentUser
+    const shareFrom = currentUser ? currentUser.employeeId : (app.globalData.initialShareFrom || 'guest')
+
     return {
       title: '善心浙里 - 与您共创丰盛未来',
-      path: '/pages/home/home',
+      path: `/pages/home/home?shareFrom=${shareFrom}`,
       imageUrl: this.data.shanxinzheliLogoUrl || ''
     }
   }

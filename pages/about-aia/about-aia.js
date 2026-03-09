@@ -121,9 +121,13 @@ Page({
   },
 
   onShareAppMessage() {
+    const app = getApp()
+    const currentUser = app.globalData.currentUser
+    const shareFrom = currentUser ? currentUser.employeeId : (app.globalData.initialShareFrom || 'guest')
+
     return {
       title: '友邦保险 - 百年基业 值得信赖',
-      path: '/pages/about-aia/about-aia'
+      path: `/pages/about-aia/about-aia?shareFrom=${shareFrom}`
     }
   }
 })

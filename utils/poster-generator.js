@@ -2,6 +2,7 @@
 // 团队海报生成逻辑，供 profile 和 team 页面共用
 const { getPartnersDataSync } = require('./partners-data-loader.js')
 const { getAssetPath } = require('./assets-loader.js')
+const { generateMiniProgramCode } = require('./qrcode-generator.js')
 const feishuApi = require('./feishu-api.js')
 
 /**
@@ -35,7 +36,19 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
 
         const personalQRCode = currentPartner ? currentPartner.qrcode : ''
         const headerImageUrl = getAssetPath('team_post_header')
-        const qrcodeImageUrl = getAssetPath('mini_program_qr_code')
+
+        // 生成动态小程序码（如果是联合创始人）
+        let qrcodeImageUrl = null
+        if (currentPartner && currentPartner.employeeId) {
+            wx.showLoading({ title: '生成小程序码...', mask: true })
+            qrcodeImageUrl = await generateMiniProgramCode(currentPartner.employeeId)
+            wx.hideLoading()
+        }
+
+        // 如果动态生成失败，降级到静态小程序码
+        if (!qrcodeImageUrl) {
+            qrcodeImageUrl = getAssetPath('mini_program_qr_code')
+        }
 
         if (!headerImageUrl || !qrcodeImageUrl) {
             wx.showToast({ title: '资源加载中，请稍后重试', icon: 'none' })

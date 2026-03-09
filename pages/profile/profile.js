@@ -361,9 +361,15 @@ Page({
 
   // 分享功能
   onShareAppMessage() {
-    const path = this.useEmployeeId
+    const app = getApp()
+    const currentUser = app.globalData.currentUser
+    const shareFrom = currentUser ? currentUser.employeeId : (app.globalData.initialShareFrom || 'guest')
+
+    const basePath = this.useEmployeeId
       ? `/pages/profile/profile?employeeId=${this.partnerId}`
       : `/pages/profile/profile?id=${this.partnerId || 0}`
+
+    const path = `${basePath}&shareFrom=${shareFrom}`
 
     return {
       title: `${this.data.name} - ${this.data.school} - ${this.data.title}`,

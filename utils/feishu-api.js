@@ -21,7 +21,10 @@ const FEISHU_CONFIG = {
   salesClinicTableId: 'tbln8UsmvNjSptvl',
   // 销售建设 base
   salesBuildingAppToken: 'KJLNbR0tRaK0LpskYjAcm4nqnRc',
-  salesBuildingTableId: 'tbleG2LqgZwV9ac3'
+  salesBuildingTableId: 'tbleG2LqgZwV9ac3',
+  // 分享追踪统计 base
+  shareTrackingAppToken: 'DahQbPH2paBJWvsaMprc6nFRn9f',
+  shareTrackingTableId: 'tbl9syGrQRoyPSHk'
 }
 
 // 缓存 tenant_access_token
@@ -323,6 +326,94 @@ async function getTableFields(params = {}) {
   return feishuRequest(url)
 }
 
+/**
+ * 查询分享统计记录
+ * @param {string} employeeId - 营销员工号
+ */
+async function findShareRecord(employeeId) {
+  const url = `/open-apis/bitable/v1/apps/${FEISHU_CONFIG.shareTrackingAppToken}/tables/${FEISHU_CONFIG.shareTrackingTableId}/records/search`
+
+  try {
+    const result = await feishuRequest(url, {
+      method: 'POST',
+      data: {
+        filter: {
+          conjunction: 'and',
+          conditions: [
+            {
+              field_name: '分享者工号',
+              operator: 'is',
+              value: [employeeId]
+            }
+          ]
+        }
+      }
+    })
+
+    return result.items && result.items.length > 0 ? result.items[0] : null
+  } catch (error) {
+    console.error('查询分享记录失败:', error)
+    return null
+  }
+}
+
+/**
+ * 更新分享统计（查询 + 更新/创建）
+ * @param {string} employeeId - 营销员工号
+ * @param {string} employeeName - 营销员姓名
+ */
+async function updateShareTracking(employeeId, employeeName = '普通用户') {
+  if (!employeeId || employeeId === 'guest') {
+    console.log('普通用户分享，不统计')
+    return { success: true, message: '普通用户分享，不统计' }
+  }
+
+  try {
+    // 查询是否已存在该工号的记录
+    const existingRecord = await findShareRecord(employeeId)
+
+    if (existingRecord) {
+      // 存在则更新浏览次数和姓名
+      const currentCount = existingRecord.fields['浏览总次数'] || 0
+      const newCount = currentCount + 1
+
+      await updateRecord(
+        existingRecord.record_id,
+        {
+          '浏览总次数': newCount,
+          '分享者姓名': employeeName
+        },
+        {
+          appToken: FEISHU_CONFIG.shareTrackingAppToken,
+          tableId: FEISHU_CONFIG.shareTrackingTableId
+        }
+      )
+
+      console.log(`更新分享统计: ${employeeName}(${employeeId}), 浏览次数: ${currentCount} -> ${newCount}`)
+      return { success: true, message: '统计成功', count: newCount }
+    } else {
+      // 不存在则创建新记录
+      await createRecord(
+        {
+          '分享者工号': employeeId,
+          '分享者姓名': employeeName,
+          '浏览总次数': 1
+        },
+        {
+          appToken: FEISHU_CONFIG.shareTrackingAppToken,
+          tableId: FEISHU_CONFIG.shareTrackingTableId
+        }
+      )
+
+      console.log(`创建分享统计: ${employeeName}(${employeeId}), 浏览次数: 1`)
+      return { success: true, message: '统计成功', count: 1 }
+    }
+  } catch (error) {
+    console.error('更新分享统计失败:', error)
+    return { success: false, message: error.message || '统计失败' }
+  }
+}
+
 module.exports = {
   getRecords,
   getAllRecords,
@@ -334,5 +425,7 @@ module.exports = {
   clearTokenCache,
   uploadImage,
   getTableFields,
+  findShareRecord,
+  updateShareTracking,
   FEISHU_CONFIG
 }
