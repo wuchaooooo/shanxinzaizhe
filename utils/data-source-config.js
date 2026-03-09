@@ -31,6 +31,18 @@ const DATA_SOURCE_CONFIG = {
     isInstructor: '是否为善心浙江讲师',  // 是否为讲师（用于首页统计）
     lastModifiedDate: 'Last Modified Date',  // 飞书系统字段，用于检测记录是否有变更
     wxOpenid: 'wx_miniprogram_shanxinzaizhe_openid'  // 微信小程序 openid，用于身份识别
+  },
+
+  // 活动数据字段映射配置
+  eventsFieldMapping: {
+    organizer: '组织者',
+    time: '开始时间',
+    image: '活动海报',
+    employeeId: '营销员工号',
+    address: '活动地址',
+    longitude: '地址经度',
+    latitude: '地址纬度',
+    lastModifiedDate: 'Last Modified Date'
   }
 }
 

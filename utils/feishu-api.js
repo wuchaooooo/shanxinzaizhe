@@ -9,7 +9,13 @@ const FEISHU_CONFIG = {
   partnersTableId: 'tblt44wzHpZlXPBT',
   // 静态资源 base（新建）
   assetsAppToken: 'Ijtdb7F4VaXiPwsUAZCchFzUndb',
-  assetsTableId: 'tblJQN5VgacsKNNo'
+  assetsTableId: 'tblJQN5VgacsKNNo',
+  // 星享会 base
+  starClubAppToken: 'D7r0bisBWamFWLs539YcDYnhnEd',
+  starClubTableId: 'tblRZ1TPZlBBwlmG',
+  // 午餐会 base
+  lunchAppToken: 'NGz1bybL5aq9YDsZK7Tcurozn1b',
+  lunchTableId: 'tblvWD7xZ33Usx9I'
 }
 
 // 缓存 tenant_access_token

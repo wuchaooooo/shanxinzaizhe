@@ -1,60 +1,27 @@
 <!--pages/events/events.wxml-->
+<wxs module="utils">
+  var formatTime = function(timeStr) {
+    if (!timeStr) return '待定'
+    try {
+      var date = getDate(timeStr)
+      var year = date.getFullYear()
+      var month = ('0' + (date.getMonth() + 1)).slice(-2)
+      var day = ('0' + date.getDate()).slice(-2)
+      var hour = ('0' + date.getHours()).slice(-2)
+      var minute = ('0' + date.getMinutes()).slice(-2)
+      return year + '-' + month + '-' + day + ' ' + hour + ':' + minute
+    } catch (e) {
+      return timeStr
+    }
+  }
+
+  module.exports = {
+    formatTime: formatTime
+  }
+</wxs>
+
 <view class="events-container">
-  <!-- 头部横幅 -->
-  <view class="events-banner">
-    <view class="banner-overlay">
-      <text class="banner-icon">🎉</text>
-      <text class="banner-title">精彩活动</text>
-      <text class="banner-subtitle">即将与您见面</text>
-    </view>
-  </view>
-
-  <!-- 近期上线卡片 -->
-  <view class="coming-soon-card">
-    <view class="card-icon">🚀</view>
-    <text class="card-title">近期上线</text>
-    <text class="card-desc">我们正在精心筹备精彩活动</text>
-    <text class="card-desc">敬请期待</text>
-  </view>
-
-  <!-- 功能预告 -->
-  <view class="features-section">
-    <view class="section-title">
-      <text class="title-text">即将推出</text>
-    </view>
-    <view class="features-grid">
-      <view class="feature-item">
-        <text class="feature-icon">📅</text>
-        <text class="feature-name">活动日历</text>
-      </view>
-      <view class="feature-item">
-        <text class="feature-icon">🎯</text>
-        <text class="feature-name">在线报名</text>
-      </view>
-      <view class="feature-item">
-        <text class="feature-icon">📸</text>
-        <text class="feature-name">精彩回顾</text>
-      </view>
-      <view class="feature-item">
-        <text class="feature-icon">🏆</text>
-        <text class="feature-name">活动奖励</text>
-      </view>
-    </view>
-  </view>
-
-  <!-- 联系我们 -->
-  <view class="contact-section">
-    <view class="contact-card">
-      <text class="contact-text">想了解更多活动信息？</text>
-      <button class="contact-btn" bindtap="onContact">联系我们</button>
-    </view>
-  </view>
-</view>
-
-<!-- 以下代码将在未来版本重新上线 -->
-<!--
-<view class="events-container">
-  标签页
+  <!-- 标签页 -->
   <view class="tabs-container">
     <view class="tabs">
       <view
@@ -67,35 +34,70 @@
         <text class="tab-text">{{item}}</text>
       </view>
     </view>
+    <!-- 创建按钮（仅联合创始人可见） -->
+    <view wx:if="{{isCofounder}}" class="create-btn" bindtap="onCreateEvent">
+      <text class="create-icon">➕</text>
+    </view>
   </view>
 
-  活动列表
+  <!-- 活动列表 -->
   <view class="events-list">
-    <view class="event-card" wx:for="{{events}}" wx:key="index">
-      <image class="event-image" src="{{item.image}}" mode="aspectFill"></image>
-      <view class="event-content">
-        <view class="event-header">
-          <text class="event-title">{{item.title}}</text>
-          <view class="event-badge event-badge-{{item.status}}">
-            <text class="badge-text">{{item.statusText}}</text>
-          </view>
-        </view>
-        <view class="event-info">
-          <view class="info-item">
-            <text class="info-icon">📅</text>
-            <text class="info-text">{{item.date}}</text>
-          </view>
-          <view class="info-item">
-            <text class="info-icon">📍</text>
-            <text class="info-text">{{item.location}}</text>
-          </view>
-        </view>
-        <view class="event-footer">
-          <text class="event-desc">{{item.desc}}</text>
-          <button class="event-btn event-btn-{{item.status}}">{{item.btnText}}</button>
+    <!-- 骨架屏 -->
+    <view wx:if="{{loading}}" class="skeleton-list">
+      <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="index">
+        <view class="skeleton-image"></view>
+        <view class="skeleton-content">
+          <view class="skeleton-title"></view>
+          <view class="skeleton-text"></view>
+          <view class="skeleton-text short"></view>
         </view>
       </view>
     </view>
+
+    <!-- 活动卡片 -->
+    <view wx:if="{{!loading && filteredEvents.length > 0}}">
+      <view
+        class="event-card"
+        wx:for="{{filteredEvents}}"
+        wx:key="id"
+        bindtap="onEventTap"
+        data-id="{{item.id}}"
+        data-type="{{item.type}}"
+      >
+        <image
+          class="event-image"
+          src="{{item.image || '/images/placeholder.png'}}"
+          mode="aspectFill"
+        ></image>
+        <view class="event-content">
+          <view class="event-header">
+            <view class="event-type-badge event-type-{{item.type === '星享会' ? 'star' : 'lunch'}}">
+              <text class="badge-text">{{item.type}}</text>
+            </view>
+          </view>
+          <view class="event-info">
+            <view class="info-item">
+              <text class="info-icon">👤</text>
+              <text class="info-text">{{item.organizer || '待定'}}</text>
+            </view>
+            <view class="info-item">
+              <text class="info-icon">📅</text>
+              <text class="info-text">{{utils.formatTime(item.time)}}</text>
+            </view>
+            <view wx:if="{{item.address}}" class="info-item">
+              <text class="info-icon">📍</text>
+              <text class="info-text">{{item.address}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view wx:if="{{!loading && filteredEvents.length === 0}}" class="empty-state">
+      <text class="empty-icon">📭</text>
+      <text class="empty-text">暂无活动</text>
+      <text class="empty-desc">敬请期待精彩活动</text>
+    </view>
   </view>
 </view>
--->

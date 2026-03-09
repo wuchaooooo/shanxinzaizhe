@@ -1,0 +1,104 @@
+<!--pages/event-detail/event-detail.wxml-->
+<wxs module="utils">
+  var formatTime = function(timeStr) {
+    if (!timeStr) return '待定'
+    try {
+      var date = getDate(timeStr)
+      var year = date.getFullYear()
+      var month = ('0' + (date.getMonth() + 1)).slice(-2)
+      var day = ('0' + date.getDate()).slice(-2)
+      var hour = ('0' + date.getHours()).slice(-2)
+      var minute = ('0' + date.getMinutes()).slice(-2)
+      return year + '年' + month + '月' + day + '日 ' + hour + ':' + minute
+    } catch (e) {
+      return timeStr
+    }
+  }
+
+  module.exports = {
+    formatTime: formatTime
+  }
+</wxs>
+
+<view class="detail-container" wx:if="{{event}}">
+  <!-- 活动图片 -->
+  <view class="image-section">
+    <image
+      class="event-image"
+      src="{{event.image || '/images/placeholder.png'}}"
+      mode="aspectFill"
+      bindtap="onImageTap"
+    ></image>
+    <view class="image-overlay">
+      <view class="type-badge type-badge-{{event.type === '星享会' ? 'star' : 'lunch'}}">
+        <text class="badge-text">{{event.type}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 活动信息 -->
+  <view class="info-section">
+    <view class="info-card">
+      <view class="info-row">
+        <view class="info-label">
+          <text class="info-icon">👤</text>
+          <text class="label-text">组织者</text>
+        </view>
+        <text class="info-value">{{event.organizer || '待定'}}</text>
+      </view>
+
+      <view class="info-row">
+        <view class="info-label">
+          <text class="info-icon">📅</text>
+          <text class="label-text">活动时间</text>
+        </view>
+        <text class="info-value">{{utils.formatTime(event.time)}}</text>
+      </view>
+
+      <view wx:if="{{event.address}}" class="info-row">
+        <view class="info-label">
+          <text class="info-icon">📍</text>
+          <text class="label-text">活动地址</text>
+        </view>
+        <text class="info-value">{{event.address}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 地图 -->
+  <view wx:if="{{event.latitude && event.longitude}}" class="map-section">
+    <view class="section-title">
+      <text class="title-text">活动地点</text>
+    </view>
+    <map
+      id="eventMap"
+      class="event-map"
+      longitude="{{event.longitude}}"
+      latitude="{{event.latitude}}"
+      markers="{{markers}}"
+      scale="16"
+      show-location
+    ></map>
+    <button class="nav-btn" bindtap="onNavigate">
+      <text class="btn-icon">🧭</text>
+      <text class="btn-text">导航到活动地点</text>
+    </button>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="actions-section">
+    <button wx:if="{{isCofounder}}" class="action-btn edit-btn" bindtap="onEdit">
+      <text class="btn-icon">✏️</text>
+      <text class="btn-text">编辑活动</text>
+    </button>
+    <button class="action-btn share-btn" bindtap="onShare">
+      <text class="btn-icon">📤</text>
+      <text class="btn-text">生成分享图</text>
+    </button>
+  </view>
+</view>
+
+<!-- 加载状态 -->
+<view wx:if="{{!event}}" class="loading-state">
+  <text class="loading-text">加载中...</text>
+</view>

@@ -1,0 +1,96 @@
+<!--pages/event-edit/event-edit.wxml-->
+<view class="edit-container">
+  <view class="form-section">
+    <!-- 活动类型 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">活动类型</text>
+        <text class="required">*</text>
+      </view>
+      <picker
+        class="form-picker"
+        mode="selector"
+        range="{{typeOptions}}"
+        value="{{typeOptions.indexOf(formData.type)}}"
+        bindchange="onTypeChange"
+      >
+        <view class="picker-value">{{formData.type}}</view>
+      </picker>
+    </view>
+
+    <!-- 组织者 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">组织者</text>
+        <text class="required">*</text>
+      </view>
+      <input
+        class="form-input"
+        placeholder="请输入组织者姓名"
+        value="{{formData.organizer}}"
+        bindinput="onOrganizerInput"
+      />
+    </view>
+
+    <!-- 活动时间 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">活动时间</text>
+        <text class="required">*</text>
+      </view>
+      <picker
+        class="form-picker"
+        mode="date"
+        value="{{formData.time}}"
+        bindchange="onTimeChange"
+      >
+        <view class="picker-value">
+          {{formData.time ? formData.time : '请选择活动时间'}}
+        </view>
+      </picker>
+    </view>
+
+    <!-- 活动地址 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">活动地址</text>
+      </view>
+      <view class="location-picker" bindtap="onChooseLocation">
+        <text class="location-text">
+          {{formData.address || '点击选择地址'}}
+        </text>
+        <text class="location-icon">📍</text>
+      </view>
+    </view>
+
+    <!-- 活动图片 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">活动海报</text>
+      </view>
+      <view class="image-upload" bindtap="onChooseImage">
+        <image
+          wx:if="{{formData.image}}"
+          class="upload-image"
+          src="{{formData.image}}"
+          mode="aspectFill"
+        ></image>
+        <view wx:else class="upload-placeholder">
+          <text class="upload-icon">📷</text>
+          <text class="upload-text">点击上传图片</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 保存按钮 -->
+  <view class="actions-section">
+    <button
+      class="save-btn"
+      bindtap="onSave"
+      disabled="{{saving}}"
+    >
+      {{saving ? '保存中...' : (isEdit ? '保存修改' : '创建活动')}}
+    </button>
+  </view>
+</view>

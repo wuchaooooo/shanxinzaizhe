@@ -3,6 +3,8 @@
     "pages/home/home",
     "pages/team/team",
     "pages/events/events",
+    "pages/event-detail/event-detail",
+    "pages/event-edit/event-edit",
     "pages/profile/profile",
     "pages/about-aia/about-aia"
   ],
@@ -13,6 +15,11 @@
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f5f5f5",
     "enablePullDownRefresh": false
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "你的位置信息将用于选择活动地点"
+    }
   },
   "tabBar": {
     "color": "#94a3b8",

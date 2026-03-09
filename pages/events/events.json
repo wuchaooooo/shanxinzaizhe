@@ -1,4 +1,6 @@
 {
-  "navigationBarTitleText": "",
+  "navigationBarTitleText": "精彩活动",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#f5f5f5",
   "usingComponents": {}
 }

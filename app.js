@@ -2,6 +2,7 @@
 const { DATA_SOURCE_CONFIG } = require('./utils/data-source-config.js')
 const { fetchFeishuPartnersText, downloadImagesBackground, getPartnersFromCache } = require('./utils/partners-data-loader.js')
 const { fetchFeishuAssets, getAssetsFromCache } = require('./utils/assets-loader.js')
+const { fetchFeishuEventsText, downloadEventImagesBackground, getEventsFromCache } = require('./utils/events-data-loader.js')
 
 App({
   async onLaunch() {
@@ -31,6 +32,13 @@ App({
         this.globalData.partnersData = cached
       }
       await this.preloadFeishuData()
+
+      // 最后加载活动数据
+      const cachedEvents = getEventsFromCache()
+      if (cachedEvents.length > 0) {
+        this.globalData.eventsData = cachedEvents
+      }
+      await this.preloadFeishuEvents()
     }
 
     // 小程序启动时执行
@@ -111,6 +119,32 @@ App({
     }
   },
 
+  // 预加载飞书活动数据（两阶段：文本数据先返回，图片后台下载）
+  async preloadFeishuEvents() {
+    if (this._fetchingFeishuEvents) return
+    this._fetchingFeishuEvents = true
+    try {
+      console.log('开始预加载飞书活动数据...')
+
+      const { events, changedIds } = await fetchFeishuEventsText()
+
+      // 始终更新引用，保证图片路径的修改能同步到 globalData
+      this.globalData.eventsData = events
+
+      // 始终通知页面刷新
+      this.globalData.eventsDataListeners.forEach(cb => cb(events))
+
+      // 等待活动图片下载完成
+      await downloadEventImagesBackground(events, (name, path) => {
+        this.globalData.eventsImageReadyListeners.forEach(cb => cb(name, path))
+      }, changedIds)
+    } catch (error) {
+      console.error('预加载飞书活动数据失败:', error)
+    } finally {
+      this._fetchingFeishuEvents = false
+    }
+  },
+
   // 获取当前登录用户的 openid，并与飞书联合创始人数据比对身份
   fetchOpenidAndMatchUser() {
     wx.cloud.callFunction({
@@ -146,6 +180,7 @@ App({
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
       await this.preloadFeishuAssets()
       await this.preloadFeishuData()
+      await this.preloadFeishuEvents()
     }
   },
 
@@ -163,6 +198,9 @@ App({
     imageReadyListeners: [],     // 头像下载完成回调列表，team/profile 页面注册
     partnersDataListeners: [],   // 文本数据刷新回调列表，home/team 页面注册
     assetsData: {},              // 静态资源缓存
-    assetsDataListeners: []      // 静态资源刷新回调列表
+    assetsDataListeners: [],     // 静态资源刷新回调列表
+    eventsData: null,            // 活动数据缓存
+    eventsImageReadyListeners: [], // 活动图片下载完成回调列表
+    eventsDataListeners: []      // 活动数据刷新回调列表
   }
 })
