@@ -73,7 +73,8 @@ Page({
     tenure: '', // 司龄
     customersServed: '', // 服务客户
     bio: '', // 个人简介
-    shanxinLogoUrl: '' // 善心logo
+    shanxinLogoUrl: '', // 善心logo
+    posterScrollReady: true // 控制scroll-view的渲染，用于重置滚动位置
   },
 
   // 计算司龄
@@ -339,7 +340,14 @@ Page({
       if (this.data.qrcodeImage) currentPartner.qrcode = this.data.qrcodeImage
     }
 
-    generateTeamPoster(this, 'posterCanvas', currentPartner, partners)
+    // 先卸载scroll-view，强制重置滚动位置
+    this.setData({ posterScrollReady: false }, () => {
+      // 立即重新挂载scroll-view
+      this.setData({ posterScrollReady: true }, () => {
+        // 然后生成海报
+        generateTeamPoster(this, 'posterCanvas', currentPartner, partners)
+      })
+    })
   },
 
   onHidePoster() {

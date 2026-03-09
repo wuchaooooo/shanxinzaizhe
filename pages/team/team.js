@@ -2,7 +2,7 @@
 const { getPartnersDataSync, fetchFeishuPartnersText, downloadImagesBackground } = require('../../utils/partners-data-loader.js')
 const { getAssetPath } = require('../../utils/assets-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
-const { generateTeamPoster } = require('../../utils/poster-generator.js')
+const { generateTeamPoster, generateShareImage } = require('../../utils/poster-generator.js')
 
 // 将包含符号的文本拆分成数组
 function splitBySymbols(text) {
@@ -60,7 +60,7 @@ function getInitialPartners() {
   if (cached.length > 0) {
     return cached.map(partner => processPartnerData({
       ...partner,
-      loaded: !!partner.image
+      loaded: false  // 初始设为 false，等待图片实际加载完成后再设为 true
     }))
   }
   // 如果没有缓存数据，返回占位符
@@ -81,7 +81,9 @@ Page({
     loading: false,
     allImagesLoaded: false, // 是否所有合伙人头像已加载完成
     shanxinLogoUrl: '', // 善心logo
-    posterBtnLogoLoaded: false // 海报按钮logo是否加载完成
+    posterBtnLogoLoaded: false, // 海报按钮logo是否加载完成
+    posterScrollReady: true, // 控制scroll-view的渲染，用于重置滚动位置
+    shareImageUrl: '' // 分享图片路径
   },
 
   checkAllImagesLoaded(partners) {
@@ -111,12 +113,12 @@ Page({
     if (partnersData.length > 0) {
       const partners = partnersData.map(partner => processPartnerData({
         ...partner,
-        loaded: !!partner.image
+        loaded: false  // 初始设为 false，等待图片实际加载完成
       }))
       this.setData({
         partners,
         filteredPartners: partners,
-        allImagesLoaded: this.checkAllImagesLoaded(partners)
+        allImagesLoaded: false
       })
       this.calculateStats()
     } else {
@@ -125,22 +127,36 @@ Page({
 
     // 注册头像下载完成回调，每下载好一张就更新对应卡片（只处理头像，不处理二维码）
     this._imageReadyCb = (name, path) => {
+      console.log('_imageReadyCb 被调用:', name, path)
       const partners = this.data.partners
       const idx = partners.findIndex(p => p.name === name)
-      if (idx === -1) return
+      if (idx === -1) {
+        console.log('_imageReadyCb: 未找到合伙人:', name)
+        return
+      }
+
+      console.log(`_imageReadyCb: 更新 partners[${idx}] 的图片路径`)
+
+      // 同时更新 globalData，确保其他页面能获取到最新数据
+      const globalPartners = app.globalData.partnersData || []
+      const globalIdx = globalPartners.findIndex(p => p.name === name)
+      if (globalIdx !== -1) {
+        globalPartners[globalIdx].image = path
+        app.globalData.partnersData = globalPartners
+        console.log(`_imageReadyCb: 同步更新 globalData.partnersData[${globalIdx}]`)
+      }
 
       const updates = {
-        [`partners[${idx}].image`]: path,
-        [`partners[${idx}].loaded`]: true
+        [`partners[${idx}].image`]: path
+        // 不在这里设置 loaded: true，等待 onImageLoad 事件触发
       }
       const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
       if (fidx !== -1) {
         updates[`filteredPartners[${fidx}].image`] = path
-        updates[`filteredPartners[${fidx}].loaded`] = true
       }
 
       this.setData(updates, () => {
-        this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
+        console.log(`_imageReadyCb: ${name} 图片路径更新完成，等待图片加载`)
       })
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
@@ -262,6 +278,28 @@ Page({
       totalBadges: { to: totalBadges },
       uniqueSkills: { to: uniqueSkills }
     })
+
+    // 数据变化时清空分享图，触发重新生成
+    this.setData({ shareImageUrl: '' })
+
+    // 生成分享图
+    if (teamCount > 0) {
+      this.generateShareImageIfNeeded()
+    }
+  },
+
+  // 生成分享图（如果还没有生成）
+  generateShareImageIfNeeded() {
+    const stats = {
+      teamCount: this.data.teamCount,
+      totalBadges: this.data.totalBadges,
+      uniqueSkills: this.data.uniqueSkills
+    }
+    // 只传递已加载的合伙人
+    const loadedPartners = this.data.partners.filter(p => p.loaded && p.image)
+    if (loadedPartners.length > 0) {
+      generateShareImage(this, 'shareCanvas', stats, loadedPartners)
+    }
   },
 
   onSearchInput(e) {
@@ -339,9 +377,9 @@ Page({
   // 分享功能
   onShareAppMessage() {
     return {
-      title: `善心浙里团队 - ${this.data.teamCount}位联合创始人`,
+      title: `善心浙里-${this.data.teamCount}位联合创始人`,
       path: '/pages/team/team',
-      imageUrl: ''
+      imageUrl: this.data.shareImageUrl || this.data.shanxinLogoUrl || ''
     }
   },
 
@@ -390,7 +428,14 @@ Page({
     if (!currentUser) return
 
     const generatePoster = () => {
-      generateTeamPoster(this, 'posterCanvas', currentUser, this.data.partners)
+      // 先卸载scroll-view，强制重置滚动位置
+      this.setData({ posterScrollReady: false }, () => {
+        // 立即重新挂载scroll-view
+        this.setData({ posterScrollReady: true }, () => {
+          // 然后生成海报
+          generateTeamPoster(this, 'posterCanvas', currentUser, this.data.partners)
+        })
+      })
     }
 
     // 检查是否所有头像都已加载
@@ -408,10 +453,57 @@ Page({
     })
   },
 
+  // 阻止事件冒泡
+  onStopPropagation() {
+    // 空方法，用于阻止事件冒泡
+  },
+
   // 海报按钮logo加载完成
   onPosterBtnLogoLoad() {
     this.setData({
       posterBtnLogoLoaded: true
     })
+  },
+
+  // 图片加载成功
+  onImageLoad(e) {
+    const name = e.currentTarget.dataset.name
+    console.log('图片加载成功:', name)
+    const partners = this.data.partners
+    const idx = partners.findIndex(p => p.name === name)
+    if (idx === -1) {
+      console.log('未找到合伙人:', name)
+      return
+    }
+
+    console.log(`设置 partners[${idx}].loaded = true`)
+    const updates = {
+      [`partners[${idx}].loaded`]: true
+    }
+    const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
+    if (fidx !== -1) {
+      updates[`filteredPartners[${fidx}].loaded`] = true
+    }
+
+    this.setData(updates, () => {
+      console.log(`${name} loaded 状态已更新`)
+      this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
+
+      // 如果还没有生成分享图，且有足够的头像，尝试生成
+      if (!this.data.shareImageUrl && this.data.teamCount > 0) {
+        const loadedCount = this.data.partners.filter(p => p.loaded).length
+        if (loadedCount >= 3) { // 至少3个头像加载完成后生成分享图
+          this.generateShareImageIfNeeded()
+        }
+      }
+    })
+  },
+
+  // 图片加载失败
+  onImageError(e) {
+    const name = e.currentTarget.dataset.name
+    console.log('图片加载失败:', name)
+    // 图片加载失败时，保持 loaded: false，继续显示骨架屏
+    // 后台的 imageReadyListeners 会重新下载图片
   }
 })

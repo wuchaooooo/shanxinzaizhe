@@ -240,7 +240,7 @@
         <text class="poster-modal-title">团队海报</text>
         <text class="poster-modal-close" bindtap="onHidePoster">✕</text>
       </view>
-      <scroll-view class="poster-scroll-view" scroll-y scroll-into-view="{{posterImage ? '' : 'poster-bottom'}}">
+      <scroll-view wx:if="{{posterScrollReady}}" class="poster-scroll-view" scroll-y>
         <view class="poster-image-wrapper">
           <!-- 骨架屏 -->
           <view class="poster-skeleton {{posterImage ? 'poster-skeleton-hide' : ''}}">
@@ -250,7 +250,6 @@
           <image class="poster-image {{posterImage ? 'poster-image-show' : ''}}" src="{{posterImage}}" mode="widthFix" show-menu-by-longpress="{{true}}"></image>
           <text class="poster-tip poster-tip-show" wx:if="{{posterImage}}">长按图片保存到相册</text>
         </view>
-        <view id="poster-bottom"></view>
       </scroll-view>
     </view>
   </view>

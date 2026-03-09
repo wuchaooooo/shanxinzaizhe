@@ -667,7 +667,8 @@
   }
 }
 
-.poster-canvas {
+.poster-canvas,
+.share-canvas {
   position: fixed;
   left: -9999px;
   top: 0;

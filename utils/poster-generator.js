@@ -323,4 +323,219 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
     }
 }
 
-module.exports = { generateTeamPoster }
+/**
+ * 生成团队分享图（包含统计数据和头像）
+ * @param {Object} page - 调用页面的 this
+ * @param {string} canvasId - canvas 的 canvas-id
+ * @param {Object} stats - 统计数据 { teamCount, totalBadges, uniqueSkills }
+ * @param {Array} partners - 合伙人数据（取前6个显示头像）
+ * @returns {Promise<string>} 返回生成的图片路径
+ */
+async function generateShareImage(page, canvasId, stats, partners) {
+    try {
+        const canvasWidth = 750
+        const canvasHeight = 750
+
+        const ctx = wx.createCanvasContext(canvasId, page)
+
+        // 背景色 - 白色
+        ctx.setFillStyle('#ffffff')
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight)
+
+        // 绘制统计卡片背景
+        const cardX = 32
+        const cardY = 40
+        const cardWidth = canvasWidth - 64
+        const cardHeight = 180
+
+        ctx.setFillStyle('#ffffff')
+        ctx.setShadow(0, 2, 8, 'rgba(0, 0, 0, 0.05)')
+        ctx.fillRect(cardX, cardY, cardWidth, cardHeight)
+        ctx.setShadow(0, 0, 0, 'transparent')
+
+        // 绘制3个统计数据
+        const statWidth = cardWidth / 3
+        const statsData = [
+            { label: '联合创始人', value: stats.teamCount },
+            { label: '荣誉徽章', value: stats.totalBadges },
+            { label: '专业技能', value: stats.uniqueSkills }
+        ]
+
+        statsData.forEach((stat, index) => {
+            const x = cardX + statWidth * index + statWidth / 2
+
+            // 绘制数字
+            ctx.setFillStyle('#c20000')
+            ctx.setFontSize(48)
+            ctx.setTextAlign('center')
+            ctx.fillText(String(stat.value), x, cardY + 80)
+
+            // 绘制标签
+            ctx.setFontSize(24)
+            ctx.setFillStyle('#666666')
+            ctx.fillText(stat.label, x, cardY + 130)
+
+            // 绘制分隔线（除了最后一个）
+            if (index < statsData.length - 1) {
+                ctx.setStrokeStyle('rgba(194, 0, 0, 0.1)')
+                ctx.setLineWidth(1)
+                ctx.beginPath()
+                ctx.moveTo(cardX + statWidth * (index + 1), cardY + 40)
+                ctx.lineTo(cardX + statWidth * (index + 1), cardY + 140)
+                ctx.stroke()
+            }
+        })
+
+        // 绘制合伙人网格（1行3列，共3个）
+        const gridStartY = cardY + cardHeight + 60
+        const cols = 3
+        const itemWidth = (canvasWidth - 64 - 32) / cols
+        const itemHeight = 280
+        const gap = 16
+
+        const displayPartners = partners.slice(0, 3).filter(p => p.image)
+
+        // 批量获取头像信息
+        const avatarInfoMap = new Map()
+        for (const partner of displayPartners) {
+            if (partner.image) {
+                try {
+                    const info = await wx.getImageInfo({ src: partner.image })
+                    avatarInfoMap.set(partner.image, { width: info.width, height: info.height, ratio: info.width / info.height })
+                } catch (e) {
+                    console.error('获取头像信息失败:', partner.name, e)
+                    avatarInfoMap.set(partner.image, { ratio: 1 }) // 默认正方形
+                }
+            }
+        }
+
+        const avatarSize = 120
+        const avatarOverhang = 40  // 头像突出卡片顶部的高度
+
+        // 先绘制所有卡片背景
+        for (let i = 0; i < Math.min(displayPartners.length, 3); i++) {
+            const row = Math.floor(i / cols)
+            const col = i % cols
+            const x = 32 + col * (itemWidth + gap)
+            const y = gridStartY + row * (itemHeight + gap)
+
+            const cardStartY = y + avatarOverhang
+            const cardHeight = itemHeight - avatarOverhang
+
+            ctx.setFillStyle('#ffffff')
+            ctx.setShadow(0, 2, 8, 'rgba(0, 0, 0, 0.05)')
+            ctx.fillRect(x, cardStartY, itemWidth, cardHeight)
+            ctx.setShadow(0, 0, 0, 'transparent')
+        }
+
+        // 再绘制所有头像和文字（在卡片背景之上）
+        for (let i = 0; i < Math.min(displayPartners.length, 3); i++) {
+            const partner = displayPartners[i]
+            const row = Math.floor(i / cols)
+            const col = i % cols
+            const x = 32 + col * (itemWidth + gap)
+            const y = gridStartY + row * (itemHeight + gap)
+
+            const avatarX = x + (itemWidth - avatarSize) / 2
+            const avatarY = y  // 头像从卡片顶部开始
+
+            // 绘制头像背景圆
+            ctx.setFillStyle('#E9AE73')
+            ctx.beginPath()
+            ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, 2 * Math.PI)
+            ctx.fill()
+
+            // 绘制头像
+            if (partner.image) {
+                const avatarInfo = avatarInfoMap.get(partner.image) || { ratio: 1 }
+                try {
+                    const imgRatio = avatarInfo.ratio
+                    // 使用 aspectFill 模式：容器宽高比 1:1.25（参考团队页面）
+                    const containerWidth = avatarSize
+                    const containerHeight = avatarSize * 1.25
+                    const containerRatio = containerWidth / containerHeight
+                    let drawWidth, drawHeight, drawX, drawY
+                    const avatarCenterY = avatarY + avatarSize / 2
+                    const avatarLeft = avatarX
+                    const avatarTop = avatarCenterY - avatarSize / 2
+
+                    if (imgRatio > containerRatio) {
+                        // 图片更宽，以高度为准
+                        drawHeight = containerHeight
+                        drawWidth = drawHeight * imgRatio
+                        drawX = avatarLeft - (drawWidth - containerWidth) / 2
+                        drawY = avatarTop
+                    } else {
+                        // 图片更高或正方形，以宽度为准
+                        drawWidth = containerWidth
+                        drawHeight = drawWidth / imgRatio
+                        drawX = avatarLeft
+                        drawY = avatarTop
+                    }
+
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.arc(avatarX + avatarSize / 2, avatarCenterY, avatarSize / 2, 0, 2 * Math.PI)
+                    ctx.clip()
+                    ctx.drawImage(partner.image, drawX, drawY, drawWidth, drawHeight)
+                    ctx.restore()
+                } catch (e) {
+                    console.error('绘制头像失败:', partner.name, e)
+                }
+            }
+
+            // 绘制姓名
+            ctx.setFillStyle('#333333')
+            ctx.setFontSize(28)
+            ctx.setTextAlign('center')
+            ctx.fillText(partner.name, x + itemWidth / 2, avatarY + avatarSize + 40)
+
+            // 绘制学校（只显示第一个）
+            if (partner.school) {
+                const schoolLines = partner.school.split(/[、，；\n]/).filter(s => s.trim())
+                if (schoolLines.length > 0) {
+                    ctx.setFillStyle('#666666')
+                    ctx.setFontSize(22)
+                    const schoolText = schoolLines[0].length > 10 ? schoolLines[0].substring(0, 10) + '...' : schoolLines[0]
+                    ctx.fillText(schoolText, x + itemWidth / 2, avatarY + avatarSize + 75)
+                }
+            }
+
+            // 绘制职位（只显示第一个）
+            if (partner.title) {
+                const titleLines = partner.title.split(/[、，；\n]/).filter(s => s.trim())
+                if (titleLines.length > 0) {
+                    ctx.setFillStyle('#999999')
+                    ctx.setFontSize(20)
+                    const titleText = titleLines[0].length > 10 ? titleLines[0].substring(0, 10) + '...' : titleLines[0]
+                    ctx.fillText(titleText, x + itemWidth / 2, avatarY + avatarSize + 105)
+                }
+            }
+        }
+
+        ctx.draw(false, async () => {
+            await new Promise(resolve => setTimeout(resolve, 500))
+            try {
+                const res = await wx.canvasToTempFilePath({
+                    canvasId: canvasId,
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    destWidth: canvasWidth,
+                    destHeight: canvasHeight,
+                    fileType: 'jpg',
+                    quality: 0.9
+                }, page)
+
+                page.setData({ shareImageUrl: res.tempFilePath })
+                console.log('分享图生成成功:', res.tempFilePath)
+            } catch (error) {
+                console.error('生成分享图失败:', error)
+            }
+        })
+    } catch (error) {
+        console.error('生成分享图出错:', error)
+        return ''
+    }
+}
+
+module.exports = { generateTeamPoster, generateShareImage }
