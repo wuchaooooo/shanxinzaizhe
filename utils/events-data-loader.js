@@ -82,6 +82,12 @@ function transformFeishuEventRecord(record, eventType) {
   const imageKeyStr = fields[mapping.imageKey] || ''
   const imageKeys = imageKeyStr ? imageKeyStr.split(',').map(k => k.trim()).filter(k => k) : []
 
+  console.log(`[${eventType}] 图片字段解析:`, {
+    原始字段值: imageKeyStr,
+    解析后数组: imageKeys,
+    数组长度: imageKeys.length
+  })
+
   const transformed = {
     id: record.record_id, // 使用 record_id 作为唯一标识
     name: fields[mapping.name] || '', // 活动名称

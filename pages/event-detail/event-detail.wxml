@@ -57,7 +57,8 @@
 </wxs>
 
 <view class="detail-container" wx:if="{{event}}">
-  <!-- 活动图片轮播 -->\n  <view class="image-section">
+  <!-- 活动图片轮播 -->
+  <view class="image-section">
     <swiper
       class="event-swiper"
       indicator-dots="{{event.images && event.images.length > 1}}"
@@ -70,7 +71,7 @@
         <image
           class="event-image"
           src="{{item || '/images/placeholder.png'}}"
-          mode="aspectFill"
+          mode="widthFix"
           bindtap="onImageTap"
           data-index="{{index}}"
         ></image>

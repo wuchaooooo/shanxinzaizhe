@@ -82,6 +82,9 @@ Page({
     // 确保 images 数组存在（兼容性处理）
     if (!event.images || event.images.length === 0) {
       event.images = event.image ? [event.image] : []
+      console.log('详情页：images 数组为空，使用 image 字段填充:', event.images)
+    } else {
+      console.log('详情页：images 数组已存在:', event.images)
     }
 
     this.setData({
@@ -91,8 +94,13 @@ Page({
     })
 
     console.log('详情页最终数据:', {
+      eventId: event.id,
+      eventName: event.name,
       images: event.images,
-      imagesLength: event.images?.length
+      imagesLength: event.images?.length,
+      image: event.image,
+      imageKeys: event.imageKeys,
+      imageKeysLength: event.imageKeys?.length
     })
   },
 
