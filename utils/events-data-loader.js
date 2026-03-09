@@ -5,11 +5,53 @@ const feishuApi = require('./feishu-api.js')
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
 
 /**
+ * 根据开始时间和结束时间计算活动状态
+ */
+function calculateEventStatus(startTime, endTime) {
+  if (!startTime) return '即将开始'
+
+  const now = new Date()
+  const start = new Date(startTime)
+  const end = endTime ? new Date(endTime) : null
+
+  // 如果当前时间 < 开始时间：即将开始
+  if (now < start) {
+    return '即将开始'
+  }
+
+  // 如果有结束时间
+  if (end) {
+    // 如果当前时间 >= 结束时间：已结束
+    if (now >= end) {
+      return '已结束'
+    }
+    // 如果开始时间 <= 当前时间 < 结束时间：进行中
+    return '进行中'
+  }
+
+  // 如果没有结束时间，只要过了开始时间就认为是进行中
+  return '进行中'
+}
+
+/**
  * 将飞书记录转换为本地数据格式
  */
 function transformFeishuEventRecord(record, eventType) {
   const fields = record.fields
   const mapping = DATA_SOURCE_CONFIG.eventsFieldMapping
+
+  console.log(`[${eventType}] 原始飞书记录:`, {
+    record_id: record.record_id,
+    所有字段名: Object.keys(fields),
+    活动名称映射: mapping.name,
+    活动名称值: fields[mapping.name],
+    组织者映射: mapping.organizer,
+    组织者值: fields[mapping.organizer],
+    开始时间映射: mapping.time,
+    开始时间值: fields[mapping.time],
+    结束时间映射: mapping.endTime,
+    结束时间值: fields[mapping.endTime]
+  })
 
   // 解析时间字段（飞书返回的是时间戳）
   const parseTime = (timestamp) => {
@@ -18,24 +60,47 @@ function transformFeishuEventRecord(record, eventType) {
       const date = new Date(timestamp)
       return date.toISOString()
     } catch (e) {
+      console.error('时间解析失败:', timestamp, e)
       return String(timestamp)
     }
   }
 
-  return {
+  const startTime = parseTime(fields[mapping.time])
+  const endTime = parseTime(fields[mapping.endTime])
+
+  console.log(`[${eventType}] 时间字段:`, {
+    原始开始时间: fields[mapping.time],
+    解析后开始时间: startTime,
+    原始结束时间: fields[mapping.endTime],
+    解析后结束时间: endTime
+  })
+
+  // 自动计算活动状态
+  const autoStatus = calculateEventStatus(startTime, endTime)
+
+  const transformed = {
     id: record.record_id, // 使用 record_id 作为唯一标识
+    name: fields[mapping.name] || '', // 活动名称
     type: eventType, // 从表格类型推断（星享会或午餐会）
     organizer: fields[mapping.organizer] || '',
-    time: parseTime(fields[mapping.time]),
-    employeeId: fields[mapping.employeeId] || '', // 营销员工号（创建者）
-    address: fields[mapping.address] || '',
-    longitude: fields[mapping.longitude] || '',
-    latitude: fields[mapping.latitude] || '',
+    time: startTime,
+    endTime: endTime,
+    employeeId: fields[mapping.employeeId] || '', // 营销员工号
+    status: autoStatus, // 自动计算的活动状态
     // 使用飞书 Base 返回的 url 字段
     imageUrl: fields[mapping.image] ? fields[mapping.image][0]?.url : '',
     image: '', // 稍后填充本地路径
     lastModified: String(fields[mapping.lastModifiedDate] || '')
   }
+
+  console.log(`[${eventType}] 转换后数据:`, {
+    id: transformed.id,
+    name: transformed.name,
+    organizer: transformed.organizer,
+    status: transformed.status
+  })
+
+  return transformed
 }
 
 /**
@@ -233,6 +298,8 @@ async function fetchFeishuEventsText() {
       const lastModified = transformed.lastModified
       const fs = wx.getFileSystemManager()
 
+      console.log(`[星享会] 处理记录: ${transformed.name} (ID: ${cacheKey})`)
+
       // 检查缓存是否有效
       let isCacheValid = false
       if (cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
@@ -281,6 +348,8 @@ async function fetchFeishuEventsText() {
       const lastModified = transformed.lastModified
       const fs = wx.getFileSystemManager()
 
+      console.log(`[午餐会] 处理记录: ${transformed.name} (ID: ${cacheKey})`)
+
       let isCacheValid = false
       if (cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
         const cachedPath = cache[cacheKey].data.image
@@ -319,8 +388,30 @@ async function fetchFeishuEventsText() {
       return transformed
     })
 
-    // 合并两个数组
-    const events = [...starClubEvents, ...lunchEvents]
+    // 合并两个数组并去重（基于 record_id）
+    const eventsMap = new Map()
+
+    // 先添加星享会记录
+    starClubEvents.forEach(event => {
+      eventsMap.set(event.id, event)
+    })
+
+    // 再添加午餐会记录（如果 ID 已存在，说明有重复，保留第一个）
+    lunchEvents.forEach(event => {
+      if (eventsMap.has(event.id)) {
+        console.warn(`发现重复记录 ID: ${event.id}，已跳过`)
+      } else {
+        eventsMap.set(event.id, event)
+      }
+    })
+
+    const events = Array.from(eventsMap.values())
+
+    console.log(`合并后总数: ${events.length} 条（去重前: ${starClubEvents.length + lunchEvents.length} 条）`)
+    console.log('活动列表:')
+    events.forEach((e, i) => {
+      console.log(`  ${i + 1}. [${e.type}] ${e.name} (ID: ${e.id})`)
+    })
 
     // 按时间倒序排列（最新的在前面）
     events.sort((a, b) => {

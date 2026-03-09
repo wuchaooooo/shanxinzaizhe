@@ -242,6 +242,68 @@ function deleteRecord(recordId, params = {}) {
   })
 }
 
+/**
+ * 清除 token 缓存（权限变更后需要调用）
+ */
+function clearTokenCache() {
+  cachedToken = null
+  tokenExpireTime = 0
+  console.log('已清除 tenant_access_token 缓存')
+}
+
+/**
+ * 上传图片到飞书（用于多维表格附件字段）
+ * @param {string} filePath - 本地图片路径
+ * @param {Object} params - 参数
+ * @param {string} params.appToken - base token
+ * @returns {Promise<string>} - 返回 file_token
+ */
+async function uploadImage(filePath, params = {}) {
+  const { appToken } = params
+  const token = await getTenantAccessToken()
+
+  return new Promise((resolve, reject) => {
+    wx.uploadFile({
+      url: 'https://open.feishu.cn/open-apis/drive/v1/medias/upload_all',
+      filePath: filePath,
+      name: 'file',
+      formData: {
+        'file_name': 'event_poster.jpg',
+        'parent_type': 'bitable_image',
+        'parent_node': appToken
+      },
+      header: {
+        'Authorization': `Bearer ${token}`
+      },
+      success: (res) => {
+        console.log('上传图片响应:', res)
+        if (res.statusCode === 200) {
+          try {
+            const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+            if (data.code === 0 && data.data && data.data.file_token) {
+              console.log('图片上传成功，file_token:', data.data.file_token)
+              resolve(data.data.file_token)
+            } else {
+              console.error('图片上传失败:', data)
+              reject(new Error(data.msg || '图片上传失败'))
+            }
+          } catch (e) {
+            console.error('解析上传响应失败:', e, res.data)
+            reject(new Error('解析响应失败'))
+          }
+        } else {
+          console.error('图片上传HTTP错误:', res.statusCode, res.data)
+          reject(new Error(`HTTP ${res.statusCode}`))
+        }
+      },
+      fail: (err) => {
+        console.error('图片上传网络请求失败:', err)
+        reject(err)
+      }
+    })
+  })
+}
+
 module.exports = {
   getRecords,
   getAllRecords,
@@ -250,5 +312,7 @@ module.exports = {
   updateRecord,
   deleteRecord,
   getTenantAccessToken,
+  clearTokenCache,
+  uploadImage,
   FEISHU_CONFIG
 }

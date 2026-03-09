@@ -2,25 +2,87 @@
 <wxs module="utils">
   var formatTime = function(timeStr) {
     if (!timeStr) return '待定'
+
     try {
-      var date = getDate(timeStr)
-      var year = date.getFullYear()
-      var month = ('0' + (date.getMonth() + 1)).slice(-2)
-      var day = ('0' + date.getDate()).slice(-2)
-      var hour = ('0' + date.getHours()).slice(-2)
-      var minute = ('0' + date.getMinutes()).slice(-2)
-      return year + '-' + month + '-' + day + ' ' + hour + ':' + minute
+      // 手动解析 ISO 8601 格式: "2026-03-09T11:00:00.000Z"
+      // 直接使用字符串切片，不进行数字转换
+      var month = timeStr.substring(5, 7)  // "03"
+      var day = timeStr.substring(8, 10)   // "09"
+      var hour = timeStr.substring(11, 13) // "11"
+      var minute = timeStr.substring(14, 16) // "00"
+
+      // 转换为东8区（UTC+8）- 需要数字运算
+      var hourNum = hour - 0
+      hourNum = hourNum + 8
+
+      var dayNum = day - 0
+      if (hourNum >= 24) {
+        hourNum = hourNum - 24
+        dayNum = dayNum + 1
+      }
+
+      // 重新格式化为字符串
+      var hourStr = hourNum < 10 ? '0' + hourNum : '' + hourNum
+      var dayStr = dayNum < 10 ? '0' + dayNum : '' + dayNum
+
+      return month + '月' + dayStr + '日 ' + hourStr + ':' + minute
     } catch (e) {
-      return timeStr
+      return '异常:' + e
     }
   }
 
+  var getStatusClass = function(status) {
+    if (status === '即将开始') return 'status-upcoming'
+    if (status === '进行中') return 'status-ongoing'
+    if (status === '已结束') return 'status-finished'
+    return 'status-upcoming'
+  }
+
   module.exports = {
-    formatTime: formatTime
+    formatTime: formatTime,
+    getStatusClass: getStatusClass
   }
 </wxs>
 
 <view class="events-container">
+  <!-- 搜索框 -->
+  <view class="search-container">
+    <view class="search-box">
+      <text class="search-icon">🔍</text>
+      <input
+        class="search-input"
+        placeholder="搜索活动名称、组织者"
+        placeholder-class="search-placeholder"
+        bindinput="onSearchInput"
+        value="{{searchQuery}}"
+      />
+    </view>
+  </view>
+
+  <!-- 活动统计 -->
+  <view class="events-stats-section">
+    <view class="events-stats-content">
+      <view class="event-stat-item">
+        <text class="event-stat-number">{{starClubCount}}</text>
+        <text class="event-stat-label">星享会</text>
+      </view>
+      <view class="event-stat-item event-stat-border">
+        <text class="event-stat-number">{{lunchCount}}</text>
+        <text class="event-stat-label">午餐会</text>
+      </view>
+      <view class="event-stat-item">
+        <text class="event-stat-number">{{totalCount}}</text>
+        <text class="event-stat-label">全部活动</text>
+      </view>
+    </view>
+    <view wx:if="{{isCofounder}}" class="events-create-btn" catchtap="onCreateEvent">
+      <view class="create-btn-icon">
+        <text class="create-icon">➕</text>
+      </view>
+      <text class="create-btn-text">创建活动</text>
+    </view>
+  </view>
+
   <!-- 标签页 -->
   <view class="tabs-container">
     <view class="tabs">
@@ -34,59 +96,113 @@
         <text class="tab-text">{{item}}</text>
       </view>
     </view>
-    <!-- 创建按钮（仅联合创始人可见） -->
-    <view wx:if="{{isCofounder}}" class="create-btn" bindtap="onCreateEvent">
-      <text class="create-icon">➕</text>
-    </view>
   </view>
 
   <!-- 活动列表 -->
   <view class="events-list">
     <!-- 骨架屏 -->
-    <view wx:if="{{loading}}" class="skeleton-list">
-      <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="index">
-        <view class="skeleton-image"></view>
-        <view class="skeleton-content">
-          <view class="skeleton-title"></view>
-          <view class="skeleton-text"></view>
-          <view class="skeleton-text short"></view>
+    <view wx:if="{{loading}}" class="skeleton-waterfall">
+      <view class="skeleton-column">
+        <view class="skeleton-card">
+          <view class="skeleton-image"></view>
+          <view class="skeleton-content">
+            <view class="skeleton-title"></view>
+            <view class="skeleton-text"></view>
+          </view>
+        </view>
+        <view class="skeleton-card">
+          <view class="skeleton-image"></view>
+          <view class="skeleton-content">
+            <view class="skeleton-title"></view>
+            <view class="skeleton-text"></view>
+          </view>
+        </view>
+      </view>
+      <view class="skeleton-column">
+        <view class="skeleton-card">
+          <view class="skeleton-image"></view>
+          <view class="skeleton-content">
+            <view class="skeleton-title"></view>
+            <view class="skeleton-text"></view>
+          </view>
+        </view>
+        <view class="skeleton-card">
+          <view class="skeleton-image"></view>
+          <view class="skeleton-content">
+            <view class="skeleton-title"></view>
+            <view class="skeleton-text"></view>
+          </view>
         </view>
       </view>
     </view>
 
-    <!-- 活动卡片 -->
-    <view wx:if="{{!loading && filteredEvents.length > 0}}">
-      <view
-        class="event-card"
-        wx:for="{{filteredEvents}}"
-        wx:key="id"
-        bindtap="onEventTap"
-        data-id="{{item.id}}"
-        data-type="{{item.type}}"
-      >
-        <image
-          class="event-image"
-          src="{{item.image || '/images/placeholder.png'}}"
-          mode="aspectFill"
-        ></image>
-        <view class="event-content">
-          <view class="event-header">
-            <view class="event-type-badge event-type-{{item.type === '星享会' ? 'star' : 'lunch'}}">
-              <text class="badge-text">{{item.type}}</text>
+    <!-- 瀑布流布局 -->
+    <view wx:if="{{!loading && filteredEvents.length > 0}}" class="waterfall-container">
+      <!-- 左列 -->
+      <view class="waterfall-column">
+        <view
+          class="event-card"
+          wx:for="{{leftColumn}}"
+          wx:key="id"
+          bindtap="onEventTap"
+          data-id="{{item.id}}"
+          data-type="{{item.type}}"
+        >
+          <image
+            class="event-image"
+            src="{{item.image || '/images/placeholder.png'}}"
+            mode="widthFix"
+          ></image>
+          <view class="event-content">
+            <view class="event-info">
+              <view class="info-item">
+                <text class="info-icon">👤</text>
+                <text class="info-text">{{item.organizer || '待定'}}</text>
+              </view>
+              <view class="info-item">
+                <text class="info-icon">📅</text>
+                <text class="info-text">{{utils.formatTime(item.time)}}</text>
+              </view>
+              <view class="info-item">
+                <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
+                  <text class="status-text">{{item.status || '待定'}}</text>
+                </view>
+              </view>
             </view>
           </view>
-          <view class="event-info">
-            <view class="info-item">
-              <text class="info-icon">👤</text>
-              <text class="info-text">{{item.organizer || '待定'}}</text>
-            </view>
-            <view class="info-item">
-              <text class="info-icon">📅</text>
-              <text class="info-text">{{utils.formatTime(item.time)}}</text>
-            </view>
-            <view wx:if="{{item.address}}" class="info-item">
-              <text class="info-icon">📍</text>
-              <text class="info-text">{{item.address}}</text>
+        </view>
+      </view>
+
+      <!-- 右列 -->
+      <view class="waterfall-column">
+        <view
+          class="event-card"
+          wx:for="{{rightColumn}}"
+          wx:key="id"
+          bindtap="onEventTap"
+          data-id="{{item.id}}"
+          data-type="{{item.type}}"
+        >
+          <image
+            class="event-image"
+            src="{{item.image || '/images/placeholder.png'}}"
+            mode="widthFix"
+          ></image>
+          <view class="event-content">
+            <view class="event-info">
+              <view class="info-item">
+                <text class="info-icon">👤</text>
+                <text class="info-text">{{item.organizer || '待定'}}</text>
+              </view>
+              <view class="info-item">
+                <text class="info-icon">📅</text>
+                <text class="info-text">{{utils.formatTime(item.time)}}</text>
+              </view>
+              <view class="info-item">
+                <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
+                  <text class="status-text">{{item.status || '待定'}}</text>
+                </view>
+              </view>
             </view>
           </view>
         </view>

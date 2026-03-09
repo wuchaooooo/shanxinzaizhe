@@ -35,13 +35,12 @@ const DATA_SOURCE_CONFIG = {
 
   // 活动数据字段映射配置
   eventsFieldMapping: {
+    name: '活动主题',
     organizer: '组织者',
     time: '开始时间',
+    endTime: '结束时间',
     image: '活动海报',
     employeeId: '营销员工号',
-    address: '活动地址',
-    longitude: '地址经度',
-    latitude: '地址纬度',
     lastModifiedDate: 'Last Modified Date'
   }
 }

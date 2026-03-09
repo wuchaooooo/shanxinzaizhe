@@ -2,21 +2,57 @@
 <wxs module="utils">
   var formatTime = function(timeStr) {
     if (!timeStr) return '待定'
+
     try {
-      var date = getDate(timeStr)
-      var year = date.getFullYear()
-      var month = ('0' + (date.getMonth() + 1)).slice(-2)
-      var day = ('0' + date.getDate()).slice(-2)
-      var hour = ('0' + date.getHours()).slice(-2)
-      var minute = ('0' + date.getMinutes()).slice(-2)
-      return year + '年' + month + '月' + day + '日 ' + hour + ':' + minute
+      // 手动解析 ISO 8601 格式: "2026-03-09T11:00:00.000Z"
+      var parts = timeStr.split('T')
+      if (parts.length !== 2) return '格式错误'
+
+      var datePart = parts[0]
+      var timePart = parts[1].replace('Z', '').split('.')[0]
+
+      var dateComponents = datePart.split('-')
+      var timeComponents = timePart.split(':')
+
+      if (dateComponents.length !== 3 || timeComponents.length !== 3) {
+        return '解析错误'
+      }
+
+      // 使用字符串切片直接提取
+      var month = timeStr.substring(5, 7)
+      var day = timeStr.substring(8, 10)
+      var hour = timeStr.substring(11, 13)
+      var minute = timeStr.substring(14, 16)
+
+      // 转换为东8区（UTC+8）
+      var hourNum = hour - 0
+      hourNum = hourNum + 8
+
+      var dayNum = day - 0
+      if (hourNum >= 24) {
+        hourNum = hourNum - 24
+        dayNum = dayNum + 1
+      }
+
+      var hourStr = hourNum < 10 ? '0' + hourNum : '' + hourNum
+      var dayStr = dayNum < 10 ? '0' + dayNum : '' + dayNum
+
+      return month + '月' + dayStr + '日 ' + hourStr + ':' + minute
     } catch (e) {
-      return timeStr
+      return '错误'
     }
   }
 
+  var getStatusClass = function(status) {
+    if (status === '即将开始') return 'upcoming'
+    if (status === '进行中') return 'ongoing'
+    if (status === '已结束') return 'finished'
+    return 'upcoming'
+  }
+
   module.exports = {
-    formatTime: formatTime
+    formatTime: formatTime,
+    getStatusClass: getStatusClass
   }
 </wxs>
 
@@ -38,6 +74,19 @@
 
   <!-- 活动信息 -->
   <view class="info-section">
+    <!-- 活动标题 -->
+    <view class="title-section">
+      <text class="event-title">{{event.name || '活动详情'}}</text>
+      <view wx:if="{{event.status}}" class="status-badge status-{{utils.getStatusClass(event.status)}}">
+        <text class="status-text">{{event.status}}</text>
+      </view>
+    </view>
+
+    <!-- 活动简介 -->
+    <view wx:if="{{event.description}}" class="description-section">
+      <text class="description-text">{{event.description}}</text>
+    </view>
+
     <view class="info-card">
       <view class="info-row">
         <view class="info-label">
@@ -87,9 +136,13 @@
 
   <!-- 操作按钮 -->
   <view class="actions-section">
-    <button wx:if="{{isCofounder}}" class="action-btn edit-btn" bindtap="onEdit">
+    <button wx:if="{{canEdit}}" class="action-btn edit-btn" bindtap="onEdit">
       <text class="btn-icon">✏️</text>
       <text class="btn-text">编辑活动</text>
+    </button>
+    <button wx:if="{{canEdit}}" class="action-btn delete-btn" bindtap="onDelete">
+      <text class="btn-icon">🗑️</text>
+      <text class="btn-text">删除活动</text>
     </button>
     <button class="action-btn share-btn" bindtap="onShare">
       <text class="btn-icon">📤</text>
@@ -97,6 +150,31 @@
     </button>
   </view>
 </view>
+
+<!-- 海报弹窗 -->
+<view class="poster-modal {{showPoster ? 'poster-modal-show' : ''}}" bindtap="onClosePoster">
+  <view class="poster-content {{showPoster ? 'poster-content-show' : ''}}" catchtap="">
+    <view class="poster-modal-header">
+      <text class="poster-modal-title">活动海报</text>
+      <text class="poster-modal-close" bindtap="onClosePoster">✕</text>
+    </view>
+    <scroll-view class="poster-scroll-view" scroll-y>
+      <view class="poster-image-wrapper">
+        <!-- 骨架屏 -->
+        <view class="poster-skeleton {{posterImage ? 'poster-skeleton-hide' : ''}}">
+          <view class="poster-skeleton-shimmer"></view>
+        </view>
+        <!-- 真实海报 -->
+        <image class="poster-image {{posterImage ? 'poster-image-show' : ''}}" src="{{posterImage}}" mode="widthFix" show-menu-by-longpress="{{true}}"></image>
+        <!-- 提示文字 -->
+        <text class="poster-tip poster-tip-show" wx:if="{{posterImage}}">长按图片保存到相册</text>
+      </view>
+    </scroll-view>
+  </view>
+</view>
+
+<!-- Canvas 用于生成海报 -->
+<canvas canvas-id="posterCanvas" class="poster-canvas" style="width: 750px; height: {{canvasHeight}}px;"></canvas>
 
 <!-- 加载状态 -->
 <view wx:if="{{!event}}" class="loading-state">
