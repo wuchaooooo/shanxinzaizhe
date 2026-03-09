@@ -78,6 +78,10 @@ function transformFeishuEventRecord(record, eventType) {
   // 自动计算活动状态
   const autoStatus = calculateEventStatus(startTime, endTime)
 
+  // 处理多张图片的 imageKey（可能是逗号分隔的字符串）
+  const imageKeyStr = fields[mapping.imageKey] || ''
+  const imageKeys = imageKeyStr ? imageKeyStr.split(',').map(k => k.trim()).filter(k => k) : []
+
   const transformed = {
     id: record.record_id, // 使用 record_id 作为唯一标识
     name: fields[mapping.name] || '', // 活动名称
@@ -87,9 +91,10 @@ function transformFeishuEventRecord(record, eventType) {
     endTime: endTime,
     employeeId: fields[mapping.employeeId] || '', // 营销员工号
     status: autoStatus, // 自动计算的活动状态
-    // 使用飞书 Base 返回的 url 字段
-    imageUrl: fields[mapping.image] ? fields[mapping.image][0]?.url : '',
-    image: '', // 稍后填充本地路径
+    imageKeys: imageKeys, // 飞书 IM 图片 keys 数组
+    imageKey: imageKeys[0] || '', // 第一张图片的 key（兼容旧逻辑）
+    images: [], // 稍后填充本地路径数组
+    image: '', // 第一张图片的本地路径（兼容旧逻辑）
     lastModified: String(fields[mapping.lastModifiedDate] || '')
   }
 
@@ -101,6 +106,19 @@ function transformFeishuEventRecord(record, eventType) {
   })
 
   return transformed
+}
+
+/**
+ * 根据 image_key 获取图片下载 URL
+ * @param {string} imageKey - 飞书图片的 image_key
+ * @returns {string} - 返回下载链接
+ */
+function getImageDownloadUrl(imageKey) {
+  // 直接使用 image_key 构建下载链接
+  // 飞书 IM 图片 API 直接返回图片二进制数据，无需两步转换
+  const downloadUrl = `https://open.feishu.cn/open-apis/im/v1/images/${imageKey}`
+  console.log('[getImageDownloadUrl] 使用 image_key 构建下载链接:', downloadUrl)
+  return downloadUrl
 }
 
 /**
@@ -212,7 +230,11 @@ function loadEventsCache() {
 }
 
 function saveEventsCache(cache) {
-  try { wx.setStorageSync(CACHE_KEY, cache) } catch (e) { console.error('保存活动缓存失败:', e) }
+  try {
+    wx.setStorageSync(CACHE_KEY, cache)
+  } catch (e) {
+    console.error('保存活动缓存失败:', e)
+  }
 }
 
 /**
@@ -334,10 +356,15 @@ async function fetchFeishuEventsText() {
         return { ...cache[cacheKey].data, image: imagePath }
       }
 
-      // 有变更：重新 transform
+      // 有变更：重新 transform，但保留 imageKeys 用于后续判断
       hasChanges = true
       changedIds.add(cacheKey)
-      newCache[cacheKey] = { lastModified, data: { ...transformed, image: '' } }
+      newCache[cacheKey] = {
+        lastModified,
+        data: { ...transformed, images: [] },
+        imageKeys: transformed.imageKeys, // 保存 imageKeys 用于判断图片是否变化
+        imagePaths: cache[cacheKey]?.imagePaths || [] // 保留旧的图片路径数组
+      }
       return transformed
     })
 
@@ -384,7 +411,12 @@ async function fetchFeishuEventsText() {
 
       hasChanges = true
       changedIds.add(cacheKey)
-      newCache[cacheKey] = { lastModified, data: { ...transformed, image: '' } }
+      newCache[cacheKey] = {
+        lastModified,
+        data: { ...transformed, images: [] },
+        imageKeys: transformed.imageKeys,
+        imagePaths: cache[cacheKey]?.imagePaths || []
+      }
       return transformed
     })
 
@@ -440,20 +472,31 @@ async function fetchFeishuEventsText() {
  * @param {Set} changedIds - 有变更的活动 ID 集合
  */
 async function downloadEventImagesBackground(eventsData, onImageReady, changedIds) {
+  console.log('[downloadEventImagesBackground] ===== 开始下载活动图片 =====')
+  console.log('[downloadEventImagesBackground] 活动数量:', eventsData.length)
+  console.log('[downloadEventImagesBackground] changedIds:', changedIds)
+
   try {
     const token = await feishuApi.getTenantAccessToken()
+    console.log('[downloadEventImagesBackground] 获取 token 成功')
+
     const imageTasks = []
     const cache = loadEventsCache()
 
     for (const event of eventsData) {
       const isChanged = !changedIds || changedIds.has(event.id)
 
-      console.log(`[${event.name}] 检查图片: isChanged=${isChanged}, hasImage=${!!event.image}, imageUrl=${!!event.imageUrl}`)
+      console.log(`[${event.name}] ===== 检查图片 =====`)
+      console.log(`[${event.name}] isChanged: ${isChanged}`)
+      console.log(`[${event.name}] hasImage: ${!!event.image}`)
+      console.log(`[${event.name}] imageKey: ${event.imageKey || '无'}`)
 
-      if (event.imageUrl) {
+      if (event.imageKey) {
         const cachedImagePath = cache[event.id]?.imagePath
+        const cachedImageKey = cache[event.id]?.imageKey
         let cacheExists = false
 
+        // 检查缓存文件是否存在
         if (cachedImagePath) {
           try {
             const fs = wx.getFileSystemManager()
@@ -462,66 +505,93 @@ async function downloadEventImagesBackground(eventsData, onImageReady, changedId
             if (!event.image) {
               event.image = cachedImagePath
             }
+            console.log(`[${event.name}] 缓存文件存在: ${cachedImagePath}`)
           } catch (e) {
-            // 缓存文件不存在
+            console.log(`[${event.name}] 缓存文件不存在`)
           }
         }
 
+        // 判断是否需要下载图片
+        // 1. 如果记录未变更且缓存存在，跳过下载
+        // 2. 如果记录变更了，但 imageKey 没变且缓存存在，也跳过下载
+        // 3. 只有当 imageKey 变化或缓存不存在时，才下载
+        const imageKeyChanged = cachedImageKey && cachedImageKey !== event.imageKey
+        const needDownload = !cacheExists || imageKeyChanged
+
         if (!isChanged && cacheExists) {
-          console.log(`[${event.name}] 跳过下载: 数据未变更且缓存文件存在`)
-        } else if (!cacheExists || isChanged) {
+          console.log(`[${event.name}] ⏭️ 跳过下载: 数据未变更且缓存文件存在`)
+        } else if (isChanged && !imageKeyChanged && cacheExists) {
+          console.log(`[${event.name}] ⏭️ 跳过下载: imageKey 未变化且缓存文件存在`)
+        } else if (needDownload) {
           const needNotify = isChanged || !event.image
-          console.log(`[${event.name}] 需要下载图片: needNotify=${needNotify}`)
-          imageTasks.push(() =>
-            downloadWithRetry(event.imageUrl, token, event.id)
-              .then(path => {
-                console.log(`[${event.name}] 图片下载成功:`, path)
+          console.log(`[${event.name}] ✅ 需要下载图片: imageKeyChanged=${imageKeyChanged}, cacheExists=${cacheExists}, needNotify=${needNotify}`)
 
-                // 删除旧文件
-                const oldPath = cache[event.id]?.imagePath
-                if (oldPath && oldPath !== path) {
-                  try {
-                    const fs = wx.getFileSystemManager()
-                    fs.unlinkSync(oldPath)
-                    console.log(`[${event.name}] 已删除旧图片:`, oldPath)
-                  } catch (e) {
-                    console.warn(`[${event.name}] 删除旧图片失败:`, oldPath, e)
-                  }
-                }
+          imageTasks.push(async () => {
+            try {
+              console.log(`[${event.name}] 📥 开始下载流程...`)
 
-                event.image = path
-                if (!cache[event.id]) {
-                  cache[event.id] = { data: event }
-                }
-                cache[event.id].imagePath = path
-                cache[event.id].data = event
-                saveEventsCache(cache)
+              console.log(`[${event.name}] 🔑 使用 imageKey 下载图片:`, event.imageKey)
+              const downloadUrl = getImageDownloadUrl(event.imageKey)
+              console.log(`[${event.name}] 🔗 下载链接:`, downloadUrl)
 
-                if (needNotify && onImageReady) {
-                  console.log(`[${event.name}] 触发图片就绪回调`)
-                  onImageReady(event.name, path)
+              console.log(`[${event.name}] 🚀 开始下载图片...`)
+              const path = await downloadWithRetry(downloadUrl, token, event.id)
+              console.log(`[${event.name}] ✅ 图片下载成功:`, path)
+
+              // 删除旧文件
+              const oldPath = cache[event.id]?.imagePath
+              if (oldPath && oldPath !== path) {
+                try {
+                  const fs = wx.getFileSystemManager()
+                  fs.unlinkSync(oldPath)
+                  console.log(`[${event.name}] 🗑️ 已删除旧图片:`, oldPath)
+                } catch (e) {
+                  console.warn(`[${event.name}] ⚠️ 删除旧图片失败:`, oldPath, e)
                 }
+              }
+
+              // 更新缓存
+              event.image = path
+              if (!cache[event.id]) {
+                cache[event.id] = { data: event }
+              }
+              cache[event.id].imagePath = path
+              cache[event.id].imageKey = event.imageKey // 保存 imageKey
+              cache[event.id].data = event
+              saveEventsCache(cache)
+
+              if (needNotify && onImageReady) {
+                console.log(`[${event.name}] 📢 触发图片就绪回调`)
+                onImageReady(event.name, path)
+              }
+            } catch (err) {
+              console.error(`[${event.name}] ❌ 图片下载失败:`, err)
+              console.error(`[${event.name}] 错误详情:`, {
+                message: err.message,
+                stack: err.stack
               })
-              .catch((err) => {
-                console.error(`[${event.name}] 图片下载失败:`, err)
-              })
-          )
+            }
+          })
         }
+      } else {
+        console.log(`[${event.name}] ⚠️ 没有 imageKey，跳过图片下载`)
       }
     }
 
-    console.log(`准备下载 ${imageTasks.length} 张活动图片`)
+    console.log(`[downloadEventImagesBackground] 📊 准备下载 ${imageTasks.length} 张活动图片`)
 
     const concurrency = DATA_SOURCE_CONFIG.imageLoadMode === 'sync' ? 1 : (DATA_SOURCE_CONFIG.imageConcurrency || 2)
+    console.log(`[downloadEventImagesBackground] 并发数: ${concurrency}`)
+
     await downloadWithLimit(imageTasks, concurrency)
 
     if (imageTasks.length === 0) {
-      console.log('所有图片已从缓存加载')
+      console.log('[downloadEventImagesBackground] ✅ 所有图片已从缓存加载')
     } else {
-      console.log(`所有图片下载完成（共${imageTasks.length}张）`)
+      console.log(`[downloadEventImagesBackground] ✅ 所有图片下载完成（共${imageTasks.length}张）`)
     }
   } catch (error) {
-    console.error('后台下载图片出错:', error)
+    console.error('[downloadEventImagesBackground] ❌ 后台下载图片出错:', error)
   }
 }
 

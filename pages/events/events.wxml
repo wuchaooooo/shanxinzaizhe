@@ -77,7 +77,7 @@
     </view>
     <view wx:if="{{isCofounder}}" class="events-create-btn" catchtap="onCreateEvent">
       <view class="create-btn-icon">
-        <text class="create-icon">➕</text>
+        <text class="create-icon">✨</text>
       </view>
       <text class="create-btn-text">创建活动</text>
     </view>

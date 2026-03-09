@@ -8,6 +8,7 @@
         <text class="required">*</text>
       </view>
       <picker
+        wx:if="{{!isEdit}}"
         class="form-picker"
         mode="selector"
         range="{{typeOptions}}"
@@ -16,6 +17,9 @@
       >
         <view class="picker-value">{{formData.type}}</view>
       </picker>
+      <view wx:else class="form-input-readonly">
+        <text class="readonly-text">{{formData.type}}</text>
+      </view>
     </view>
 
     <!-- 活动名称 -->
@@ -76,52 +80,36 @@
       </picker>
     </view>
 
-    <!-- 结束时间 -->
-    <view class="form-item">
-      <view class="form-label">
-        <text class="label-text">结束日期</text>
-      </view>
-      <picker
-        class="form-picker"
-        mode="date"
-        bindchange="onEndDateChange"
-      >
-        <view class="picker-value">
-          {{formData.displayEndDate || '请选择结束日期（可选）'}}
-        </view>
-      </picker>
-    </view>
-
-    <view class="form-item">
-      <view class="form-label">
-        <text class="label-text">结束时间</text>
-      </view>
-      <picker
-        class="form-picker"
-        mode="time"
-        bindchange="onEndTimeChange"
-      >
-        <view class="picker-value">
-          {{formData.displayEndTime || '请选择结束时间（可选）'}}
-        </view>
-      </picker>
-    </view>
-
     <!-- 活动图片 -->
     <view class="form-item">
       <view class="form-label">
         <text class="label-text">活动海报</text>
+        <text class="label-hint">（最多9张）</text>
       </view>
-      <view class="image-upload" bindtap="onChooseImage">
-        <image
-          wx:if="{{formData.image}}"
-          class="upload-image"
-          src="{{formData.image}}"
-          mode="aspectFill"
-        ></image>
-        <view wx:else class="upload-placeholder">
+      <view class="images-grid">
+        <!-- 已上传的图片 -->
+        <view
+          class="image-item"
+          wx:for="{{formData.images}}"
+          wx:key="index"
+        >
+          <image
+            class="upload-image"
+            src="{{item}}"
+            mode="aspectFill"
+          ></image>
+          <view class="image-delete" bindtap="onDeleteImage" data-index="{{index}}">
+            <text class="delete-icon">✕</text>
+          </view>
+        </view>
+        <!-- 上传按钮 -->
+        <view
+          wx:if="{{formData.images.length < 9}}"
+          class="image-upload"
+          bindtap="onChooseImage"
+        >
           <text class="upload-icon">📷</text>
-          <text class="upload-text">点击上传图片</text>
+          <text class="upload-text">添加图片</text>
         </view>
       </view>
     </view>

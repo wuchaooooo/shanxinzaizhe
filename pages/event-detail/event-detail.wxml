@@ -57,17 +57,32 @@
 </wxs>
 
 <view class="detail-container" wx:if="{{event}}">
-  <!-- 活动图片 -->
-  <view class="image-section">
-    <image
-      class="event-image"
-      src="{{event.image || '/images/placeholder.png'}}"
-      mode="aspectFill"
-      bindtap="onImageTap"
-    ></image>
+  <!-- 活动图片轮播 -->\n  <view class="image-section">
+    <swiper
+      class="event-swiper"
+      indicator-dots="{{event.images && event.images.length > 1}}"
+      indicator-color="rgba(255, 255, 255, 0.5)"
+      indicator-active-color="#ffffff"
+      autoplay="{{false}}"
+      circular="{{true}}"
+    >
+      <swiper-item wx:for="{{event.images || [event.image]}}" wx:key="index">
+        <image
+          class="event-image"
+          src="{{item || '/images/placeholder.png'}}"
+          mode="aspectFill"
+          bindtap="onImageTap"
+          data-index="{{index}}"
+        ></image>
+      </swiper-item>
+    </swiper>
     <view class="image-overlay">
       <view class="type-badge type-badge-{{event.type === '星享会' ? 'star' : 'lunch'}}">
         <text class="badge-text">{{event.type}}</text>
+      </view>
+      <!-- 更多按钮 -->
+      <view class="more-btn" bindtap="onShowActionSheet">
+        <text class="more-icon">⋯</text>
       </view>
     </view>
   </view>
@@ -133,21 +148,36 @@
       <text class="btn-text">导航到活动地点</text>
     </button>
   </view>
+</view>
 
-  <!-- 操作按钮 -->
-  <view class="actions-section">
-    <button wx:if="{{canEdit}}" class="action-btn edit-btn" bindtap="onEdit">
-      <text class="btn-icon">✏️</text>
-      <text class="btn-text">编辑活动</text>
-    </button>
-    <button wx:if="{{canEdit}}" class="action-btn delete-btn" bindtap="onDelete">
-      <text class="btn-icon">🗑️</text>
-      <text class="btn-text">删除活动</text>
-    </button>
-    <button class="action-btn share-btn" bindtap="onShare">
-      <text class="btn-icon">📤</text>
-      <text class="btn-text">生成分享图</text>
-    </button>
+<!-- 操作菜单弹窗 -->
+<view class="action-sheet-mask {{showActionSheet ? 'action-sheet-mask-show' : ''}}" bindtap="onHideActionSheet"></view>
+<view class="action-sheet {{showActionSheet ? 'action-sheet-show' : ''}}">
+  <view class="action-sheet-header">
+    <text class="action-sheet-title">更多操作</text>
+    <text class="action-sheet-close" bindtap="onHideActionSheet">✕</text>
+  </view>
+  <view class="action-sheet-body">
+    <view class="action-icons-row">
+      <view class="action-icon-item" bindtap="onShare">
+        <view class="action-icon-circle">
+          <text class="action-icon-emoji">📤</text>
+        </view>
+        <text class="action-icon-label">分享</text>
+      </view>
+      <view wx:if="{{canEdit}}" class="action-icon-item" bindtap="onEdit">
+        <view class="action-icon-circle">
+          <text class="action-icon-emoji">✏️</text>
+        </view>
+        <text class="action-icon-label">编辑</text>
+      </view>
+      <view wx:if="{{canEdit}}" class="action-icon-item" bindtap="onDelete">
+        <view class="action-icon-circle danger">
+          <text class="action-icon-emoji">🗑️</text>
+        </view>
+        <text class="action-icon-label danger">删除</text>
+      </view>
+    </view>
   </view>
 </view>
 

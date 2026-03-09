@@ -254,37 +254,34 @@ function clearTokenCache() {
 /**
  * 上传图片到飞书（用于多维表格附件字段）
  * @param {string} filePath - 本地图片路径
- * @param {Object} params - 参数
- * @param {string} params.appToken - base token
- * @returns {Promise<string>} - 返回 file_token
+ * @returns {Promise<string>} - 返回 image_key
  */
-async function uploadImage(filePath, params = {}) {
-  const { appToken } = params
+async function uploadImage(filePath) {
   const token = await getTenantAccessToken()
 
   return new Promise((resolve, reject) => {
     wx.uploadFile({
-      url: 'https://open.feishu.cn/open-apis/drive/v1/medias/upload_all',
+      url: 'https://open.feishu.cn/open-apis/im/v1/images',
       filePath: filePath,
-      name: 'file',
+      name: 'image',
       formData: {
-        'file_name': 'event_poster.jpg',
-        'parent_type': 'bitable_image',
-        'parent_node': appToken
+        'image_type': 'message'
       },
       header: {
         'Authorization': `Bearer ${token}`
       },
       success: (res) => {
-        console.log('上传图片响应:', res)
+        console.log('上传图片响应 - statusCode:', res.statusCode)
+        console.log('上传图片响应 - data:', res.data)
         if (res.statusCode === 200) {
           try {
             const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
-            if (data.code === 0 && data.data && data.data.file_token) {
-              console.log('图片上传成功，file_token:', data.data.file_token)
-              resolve(data.data.file_token)
+            console.log('解析后的响应:', data)
+            if (data.code === 0 && data.data && data.data.image_key) {
+              console.log('图片上传成功，image_key:', data.data.image_key)
+              resolve(data.data.image_key)
             } else {
-              console.error('图片上传失败:', data)
+              console.error('图片上传失败 - code:', data.code, 'msg:', data.msg)
               reject(new Error(data.msg || '图片上传失败'))
             }
           } catch (e) {
@@ -304,6 +301,22 @@ async function uploadImage(filePath, params = {}) {
   })
 }
 
+/**
+ * 获取表格的所有字段信息（用于调试）
+ * @param {Object} params - 查询参数
+ * @param {string} params.appToken - base token
+ * @param {string} params.tableId - 表格ID
+ * @returns {Promise<Array>} - 返回字段列表
+ */
+async function getTableFields(params = {}) {
+  const {
+    appToken = FEISHU_CONFIG.partnersAppToken,
+    tableId = FEISHU_CONFIG.partnersTableId
+  } = params
+  const url = `/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/fields`
+  return feishuRequest(url)
+}
+
 module.exports = {
   getRecords,
   getAllRecords,
@@ -314,5 +327,6 @@ module.exports = {
   getTenantAccessToken,
   clearTokenCache,
   uploadImage,
+  getTableFields,
   FEISHU_CONFIG
 }

@@ -11,7 +11,8 @@ Page({
     markers: [],
     showPoster: false,
     posterImage: '',
-    canvasHeight: 0
+    canvasHeight: 0,
+    showActionSheet: false
   },
 
   onLoad(options) {
@@ -119,8 +120,19 @@ Page({
     })
   },
 
+  // 显示操作菜单
+  onShowActionSheet() {
+    this.setData({ showActionSheet: true })
+  },
+
+  // 隐藏操作菜单
+  onHideActionSheet() {
+    this.setData({ showActionSheet: false })
+  },
+
   // 编辑活动
   onEdit() {
+    this.setData({ showActionSheet: false })
     const { event } = this.data
     wx.navigateTo({
       url: `/pages/event-edit/event-edit?eventId=${event.id}&type=${event.type}`
@@ -129,6 +141,7 @@ Page({
 
   // 删除活动
   onDelete() {
+    this.setData({ showActionSheet: false })
     const { event } = this.data
 
     wx.showModal({
@@ -186,6 +199,7 @@ Page({
 
   // 生成分享图
   onShare() {
+    this.setData({ showActionSheet: false })
     const { event } = this.data
     if (!event) {
       wx.showToast({

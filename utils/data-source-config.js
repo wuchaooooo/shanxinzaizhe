@@ -39,7 +39,7 @@ const DATA_SOURCE_CONFIG = {
     organizer: '组织者',
     time: '开始时间',
     endTime: '结束时间',
-    image: '活动海报',
+    imageKey: '活动海报链接_飞书_image_key',
     employeeId: '营销员工号',
     lastModifiedDate: 'Last Modified Date'
   }

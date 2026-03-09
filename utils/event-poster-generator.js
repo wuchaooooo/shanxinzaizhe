@@ -17,9 +17,14 @@ async function generateEventPoster(page, canvasId, event) {
       posterImage: ''
     })
 
-    // 获取当前用户信息
+    // 获取当前用户信息和合伙人数据
     const app = getApp()
     const currentUser = app.globalData.currentUser
+    const partnersData = app.globalData.partnersData || []
+
+    // 根据组织者姓名查找对应的合伙人数据
+    const organizer = partnersData.find(p => p.name === event.organizer)
+    const organizerBadges = organizer?.badges || []
 
     // 获取小程序码和用户二维码
     const qrcodeImageUrl = getAssetPath('mini_program_qr_code')
@@ -95,7 +100,23 @@ async function generateEventPoster(page, canvasId, event) {
       ctx.setTextAlign('left')
       ctx.setTextBaseline('top')
       ctx.fillText(`👤 ${event.organizer}`, padding, currentY)
-      currentY += 60
+      currentY += 50
+
+      // 绘制荣誉徽章（最多显示前3个）
+      if (organizerBadges.length > 0) {
+        const badgesToShow = organizerBadges.slice(0, 3)
+        ctx.setFillStyle('#64748b')
+        ctx.setFontSize(24)
+
+        badgesToShow.forEach((badge, index) => {
+          const badgeText = `${badge.icon} ${badge.title}`
+          ctx.fillText(badgeText, padding + 60, currentY + index * 35)
+        })
+
+        currentY += badgesToShow.length * 35 + 10
+      } else {
+        currentY += 10
+      }
     }
 
     // 活动时间
