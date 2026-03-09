@@ -3,44 +3,29 @@
   var formatTime = function(timeStr) {
     if (!timeStr) return '待定'
 
-    try {
-      // 手动解析 ISO 8601 格式: "2026-03-09T11:00:00.000Z"
-      var parts = timeStr.split('T')
-      if (parts.length !== 2) return '格式错误'
+    // 简化版本：直接提取并转换
+    var year = timeStr.substring(0, 4)
+    var month = timeStr.substring(5, 7)
+    var day = timeStr.substring(8, 10)
+    var hour = timeStr.substring(11, 13)
+    var minute = timeStr.substring(14, 16)
 
-      var datePart = parts[0]
-      var timePart = parts[1].replace('Z', '').split('.')[0]
+    // 转换为数字
+    var hourNum = parseInt(hour)
+    var dayNum = parseInt(day)
 
-      var dateComponents = datePart.split('-')
-      var timeComponents = timePart.split(':')
-
-      if (dateComponents.length !== 3 || timeComponents.length !== 3) {
-        return '解析错误'
-      }
-
-      // 使用字符串切片直接提取
-      var month = timeStr.substring(5, 7)
-      var day = timeStr.substring(8, 10)
-      var hour = timeStr.substring(11, 13)
-      var minute = timeStr.substring(14, 16)
-
-      // 转换为东8区（UTC+8）
-      var hourNum = hour - 0
-      hourNum = hourNum + 8
-
-      var dayNum = day - 0
-      if (hourNum >= 24) {
-        hourNum = hourNum - 24
-        dayNum = dayNum + 1
-      }
-
-      var hourStr = hourNum < 10 ? '0' + hourNum : '' + hourNum
-      var dayStr = dayNum < 10 ? '0' + dayNum : '' + dayNum
-
-      return month + '月' + dayStr + '日 ' + hourStr + ':' + minute
-    } catch (e) {
-      return '错误'
+    // 转换为东8区（UTC+8）
+    hourNum = hourNum + 8
+    if (hourNum >= 24) {
+      hourNum = hourNum - 24
+      dayNum = dayNum + 1
     }
+
+    // 格式化
+    var hourStr = hourNum < 10 ? '0' + hourNum : '' + hourNum
+    var dayStr = dayNum < 10 ? '0' + dayNum : '' + dayNum
+
+    return year + '年' + month + '月' + dayStr + '日 ' + hourStr + ':' + minute
   }
 
   var getStatusClass = function(status) {
@@ -71,14 +56,14 @@
         <image
           class="event-image"
           src="{{item || '/images/placeholder.png'}}"
-          mode="widthFix"
+          mode="aspectFit"
           bindtap="onImageTap"
           data-index="{{index}}"
         ></image>
       </swiper-item>
     </swiper>
     <view class="image-overlay">
-      <view class="type-badge type-badge-{{event.type === '星享会' ? 'star' : 'lunch'}}">
+      <view class="type-badge type-badge-{{event.type === '星享会' ? 'star' : event.type === '午餐会' ? 'lunch' : event.type === '销售门诊' ? 'clinic' : 'building'}}">
         <text class="badge-text">{{event.type}}</text>
       </view>
       <!-- 更多按钮 -->
@@ -109,7 +94,10 @@
           <text class="info-icon">👤</text>
           <text class="label-text">组织者</text>
         </view>
-        <text class="info-value">{{event.organizer || '待定'}}</text>
+        <view class="organizer-info">
+          <text class="info-value">{{event.organizer || '待定'}}</text>
+          <image wx:if="{{organizerData}}" class="organizer-avatar" src="{{organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+        </view>
       </view>
 
       <view class="info-row">
@@ -118,6 +106,12 @@
           <text class="label-text">活动时间</text>
         </view>
         <text class="info-value">{{utils.formatTime(event.time)}}</text>
+      </view>
+
+      <!-- 调试：显示原始时间 -->
+      <view wx:if="{{false}}" class="info-row">
+        <text>原始时间: {{event.time}}</text>
+        <text>格式化后: {{utils.formatTime(event.time)}}</text>
       </view>
 
       <view wx:if="{{event.address}}" class="info-row">
@@ -143,11 +137,9 @@
       markers="{{markers}}"
       scale="16"
       show-location
+      bindtap="onNavigate"
+      bindmarkertap="onNavigate"
     ></map>
-    <button class="nav-btn" bindtap="onNavigate">
-      <text class="btn-icon">🧭</text>
-      <text class="btn-text">导航到活动地点</text>
-    </button>
   </view>
 </view>
 

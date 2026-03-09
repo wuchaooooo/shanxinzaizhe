@@ -318,9 +318,30 @@
   gap: 12rpx;
 }
 
+.event-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.event-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.4;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .event-info {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: 8rpx;
 }
 
@@ -330,6 +351,18 @@
   gap: 8rpx;
   color: #64748b;
   font-size: 24rpx;
+}
+
+.organizer-item {
+  gap: 12rpx;
+}
+
+.organizer-avatar-small {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  border: 2rpx solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .info-icon {

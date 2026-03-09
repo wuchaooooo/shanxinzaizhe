@@ -14,9 +14,12 @@ Page({
       time: '',
       images: [], // 改为数组
       displayDate: '',
-      displayTime: ''
+      displayTime: '',
+      address: '',
+      latitude: null,
+      longitude: null
     },
-    typeOptions: ['星享会', '午餐会'],
+    typeOptions: ['星享会', '午餐会', '销售门诊', '销售建设'],
     saving: false
   },
 
@@ -106,7 +109,10 @@ Page({
         time: startTime.datetime,
         displayDate: startTime.date,
         displayTime: startTime.time,
-        images: images
+        images: images,
+        address: event.address || '',
+        latitude: event.latitude || null,
+        longitude: event.longitude || null
       }
     })
   },
@@ -166,6 +172,35 @@ Page({
       'formData.time': datetime
     })
     console.log('合并后的开始时间:', datetime)
+  },
+
+  // 选择地址
+  onChooseLocation() {
+    wx.chooseLocation({
+      success: (res) => {
+        console.log('选择地址成功:', res)
+        this.setData({
+          'formData.address': res.address + res.name,
+          'formData.latitude': res.latitude,
+          'formData.longitude': res.longitude
+        })
+      },
+      fail: (err) => {
+        console.error('选择地址失败:', err)
+        if (err.errMsg.includes('auth deny')) {
+          wx.showModal({
+            title: '需要位置权限',
+            content: '请在设置中开启位置权限',
+            confirmText: '去设置',
+            success: (modalRes) => {
+              if (modalRes.confirm) {
+                wx.openSetting()
+              }
+            }
+          })
+        }
+      }
+    })
   },
 
   // 选择图片
@@ -237,10 +272,18 @@ Page({
 
   // 保存活动
   async onSave() {
+    console.log('=== 开始保存活动 ===')
+    console.log('当前表单数据:', this.data.formData)
+
     if (!this.validateForm()) return
 
-    if (this.data.saving) return
+    if (this.data.saving) {
+      console.log('正在保存中，忽略重复点击')
+      return
+    }
+
     this.setData({ saving: true })
+    console.log('设置 saving 状态为 true')
 
     try {
       const { formData, isEdit, eventId } = this.data
@@ -266,14 +309,33 @@ Page({
         '营销员工号': currentUser?.employeeId || ''
       }
 
+      // 添加地址信息（销售门诊和销售建设不保存地址字段）
+      if (formData.type !== '销售门诊' && formData.type !== '销售建设') {
+        if (formData.address) {
+          fields['活动地址'] = formData.address
+        }
+        if (formData.latitude !== null && formData.longitude !== null) {
+          fields['地址纬度'] = String(formData.latitude)
+          fields['地址经度'] = String(formData.longitude)
+        }
+      }
+
       // 确定使用哪个表格
       const config = feishuApi.FEISHU_CONFIG
       const appToken = formData.type === '星享会'
         ? config.starClubAppToken
-        : config.lunchAppToken
+        : formData.type === '午餐会'
+        ? config.lunchAppToken
+        : formData.type === '销售门诊'
+        ? config.salesClinicAppToken
+        : config.salesBuildingAppToken
       const tableId = formData.type === '星享会'
         ? config.starClubTableId
-        : config.lunchTableId
+        : formData.type === '午餐会'
+        ? config.lunchTableId
+        : formData.type === '销售门诊'
+        ? config.salesClinicTableId
+        : config.salesBuildingTableId
 
       // 调试：获取表格字段列表
       try {
@@ -342,13 +404,11 @@ Page({
         console.log('更新记录:', eventId)
         const result = await feishuApi.updateRecord(eventId, fields, { appToken, tableId })
         console.log('更新结果:', result)
-        wx.showToast({ title: '更新成功', icon: 'success' })
       } else {
         // 创建记录
         console.log('创建记录')
         const result = await feishuApi.createRecord(fields, { appToken, tableId })
         console.log('创建结果:', result)
-        wx.showToast({ title: '创建成功', icon: 'success' })
       }
 
       // 刷新数据
@@ -357,26 +417,35 @@ Page({
         await app.preloadFeishuEvents()
       }
 
-      // 返回上一页
+      // 显示成功提示并立即返回
+      wx.showToast({
+        title: isEdit ? '更新成功' : '创建成功',
+        icon: 'success',
+        duration: 1500
+      })
+
+      // 立即返回上一页（不等待）
       setTimeout(() => {
         wx.navigateBack()
-      }, 1500)
+      }, 500)
 
     } catch (error) {
-      console.error('保存活动失败:', error)
-      console.error('错误详情:', {
-        message: error.message,
-        stack: error.stack,
-        error: error
-      })
+      console.error('=== 保存活动失败 ===')
+      console.error('错误类型:', error.constructor.name)
+      console.error('错误消息:', error.message)
+      console.error('错误堆栈:', error.stack)
+      console.error('完整错误对象:', JSON.stringify(error, null, 2))
+
+      wx.hideLoading()
       wx.showToast({
-        title: error.message || '保存失败',
+        title: error.message || '保存失败，请查看控制台',
         icon: 'none',
         duration: 3000
       })
-    } finally {
-      wx.hideLoading()
+
+      // 只在失败时重置 saving 状态
       this.setData({ saving: false })
     }
+    // 注意：成功时不重置 saving 状态，保持按钮禁用直到页面返回
   }
 })

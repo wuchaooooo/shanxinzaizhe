@@ -41,6 +41,9 @@ const DATA_SOURCE_CONFIG = {
     endTime: '结束时间',
     imageKey: '活动海报链接_飞书_image_key',
     employeeId: '营销员工号',
+    address: '活动地址',
+    latitude: '地址纬度',
+    longitude: '地址经度',
     lastModifiedDate: 'Last Modified Date'
   }
 }

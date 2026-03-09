@@ -53,31 +53,39 @@
         <text class="label-text">开始时间</text>
         <text class="required">*</text>
       </view>
-      <picker
-        class="form-picker"
-        mode="date"
-        bindchange="onDateChange"
-      >
-        <view class="picker-value">
-          {{formData.displayDate || '请选择日期'}}
-        </view>
-      </picker>
+      <view class="time-picker-row">
+        <picker
+          class="form-picker time-picker-half"
+          mode="date"
+          value="{{formData.displayDate}}"
+          bindchange="onDateChange"
+        >
+          <view class="picker-value">
+            {{formData.displayDate || '请选择日期'}}
+          </view>
+        </picker>
+        <picker
+          class="form-picker time-picker-half"
+          mode="time"
+          value="{{formData.displayTime}}"
+          bindchange="onTimeChange"
+        >
+          <view class="picker-value">
+            {{formData.displayTime || '请选择时间'}}
+          </view>
+        </picker>
+      </view>
     </view>
 
-    <view class="form-item">
+    <!-- 活动地址（销售门诊和销售建设不显示） -->
+    <view class="form-item" wx:if="{{formData.type !== '销售门诊' && formData.type !== '销售建设'}}">
       <view class="form-label">
-        <text class="label-text">开始时间</text>
-        <text class="required">*</text>
+        <text class="label-text">活动地址</text>
       </view>
-      <picker
-        class="form-picker"
-        mode="time"
-        bindchange="onTimeChange"
-      >
-        <view class="picker-value">
-          {{formData.displayTime || '请选择时间'}}
-        </view>
-      </picker>
+      <view class="location-picker" bindtap="onChooseLocation">
+        <text class="location-text">{{formData.address || '点击选择地址'}}</text>
+        <text class="location-icon">📍</text>
+      </view>
     </view>
 
     <!-- 活动图片 -->

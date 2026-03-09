@@ -15,7 +15,13 @@ const FEISHU_CONFIG = {
   starClubTableId: 'tblRZ1TPZlBBwlmG',
   // 午餐会 base
   lunchAppToken: 'NGz1bybL5aq9YDsZK7Tcurozn1b',
-  lunchTableId: 'tblvWD7xZ33Usx9I'
+  lunchTableId: 'tblvWD7xZ33Usx9I',
+  // 销售门诊 base
+  salesClinicAppToken: 'HCybbpTQVaOGJysPHFMcktZnn3c',
+  salesClinicTableId: 'tbln8UsmvNjSptvl',
+  // 销售建设 base
+  salesBuildingAppToken: 'KJLNbR0tRaK0LpskYjAcm4nqnRc',
+  salesBuildingTableId: 'tbleG2LqgZwV9ac3'
 }
 
 // 缓存 tenant_access_token

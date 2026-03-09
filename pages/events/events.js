@@ -4,7 +4,7 @@ const { getEventsDataSync } = require('../../utils/events-data-loader.js')
 Page({
   data: {
     activeTab: '全部活动',
-    tabs: ['全部活动', '星享会', '午餐会'],
+    tabs: ['全部活动', '星享会', '午餐会', '销售门诊', '销售建设'],
     events: [],
     filteredEvents: [],
     leftColumn: [],
@@ -12,6 +12,8 @@ Page({
     searchQuery: '',
     starClubCount: 0,
     lunchCount: 0,
+    salesClinicCount: 0,
+    salesBuildingCount: 0,
     totalCount: 0,
     loading: true,
     allImagesLoaded: false,
@@ -52,27 +54,79 @@ Page({
   loadEventsData() {
     const events = getEventsDataSync()
     console.log('从缓存加载活动数据:', events.length)
-    console.log('活动数据详情:', events.map(e => ({
+
+    // 检查团队数据状态
+    const app = getApp()
+    const partnersData = app.globalData.partnersData
+    console.log('[Events] 团队数据状态:', {
+      partnersDataExists: !!partnersData,
+      partnersDataLength: partnersData?.length || 0
+    })
+
+    // 为每个活动添加组织者数据
+    const eventsWithOrganizer = events.map(event => {
+      const organizerData = this.findOrganizerData(event.organizer)
+      console.log(`[Events] 处理活动 "${event.name}", 组织者: "${event.organizer}", organizerData:`, organizerData)
+      return {
+        ...event,
+        organizerData: organizerData
+      }
+    })
+
+    console.log('活动数据详情:', eventsWithOrganizer.map(e => ({
       id: e.id,
       name: e.name,
       organizer: e.organizer,
+      organizerData: e.organizerData,
       time: e.time,
       status: e.status
     })))
 
     // 计算统计数据
-    const starClubCount = events.filter(e => e.type === '星享会').length
-    const lunchCount = events.filter(e => e.type === '午餐会').length
+    const starClubCount = eventsWithOrganizer.filter(e => e.type === '星享会').length
+    const lunchCount = eventsWithOrganizer.filter(e => e.type === '午餐会').length
+    const salesClinicCount = eventsWithOrganizer.filter(e => e.type === '销售门诊').length
+    const salesBuildingCount = eventsWithOrganizer.filter(e => e.type === '销售建设').length
 
     this.setData({
-      events: events,
+      events: eventsWithOrganizer,
       starClubCount: starClubCount,
       lunchCount: lunchCount,
-      totalCount: events.length,
+      salesClinicCount: salesClinicCount,
+      salesBuildingCount: salesBuildingCount,
+      totalCount: eventsWithOrganizer.length,
       loading: false
     }, () => {
       this.filterEvents()
     })
+  },
+
+  // 根据组织者名称查找团队成员数据
+  findOrganizerData(organizerName) {
+    if (!organizerName) return null
+
+    const app = getApp()
+    const partnersData = app.globalData.partnersData
+
+    if (!partnersData || partnersData.length === 0) {
+      console.log('[Events] 团队数据未加载')
+      return null
+    }
+
+    // 根据姓名查找匹配的团队成员
+    const partner = partnersData.find(p => p.name === organizerName)
+
+    if (partner) {
+      console.log('[Events] 找到组织者:', organizerName, '头像:', partner.image)
+      return {
+        name: partner.name,
+        avatar: partner.image,  // 使用 image 字段作为 avatar
+        employeeId: partner.employeeId
+      }
+    }
+
+    console.log('[Events] 未找到组织者:', organizerName)
+    return null
   },
 
   // 注册监听器
@@ -85,6 +139,16 @@ Page({
       this.setData({ isCofounder: !!user })
     }
     app.globalData.currentUserListeners.push(this._currentUserCb)
+
+    // 监听团队数据加载完成
+    this.partnersDataListener = () => {
+      console.log('[Events] 收到团队数据加载完成通知，重新加载活动数据')
+      this.loadEventsData()
+    }
+    if (!app.globalData.partnersDataListeners) {
+      app.globalData.partnersDataListeners = []
+    }
+    app.globalData.partnersDataListeners.push(this.partnersDataListener)
 
     // 监听活动数据刷新
     this.eventsDataListener = (events) => {
@@ -101,15 +165,25 @@ Page({
         })
       }
 
+      // 为每个活动添加组织者数据
+      const eventsWithOrganizer = events.map(event => ({
+        ...event,
+        organizerData: this.findOrganizerData(event.organizer)
+      }))
+
       // 计算统计数据
-      const starClubCount = events.filter(e => e.type === '星享会').length
-      const lunchCount = events.filter(e => e.type === '午餐会').length
+      const starClubCount = eventsWithOrganizer.filter(e => e.type === '星享会').length
+      const lunchCount = eventsWithOrganizer.filter(e => e.type === '午餐会').length
+      const salesClinicCount = eventsWithOrganizer.filter(e => e.type === '销售门诊').length
+      const salesBuildingCount = eventsWithOrganizer.filter(e => e.type === '销售建设').length
 
       this.setData({
-        events: events,
+        events: eventsWithOrganizer,
         starClubCount: starClubCount,
         lunchCount: lunchCount,
-        totalCount: events.length
+        salesClinicCount: salesClinicCount,
+        salesBuildingCount: salesBuildingCount,
+        totalCount: eventsWithOrganizer.length
       }, () => {
         this.filterEvents()
       })
@@ -139,6 +213,13 @@ Page({
         app.globalData.currentUserListeners.splice(index, 1)
       }
       this._currentUserCb = null
+    }
+
+    if (this.partnersDataListener && app.globalData.partnersDataListeners) {
+      const index = app.globalData.partnersDataListeners.indexOf(this.partnersDataListener)
+      if (index > -1) {
+        app.globalData.partnersDataListeners.splice(index, 1)
+      }
     }
 
     if (this.eventsDataListener) {
@@ -193,6 +274,10 @@ Page({
       filtered = events.filter(e => e.type === '星享会')
     } else if (activeTab === '午餐会') {
       filtered = events.filter(e => e.type === '午餐会')
+    } else if (activeTab === '销售门诊') {
+      filtered = events.filter(e => e.type === '销售门诊')
+    } else if (activeTab === '销售建设') {
+      filtered = events.filter(e => e.type === '销售建设')
     }
 
     // 按搜索关键词过滤
@@ -220,7 +305,9 @@ Page({
       过滤后数量: filtered.length,
       左列数量: leftColumn.length,
       右列数量: rightColumn.length,
-      左列第一个的time: leftColumn[0]?.time
+      左列第一个的time: leftColumn[0]?.time,
+      左列第一个的organizerData: leftColumn[0]?.organizerData,
+      右列第一个的organizerData: rightColumn[0]?.organizerData
     })
 
     this.setData({

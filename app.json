@@ -21,6 +21,9 @@
       "desc": "你的位置信息将用于选择活动地点"
     }
   },
+  "requiredPrivateInfos": [
+    "chooseLocation"
+  ],
   "tabBar": {
     "color": "#94a3b8",
     "selectedColor": "#c20000",

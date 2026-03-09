@@ -154,19 +154,16 @@
             mode="widthFix"
           ></image>
           <view class="event-content">
+            <view class="event-title-row">
+              <text class="event-title">{{item.name || '活动'}}</text>
+            </view>
             <view class="event-info">
-              <view class="info-item">
-                <text class="info-icon">👤</text>
+              <view class="info-item organizer-item">
+                <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
                 <text class="info-text">{{item.organizer || '待定'}}</text>
               </view>
-              <view class="info-item">
-                <text class="info-icon">📅</text>
-                <text class="info-text">{{utils.formatTime(item.time)}}</text>
-              </view>
-              <view class="info-item">
-                <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
-                  <text class="status-text">{{item.status || '待定'}}</text>
-                </view>
+              <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
+                <text class="status-text">{{item.status || '待定'}}</text>
               </view>
             </view>
           </view>
@@ -189,19 +186,16 @@
             mode="widthFix"
           ></image>
           <view class="event-content">
+            <view class="event-title-row">
+              <text class="event-title">{{item.name || '活动'}}</text>
+            </view>
             <view class="event-info">
-              <view class="info-item">
-                <text class="info-icon">👤</text>
+              <view class="info-item organizer-item">
+                <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
                 <text class="info-text">{{item.organizer || '待定'}}</text>
               </view>
-              <view class="info-item">
-                <text class="info-icon">📅</text>
-                <text class="info-text">{{utils.formatTime(item.time)}}</text>
-              </view>
-              <view class="info-item">
-                <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
-                  <text class="status-text">{{item.status || '待定'}}</text>
-                </view>
+              <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
+                <text class="status-text">{{item.status || '待定'}}</text>
               </view>
             </view>
           </view>

@@ -115,6 +115,16 @@
   flex: 1;
 }
 
+/* 时间选择器行 */
+.time-picker-row {
+  display: flex;
+  gap: 16rpx;
+}
+
+.time-picker-half {
+  flex: 1;
+}
+
 /* 地址选择 */
 .location-picker {
   width: 100%;
