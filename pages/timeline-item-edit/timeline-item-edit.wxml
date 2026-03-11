@@ -19,9 +19,9 @@
     <!-- 结束时间 -->
     <view class="form-row">
       <text class="form-label">结束时间（可选）</text>
-      <picker mode="date" fields="month" value="{{item.timeEnd || ''}}" start="2000-01" end="2035-12" bindchange="onTimeEndChange">
+      <picker mode="date" value="{{item.timeEnd || ''}}" start="2000-01-01" end="2035-12-31" bindchange="onTimeEndChange">
         <view class="picker-box">
-          <text class="{{item.timeEnd ? 'picker-value' : 'picker-placeholder'}}">{{item.timeEnd || '选择年月'}}</text>
+          <text class="{{item.timeEnd ? 'picker-value' : 'picker-placeholder'}}">{{item.timeEnd || '选择日期'}}</text>
           <text class="picker-arrow">›</text>
         </view>
       </picker>

@@ -21,17 +21,26 @@ Page({
   },
 
   onLoad(options) {
-    const { eventId, type } = options
-    console.log('Event Detail 页面加载:', eventId, type)
+    const { eventId, type, shareFrom } = options
+    console.log('Event Detail 页面加载:', eventId, type, shareFrom)
 
     // 保存 eventId 用于监听器
     this.eventId = eventId
+    this.isFirstShow = true  // 标记首次显示
 
     // 获取当前用户身份
     const app = getApp()
     this.setData({
       isCofounder: !!app.globalData.currentUser
     })
+
+    // 处理分享来源（营销员工号）
+    if (shareFrom) {
+      this.recordShareVisit(shareFrom, eventId)
+    } else {
+      // 普通用户访问
+      this.recordShareVisit(null, eventId)
+    }
 
     // 注册图片下载监听器
     this.registerImageListener()
@@ -40,8 +49,64 @@ Page({
     this.loadEventData(eventId)
   },
 
+  // 记录分享访问
+  async recordShareVisit(shareFromEmployeeId, eventId) {
+    const app = getApp()
+    const partnersData = app.globalData.partnersData || []
+    const currentUser = app.globalData.currentUser
+    const feishuApi = require('../../utils/feishu-api.js')
+
+    let visitorName = '普通用户'
+    let visitorEmployeeId = ''
+
+    if (shareFromEmployeeId) {
+      // 链接带了分享工号，根据工号查找营销员信息
+      const partner = partnersData.find(p => p.employeeId === shareFromEmployeeId)
+      if (partner) {
+        visitorName = partner.name
+        visitorEmployeeId = shareFromEmployeeId
+        console.log(`分享访问：营销员 ${visitorName} (${visitorEmployeeId})`)
+      } else {
+        console.log(`分享访问：未找到工号 ${shareFromEmployeeId} 对应的营销员`)
+        // 即使找不到营销员，也使用工号进行统计
+        visitorEmployeeId = shareFromEmployeeId
+      }
+    } else {
+      // 链接没有分享工号，区分两种情况
+      if (currentUser) {
+        // 情况1：当前登录用户是联合创始人
+        visitorName = currentUser.name || '联合创始人'
+        visitorEmployeeId = currentUser.employeeId || ''
+        console.log(`直接访问：联合创始人 ${visitorName} (${visitorEmployeeId})`)
+      } else {
+        // 情况2：当前登录用户是普通用户
+        visitorName = '普通用户'
+        visitorEmployeeId = ''
+        console.log('直接访问：普通用户')
+      }
+    }
+
+    // 调用后端接口记录访问
+    try {
+      const result = await feishuApi.updateShareTracking(visitorEmployeeId, visitorName)
+      if (result.success) {
+        console.log(`分享统计成功: ${visitorName}, 浏览次数: ${result.count}`)
+      } else {
+        console.error('分享统计失败:', result.message)
+      }
+    } catch (error) {
+      console.error('记录分享访问失败:', error)
+    }
+  },
+
   // 页面显示时重新加载数据
   async onShow() {
+    // 首次显示时不刷新（onLoad 已经加载过了）
+    if (this.isFirstShow) {
+      this.isFirstShow = false
+      return
+    }
+
     console.log('Event Detail 页面显示，重新加载数据')
     if (this.eventId) {
       // 刷新活动数据
@@ -63,11 +128,24 @@ Page({
   registerImageListener() {
     const app = getApp()
 
-    // 监听图片下载完成
-    this.imageListener = () => {
-      console.log('详情页：收到图片更新通知，重新加载数据')
-      if (this.eventId) {
-        this.loadEventData(this.eventId)
+    // 监听活动图片下载完成（只响应当前活动的图片）
+    this.imageListener = (eventId, path) => {
+      // 只处理当前活动的图片更新
+      if (eventId !== this.eventId) return
+
+      console.log('详情页：收到当前活动图片更新通知，更新显示')
+
+      // 直接更新图片，不重新加载整个数据（避免触发重复下载）
+      const event = this.data.event
+      if (event) {
+        const images = event.images || []
+        if (!images.includes(path)) {
+          images.push(path)
+          this.setData({
+            'event.images': images,
+            'event.image': images[0] || path
+          })
+        }
       }
     }
 
@@ -88,6 +166,27 @@ Page({
       app.globalData.partnersDataListeners = []
     }
     app.globalData.partnersDataListeners.push(this.partnersDataListener)
+
+    // 监听团队成员头像下载完成（用于更新组织者头像）
+    this._imageReadyCb = (type, name, path) => {
+      if (type !== 'avatar') return
+
+      console.log(`[EventDetail] 收到团队成员头像下载完成通知: ${name}`)
+      // 检查当前活动的组织者是否是这个人
+      const event = this.data.event
+      if (event && event.organizer === name) {
+        // 重新查找组织者数据（包含新的头像）
+        const organizerData = this.findOrganizerData(event.organizer)
+        this.setData({
+          organizerData: organizerData
+        })
+      }
+    }
+
+    if (!app.globalData.imageReadyListeners) {
+      app.globalData.imageReadyListeners = []
+    }
+    app.globalData.imageReadyListeners.push(this._imageReadyCb)
   },
 
   // 加载活动数据
@@ -112,6 +211,56 @@ Page({
         wx.navigateBack()
       }, 1500)
       return
+    }
+
+    // 如果图片路径为空，尝试从缓存加载
+    if ((!event.image || !event.images || event.images.length === 0) && event.imageKeys && event.imageKeys.length > 0) {
+      const { getEventsFromCache } = require('../../utils/events-data-loader.js')
+      const cachedEvents = getEventsFromCache()
+      const cachedEvent = cachedEvents.find(e => e.id === eventId)
+      if (cachedEvent && (cachedEvent.image || (cachedEvent.images && cachedEvent.images.length > 0))) {
+        console.log('从缓存加载活动图片:', {
+          image: cachedEvent.image,
+          images: cachedEvent.images
+        })
+        event.image = cachedEvent.image
+        event.images = cachedEvent.images
+      }
+    }
+
+    // 验证图片文件是否存在（参考个人二维码的下载逻辑）
+    const fs = wx.getFileSystemManager()
+    let needRedownload = false
+
+    // 检查 images 数组中的所有图片
+    if (event.images && event.images.length > 0) {
+      const validImages = []
+      event.images.forEach((imagePath, index) => {
+        if (imagePath) {
+          try {
+            fs.accessSync(imagePath)
+            validImages.push(imagePath)
+            console.log(`[${event.name}] 图片 ${index + 1} 文件验证通过:`, imagePath)
+          } catch (e) {
+            console.log(`[${event.name}] 图片 ${index + 1} 文件已失效，需要重新下载:`, imagePath)
+            needRedownload = true
+          }
+        }
+      })
+
+      // 更新为有效的图片列表
+      event.images = validImages
+      event.image = validImages[0] || ''
+    }
+
+    // 如果有图片失效且有 imageKeys，触发重新下载
+    if (needRedownload && event.imageKeys && event.imageKeys.length > 0) {
+      console.log(`[${event.name}] 检测到图片文件失效，将触发重新下载`)
+      // 清空失效的图片路径，让后续逻辑触发下载
+      if (event.images.length === 0) {
+        event.image = ''
+        event.images = []
+      }
     }
 
     // 判断是否可以编辑
@@ -141,12 +290,18 @@ Page({
     }
 
     // 确保 images 数组存在（兼容性处理）
-    if (!event.images || event.images.length === 0) {
-      event.images = event.image ? [event.image] : []
-      console.log('详情页：images 数组为空，使用 image 字段填充:', event.images)
-    } else {
-      console.log('详情页：images 数组已存在:', event.images)
+    // 注意：不要用 event.image 填充 event.images，因为这会影响下载逻辑
+    if (!event.images) {
+      event.images = []
     }
+
+    // 如果 images 数组为空但有 imageKeys，说明图片还未下载
+    // 保持 images 为空数组，让下载逻辑正确判断
+    console.log('详情页图片状态:', {
+      imagesLength: event.images.length,
+      imageKeysLength: event.imageKeys?.length || 0,
+      hasImage: !!event.image
+    })
 
     // 查找组织者数据
     const organizerData = this.findOrganizerData(event.organizer)
@@ -183,6 +338,70 @@ Page({
         console.log(`  [${idx}]: ${img}`)
       })
     }
+
+    // 如果活动有图片，但还没下载完成，下载剩余的图片
+    if (event.imageKeys && event.imageKeys.length > 0) {
+      const downloadedCount = event.images ? event.images.length : 0
+      if (downloadedCount < event.imageKeys.length) {
+        console.log(`详情页：需要下载剩余图片，已有 ${downloadedCount} 张，共 ${event.imageKeys.length} 张`)
+
+        // 检查是否已经在下载中（防止重复下载）
+        if (!this.isDownloadingImages) {
+          // 异步下载剩余图片，不阻塞页面显示
+          this.downloadRemainingImages(event)
+        } else {
+          console.log('详情页：图片下载已在进行中，跳过')
+        }
+      }
+    }
+  },
+
+  // 下载剩余图片（使用缓存检查逻辑）
+  async downloadRemainingImages(event) {
+    // 设置下载标志，防止并发下载
+    this.isDownloadingImages = true
+
+    const { downloadEventImages, getEventsFromCache } = require('../../utils/events-data-loader.js')
+    const { id, name } = event
+
+    console.log(`[${name}] 开始下载所有图片（利用缓存避免重复下载）`)
+
+    try {
+      // 从头开始下载所有图片，downloadEventImages 会自动使用缓存
+      // startIndex = 0 确保检查所有图片，包括第一张
+      await downloadEventImages(event, null, true, 0)
+
+      // 下载完成后，从缓存中读取完整的图片数组
+      const cachedEvents = getEventsFromCache()
+      const cachedEvent = cachedEvents.find(e => e.id === id)
+
+      if (cachedEvent && cachedEvent.images && cachedEvent.images.length > 0) {
+        console.log(`[${name}] 从缓存读取完整图片数组，共 ${cachedEvent.images.length} 张`)
+
+        // 一次性更新页面显示
+        this.setData({
+          'event.images': cachedEvent.images,
+          'event.image': cachedEvent.images[0]
+        })
+
+        // 同步更新 globalData
+        const app = getApp()
+        const globalEvents = app.globalData.eventsData || []
+        const globalIdx = globalEvents.findIndex(e => e.id === id)
+        if (globalIdx !== -1) {
+          globalEvents[globalIdx].images = cachedEvent.images
+          globalEvents[globalIdx].imagePaths = cachedEvent.images
+          globalEvents[globalIdx].image = cachedEvent.images[0]
+        }
+      }
+
+      console.log(`[${name}] 所有图片下载完成`)
+    } catch (error) {
+      console.error(`[${name}] 下载图片失败:`, error)
+    }
+
+    // 清除下载标志
+    this.isDownloadingImages = false
   },
 
   // 根据组织者名称查找团队成员数据
@@ -309,20 +528,28 @@ Page({
           try {
             // 确定使用哪个表格
             const config = feishuApi.FEISHU_CONFIG
-            const appToken = event.type === '星享会'
-              ? config.starClubAppToken
-              : event.type === '午餐会'
-              ? config.lunchAppToken
-              : event.type === '销售门诊'
-              ? config.salesClinicAppToken
-              : config.salesBuildingAppToken
-            const tableId = event.type === '星享会'
-              ? config.starClubTableId
-              : event.type === '午餐会'
-              ? config.lunchTableId
-              : event.type === '销售门诊'
-              ? config.salesClinicTableId
-              : config.salesBuildingTableId
+            let appToken, tableId
+
+            if (event.type === '星享会') {
+              appToken = config.starClubAppToken
+              tableId = config.starClubTableId
+            } else if (event.type === '午餐会') {
+              appToken = config.lunchAppToken
+              tableId = config.lunchTableId
+            } else if (event.type === '销售门诊') {
+              appToken = config.salesClinicAppToken
+              tableId = config.salesClinicTableId
+            } else if (event.type === '销售建设') {
+              appToken = config.salesBuildingAppToken
+              tableId = config.salesBuildingTableId
+            } else if (event.type === '客户活动' || event.type === '看电影' || event.type === '徒步活动' || event.type === '其他活动') {
+              appToken = config.otherActivitiesAppToken
+              tableId = config.otherActivitiesTableId
+            } else {
+              throw new Error(`未知的活动类型: ${event.type}`)
+            }
+
+            console.log('删除活动:', { eventId: event.id, type: event.type, appToken, tableId })
 
             // 调用飞书 API 删除记录
             await feishuApi.deleteRecord(event.id, { appToken, tableId })
@@ -333,13 +560,15 @@ Page({
               icon: 'success'
             })
 
-            // 刷新数据
+            // 强制刷新数据（即使正在加载中也要重新加载）
             const app = getApp()
             if (app.preloadFeishuEvents) {
+              // 重置加载标志，强制重新加载
+              app._fetchingFeishuEvents = false
               await app.preloadFeishuEvents()
             }
 
-            // 返回上一页
+            // 等待 Toast 显示完成后返回
             setTimeout(() => {
               wx.navigateBack()
             }, 1500)
@@ -360,12 +589,12 @@ Page({
   },
 
   // 生成分享图
-  onShare() {
+  async onShare() {
     const { isGeneratingPoster } = this.data
     if (isGeneratingPoster) return // 防止重复点击
 
     this.setData({ showActionSheet: false, isGeneratingPoster: true })
-    const { event } = this.data
+    const { event, organizerData } = this.data
     if (!event) {
       this.setData({ isGeneratingPoster: false })
       wx.showToast({
@@ -373,6 +602,29 @@ Page({
         icon: 'none'
       })
       return
+    }
+
+    // 确保组织者二维码已下载（使用统一接口）
+    const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
+
+    if (organizerData && organizerData.employeeId) {
+      wx.showLoading({ title: '准备中...', mask: true })
+
+      try {
+        const qrcodePath = await ensureQrcodeDownloaded(organizerData.employeeId)
+
+        if (qrcodePath) {
+          console.log('组织者二维码已准备:', qrcodePath)
+        } else {
+          console.warn('组织者二维码下载失败，将使用默认二维码')
+        }
+
+        wx.hideLoading()
+      } catch (error) {
+        console.error('下载组织者二维码失败:', error)
+        wx.hideLoading()
+        // 继续生成海报，即使二维码下载失败
+      }
     }
 
     try {
@@ -467,7 +719,7 @@ Page({
 
     const { event } = this.data
     return {
-      title: `${event.type} - ${event.organizer || '精彩活动'}`,
+      title: `${event.type} - ${event.name || '精彩活动'}`,
       path: `/pages/event-detail/event-detail?eventId=${event.id}&type=${event.type}&shareFrom=${shareFrom}`,
       imageUrl: event.image || ''
     }

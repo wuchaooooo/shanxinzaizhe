@@ -31,12 +31,10 @@
     <view class="profile-info">
       <text class="profile-name">{{name}}</text>
       <view class="profile-tags">
-        <view class="profile-title-container">
-          <text class="tag tag-primary" wx:for="{{titleLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
-        </view>
-        <view class="profile-school-container">
-          <text class="tag tag-secondary" wx:for="{{schoolLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
-        </view>
+        <!-- 前职标签 -->
+        <text class="tag tag-primary" wx:for="{{titleLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
+        <!-- 学校标签 -->
+        <text class="tag tag-secondary" wx:for="{{schoolLines}}" wx:key="*this" wx:for-item="line">{{line}}</text>
       </view>
       <view class="profile-stats">
         <view class="stat-item">
@@ -215,7 +213,13 @@
         <text class="qrcode-modal-close" bindtap="onHideQRCode">✕</text>
       </view>
       <view class="qrcode-image-wrapper">
-        <image class="qrcode-image" src="{{qrcodeImage}}" mode="aspectFill" show-menu-by-longpress="{{true}}" binderror="onQrcodeError"></image>
+        <!-- 二维码加载中状态 -->
+        <view wx:if="{{!qrcodeImage}}" class="qrcode-loading">
+          <view class="loading-spinner"></view>
+          <text class="loading-text">加载中...</text>
+        </view>
+        <!-- 二维码图片 -->
+        <image wx:else class="qrcode-image" src="{{qrcodeImage}}" mode="aspectFill" show-menu-by-longpress="{{true}}" binderror="onQrcodeError"></image>
         <text class="qrcode-tip">长按识别二维码添加微信</text>
       </view>
     </view>

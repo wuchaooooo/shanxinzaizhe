@@ -328,8 +328,8 @@ async function fetchFeishuAssets(onAssetReady) {
       }
     })
 
-    // 使用配置的并发数,与头像下载保持一致
-    const concurrency = DATA_SOURCE_CONFIG.imageLoadMode === 'sync' ? 1 : (DATA_SOURCE_CONFIG.imageConcurrency || 3)
+    // 使用配置的并发数
+    const concurrency = DATA_SOURCE_CONFIG.imageConcurrency || 5
     await downloadWithLimit(downloadTasks, concurrency)
 
     // 保存缓存

@@ -3,6 +3,7 @@ const { loadAllProfilesText, downloadAllProfileImages } = require('../../utils/p
 const { getAssetPath } = require('../../utils/assets-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
 const { generateTeamPoster, generateShareImage } = require('../../utils/poster-generator.js')
+const { DATA_SOURCE_CONFIG } = require('../../utils/data-source-config.js')
 
 // 处理合伙人数据
 // team页面只显示第一个学校和职位
@@ -28,10 +29,18 @@ function sortByJoinDate(partners) {
   })
 }
 
-// 检测是否有未完善的资料（有 openid 但没有 employeeId）
-function checkIncompleteProfile(partners) {
-  const incomplete = partners.find(p => p.wxOpenid && !p.employeeId)
-  return incomplete ? incomplete.wxOpenid : null
+// 检测指定 openid 是否有未完善的资料（有 openid 但没有 employeeId）
+function checkIncompleteProfile(partners, targetOpenid) {
+  if (!targetOpenid) return false
+
+  const incomplete = partners.find(p => {
+    const hasOpenid = !!(p.wxOpenid && p.wxOpenid.trim())
+    const hasEmployeeId = !!(p.employeeId && p.employeeId.trim())
+    const isTargetUser = p.wxOpenid === targetOpenid
+    return hasOpenid && !hasEmployeeId && isTargetUser
+  })
+
+  return !!incomplete
 }
 
 // 过滤掉未完善的资料（用于正常显示）
@@ -61,7 +70,8 @@ function getInitialPartners() {
     const completeProfiles = filterCompleteProfiles(cached)
     return completeProfiles.map(partner => processPartnerData({
       ...partner,
-      loaded: false  // 初始设为 false，等待图片实际加载完成后再设为 true
+      // 初始都显示骨架图，等待图片加载完成后一起显示
+      loaded: false
     }))
   }
   // 如果没有缓存数据，返回占位符
@@ -79,6 +89,7 @@ Page({
     searchPlaceholder: '搜索善心浙里联合创始人',
     isApplyMode: false,
     isCofounder: false,  // 当前用户是否为联合创始人
+    identityChecked: false,  // 身份识别是否完成
     loading: false,
     allImagesLoaded: false, // 是否所有合伙人头像已加载完成
     shanxinLogoUrl: '', // 善心logo
@@ -86,7 +97,9 @@ Page({
     posterScrollReady: true, // 控制scroll-view的渲染，用于重置滚动位置
     shareImageUrl: '', // 分享图片路径
     hasIncompleteProfile: false, // 是否有未完善的资料（有openid但无employeeId）
-    incompleteProfileOpenid: '' // 未完善资料的openid
+    incompleteProfileOpenid: '', // 未完善资料的openid
+    enableItemAnimation: false, // 禁用项目动画（骨架屏一开始就全部显示）
+    isFirstLoad: true // 是否首次加载
   },
 
   checkAllImagesLoaded(partners) {
@@ -95,6 +108,9 @@ Page({
   },
 
   onLoad() {
+    // 首次加载时不启用动画，让骨架屏一开始就全部显示
+    // （动画会导致骨架屏一个一个出现）
+
     // 加载善心 logo（代码：shanxinzheli）
     const shanxinLogoPath = getAssetPath('shanxinzheli')
     if (shanxinLogoPath) {
@@ -114,106 +130,230 @@ Page({
     const partnersData = app.globalData.partnersData || []
 
     if (partnersData.length > 0) {
-      // 检测是否有未完善的资料
-      const incompleteOpenid = checkIncompleteProfile(partnersData)
-      
-      // 只有当前用户的 openID 和未完善资料的 openID 一致时，才显示占位项
+      // 检测当前用户是否有未完善的资料
       const currentOpenid = app.globalData.openid || ''
-      const shouldShowIncomplete = incompleteOpenid && currentOpenid && incompleteOpenid === currentOpenid
-      
+      const hasIncompleteProfile = checkIncompleteProfile(partnersData, currentOpenid)
+
       // 过滤掉未完善的资料，只显示有 employeeId 的
       const completeProfiles = filterCompleteProfiles(partnersData)
       const sortedData = sortByJoinDate([...completeProfiles])
       const partners = sortedData.map(partner => processPartnerData({
         ...partner,
-        loaded: !!partner.image  // 如果已有图片路径则标记为已加载
+        // 初始都显示骨架图，等待图片加载完成后再显示
+        loaded: false
       }))
       this.setData({
         partners,
         filteredPartners: partners,
         allImagesLoaded: this.checkAllImagesLoaded(partners),
-        hasIncompleteProfile: shouldShowIncomplete,
-        incompleteProfileOpenid: incompleteOpenid || ''
+        hasIncompleteProfile,
+        incompleteProfileOpenid: currentOpenid
       })
       this.calculateStats()
     } else {
       this.loadFeishuData()
     }
 
-    // 注册头像下载完成回调，每下载好一张就更新对应卡片（只处理头像，不处理二维码）
-    this._imageReadyCb = (name, path) => {
-      console.log('_imageReadyCb 被调用:', name, path)
+    // 注册图片下载完成回调，处理头像和二维码
+    this._imageReadyCb = (type, name, path) => {
       const partners = this.data.partners
       const idx = partners.findIndex(p => p.name === name)
-      if (idx === -1) {
-        console.log('_imageReadyCb: 未找到合伙人:', name)
-        return
-      }
-
-      console.log(`_imageReadyCb: 更新 partners[${idx}] 的图片路径`)
+      if (idx === -1) return
 
       // 同时更新 globalData，确保其他页面能获取到最新数据
       const globalPartners = app.globalData.partnersData || []
       const globalIdx = globalPartners.findIndex(p => p.name === name)
       if (globalIdx !== -1) {
-        globalPartners[globalIdx].image = path
+        if (type === 'avatar') {
+          globalPartners[globalIdx].image = path
+        } else if (type === 'qrcode') {
+          globalPartners[globalIdx].qrcode = path
+        }
         app.globalData.partnersData = globalPartners
-        console.log(`_imageReadyCb: 同步更新 globalData.partnersData[${globalIdx}]`)
       }
 
-      const updates = {
-        [`partners[${idx}].image`]: path
-        // 不在这里设置 loaded: true，等待 onImageLoad 事件触发
-      }
-      const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
-      if (fidx !== -1) {
-        updates[`filteredPartners[${fidx}].image`] = path
+      // 更新图片路径
+      const updates = {}
+      if (type === 'avatar') {
+        // 如果头像路径已经相同，不需要更新（避免闪烁）
+        if (partners[idx].image === path) return
+
+        // 更新 partners 数组
+        updates[`partners[${idx}].image`] = path
+        updates[`partners[${idx}].loaded`] = true
+
+        // 同时更新 filteredPartners（WXML 渲染使用）
+        const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
+        if (fidx !== -1) {
+          updates[`filteredPartners[${fidx}].image`] = path
+          updates[`filteredPartners[${fidx}].loaded`] = true
+        }
+
+        // 同时计算并更新 allImagesLoaded 状态，避免二次 setData
+        const updatedPartners = [...partners]
+        updatedPartners[idx] = { ...updatedPartners[idx], image: path, loaded: true }
+        updates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
+      } else if (type === 'qrcode') {
+        // 如果二维码路径已经相同，不需要更新
+        if (partners[idx].qrcode === path) return
+
+        // 更新 partners 数组
+        updates[`partners[${idx}].qrcode`] = path
+
+        // 同时更新 filteredPartners
+        const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
+        if (fidx !== -1) {
+          updates[`filteredPartners[${fidx}].qrcode`] = path
+        }
       }
 
-      this.setData(updates, () => {
-        console.log(`_imageReadyCb: ${name} 图片路径更新完成，等待图片加载`)
-      })
+      this.setData(updates)
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
 
-    // 注册文本数据刷新回调，飞书数据更新时重建列表
+    // 注册文本数据刷新回调，飞书数据更新时只更新有变化的记录
     this._partnersDataCb = (partnersData) => {
-      // 检测是否有未完善的资料
-      const incompleteOpenid = checkIncompleteProfile(partnersData)
-      
-      // 只有当前用户的 openID 和未完善资料的 openID 一致时，才显示占位项
+      // 检测当前用户是否有未完善的资料
       const currentOpenid = app.globalData.openid || ''
-      const shouldShowIncomplete = incompleteOpenid && currentOpenid && incompleteOpenid === currentOpenid
-      
+      const hasIncompleteProfile = checkIncompleteProfile(partnersData, currentOpenid)
+
       // 过滤掉未完善的资料，只显示有 employeeId 的
       const completeProfiles = filterCompleteProfiles(partnersData)
       const sortedData = sortByJoinDate([...completeProfiles])
-      const partners = sortedData.map(partner => processPartnerData({
-        ...partner,
-        loaded: !!partner.image
-      }))
-      this.setData({
-        partners,
-        filteredPartners: partners,
-        searchQuery: '',
-        allImagesLoaded: this.checkAllImagesLoaded(partners),
-        hasIncompleteProfile: shouldShowIncomplete,
-        incompleteProfileOpenid: incompleteOpenid || ''
-      })
-      this.calculateStats()
+
+      // 保存当前的 partners
+      const currentPartners = this.data.partners || []
+
+      // 检查是否需要完全重建列表（人数变化、顺序变化等）
+      const needRebuild =
+        sortedData.length !== currentPartners.length ||
+        hasIncompleteProfile !== this.data.hasIncompleteProfile ||
+        sortedData.some((p, i) => {
+          const curr = currentPartners[i]
+          return !curr || p.employeeId !== curr.employeeId
+        })
+
+      if (needRebuild) {
+        // 需要重建列表：保留已下载的图片
+        console.log('[Team] 重建列表')
+        const imageMap = {}
+        const loadedMap = {}
+        currentPartners.forEach(p => {
+          if (p.employeeId) {
+            if (p.image) imageMap[p.employeeId] = p.image
+            if (p.loaded) loadedMap[p.employeeId] = true
+          }
+        })
+
+        const partners = sortedData.map(partner => {
+          const existingImage = imageMap[partner.employeeId]
+          const finalImage = existingImage || partner.image
+          const wasLoaded = loadedMap[partner.employeeId]
+          return processPartnerData({
+            ...partner,
+            image: finalImage,
+            // 保持之前的加载状态，新数据初始为未加载
+            loaded: wasLoaded || false
+          })
+        })
+
+        this.setData({
+          partners,
+          filteredPartners: partners,
+          searchQuery: '',
+          allImagesLoaded: this.checkAllImagesLoaded(partners),
+          hasIncompleteProfile,
+          incompleteProfileOpenid: currentOpenid
+        })
+        this.calculateStats()
+      } else {
+        // 不需要重建列表：只更新有变化的文字数据
+        const updates = {}
+        let hasChanges = false
+
+        sortedData.forEach((partner, i) => {
+          const curr = currentPartners[i]
+          if (!curr) return
+
+          // 检查文字数据是否有变化
+          if (curr.name !== partner.name ||
+              curr.school !== partner.school ||
+              curr.title !== partner.title ||
+              curr.customersServed !== partner.customersServed ||
+              curr.bio !== partner.bio) {
+            hasChanges = true
+            // 更新文字数据，保留图片
+            const processed = processPartnerData({
+              ...partner,
+              image: curr.image,
+              loaded: curr.loaded
+            })
+            updates[`partners[${i}]`] = processed
+
+            // 同时更新 filteredPartners
+            const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
+            if (fidx !== -1) {
+              updates[`filteredPartners[${fidx}]`] = processed
+            }
+          }
+        })
+
+        // 更新 hasIncompleteProfile
+        if (hasIncompleteProfile !== this.data.hasIncompleteProfile) {
+          hasChanges = true
+          updates.hasIncompleteProfile = hasIncompleteProfile
+          updates.incompleteProfileOpenid = currentOpenid
+        }
+
+        if (hasChanges) {
+          console.log('[Team] 更新文字数据')
+          this.setData(updates)
+          this.calculateStats()
+        } else {
+          console.log('[Team] 数据无变化')
+        }
+      }
     }
     app.globalData.partnersDataListeners.push(this._partnersDataCb)
 
-    // 注册身份识别回调，更新底部按钮
+    // 注册身份识别回调，更新底部按钮和占位符显示
     this._currentUserCb = (user) => {
-      this.setData({ isCofounder: !!user })
+      // 只有当用户有营销员工号时才显示生成海报按钮
+      this.setData({
+        isCofounder: !!(user && user.employeeId),
+        identityChecked: true
+      })
+
+      // 重新检查是否需要显示占位符
+      const partnersData = app.globalData.partnersData || []
+      const currentOpenid = app.globalData.openid || ''
+      if (partnersData.length > 0 && currentOpenid) {
+        const hasIncompleteProfile = checkIncompleteProfile(partnersData, currentOpenid)
+        this.setData({
+          hasIncompleteProfile,
+          incompleteProfileOpenid: currentOpenid
+        })
+      }
     }
     app.globalData.currentUserListeners.push(this._currentUserCb)
 
     // 立即应用已有结果（如果身份识别已完成）
     // 注意：只有当 openid 和 partnersData 都存在时，才能确定身份识别已完成
     if (app.globalData.openid && app.globalData.partnersData && app.globalData.partnersData.length > 0) {
-      this.setData({ isCofounder: !!app.globalData.currentUser })
+      const currentUser = app.globalData.currentUser
+      this.setData({
+        isCofounder: !!(currentUser && currentUser.employeeId),
+        identityChecked: true
+      })
+
+      // 重新检查是否需要显示占位符
+      const partnersData = app.globalData.partnersData
+      const currentOpenid = app.globalData.openid
+      const hasIncompleteProfile = checkIncompleteProfile(partnersData, currentOpenid)
+      this.setData({
+        hasIncompleteProfile,
+        incompleteProfileOpenid: currentOpenid
+      })
     }
   },
 
@@ -259,40 +399,36 @@ Page({
     this.setData({ loading: true })
     try {
       // 阶段一：先拿文本数据，立即展示
-      const partnersData = await loadAllProfilesText()
+      const { profiles: partnersData } = await loadAllProfilesText()
       const app = getApp()
       app.globalData.partnersData = partnersData
 
-      // 检测是否有未完善的资料
-      const incompleteOpenid = checkIncompleteProfile(partnersData)
-      
-      // 只有当前用户的 openID 和未完善资料的 openID 一致时，才显示占位项
+      // 检测当前用户是否有未完善的资料
       const currentOpenid = app.globalData.openid || ''
-      const shouldShowIncomplete = incompleteOpenid && currentOpenid && incompleteOpenid === currentOpenid
+      const hasIncompleteProfile = checkIncompleteProfile(partnersData, currentOpenid)
 
       // 过滤掉未完善的资料，只显示有 employeeId 的
       const completeProfiles = filterCompleteProfiles(partnersData)
       const sortedData = sortByJoinDate([...completeProfiles])
       const partners = sortedData.map(partner => processPartnerData({
         ...partner,
-        loaded: false  // 图片还没下载
+        // 初始都显示骨架图，等待图片加载完成后一起显示
+        loaded: false
       }))
-      this.setData({ 
-        partners, 
-        filteredPartners: partners, 
+      this.setData({
+        partners,
+        filteredPartners: partners,
         loading: false,
-        hasIncompleteProfile: shouldShowIncomplete,
-        incompleteProfileOpenid: incompleteOpenid || ''
+        hasIncompleteProfile,
+        incompleteProfileOpenid: currentOpenid
       })
       this.calculateStats()
 
       // 阶段二：后台下载图片
       downloadAllProfileImages(partnersData, (type, path, employeeId, name) => {
-        if (type === 'avatar') {
-          // 通知所有监听器
-          app.globalData.imageReadyListeners.forEach(cb => cb(name, path))
-        }
-      }, 2)
+        // 通知所有监听器（头像和二维码）
+        app.globalData.imageReadyListeners.forEach(cb => cb(type, name, path))
+      }, DATA_SOURCE_CONFIG.imageConcurrency || 10)
     } catch (error) {
       console.error('加载飞书数据失败:', error)
       this.setData({ loading: false })
@@ -325,13 +461,8 @@ Page({
       uniqueSkills: { to: uniqueSkills }
     })
 
-    // 数据变化时清空分享图，触发重新生成
+    // 数据变化时清空分享图，下次分享时重新生成
     this.setData({ shareImageUrl: '' })
-
-    // 生成分享图
-    if (teamCount > 0) {
-      this.generateShareImageIfNeeded()
-    }
   },
 
   // 生成分享图（如果还没有生成）
@@ -438,6 +569,11 @@ Page({
     const currentUser = app.globalData.currentUser
     const shareFrom = currentUser ? currentUser.employeeId : (app.globalData.initialShareFrom || 'guest')
 
+    // 如果还没有生成分享图，立即生成
+    if (!this.data.shareImageUrl && this.data.teamCount > 0) {
+      this.generateShareImageIfNeeded()
+    }
+
     return {
       title: `善心浙里-${this.data.teamCount}位联合创始人`,
       path: `/pages/team/team?shareFrom=${shareFrom}`,
@@ -484,10 +620,42 @@ Page({
   },
 
   // 联合创始人：生成团队海报
-  onGeneratePoster() {
+  async onGeneratePoster() {
     const app = getApp()
     const currentUser = app.globalData.currentUser
     if (!currentUser) return
+
+    // 确保二维码已下载（使用统一接口）
+    const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
+
+    if (currentUser.qrcodeKey) {
+      wx.showLoading({ title: '准备中...', mask: true })
+
+      try {
+        const qrcodePath = await ensureQrcodeDownloaded(currentUser.employeeId)
+
+        if (qrcodePath) {
+          currentUser.qrcode = qrcodePath
+          console.log(`[${currentUser.name}] 二维码已准备好:`, qrcodePath)
+        } else {
+          console.log(`[${currentUser.name}] 二维码下载失败，将不显示个人二维码`)
+        }
+
+        wx.hideLoading()
+      } catch (error) {
+        wx.hideLoading()
+        console.error('下载二维码失败:', error)
+        // 即使下载失败也继续生成海报
+      }
+    }
+
+    // 调试日志：确认传递给海报生成器的数据
+    console.log(`[生成海报] 准备生成海报，当前用户信息:`)
+    console.log(`  - 姓名: ${currentUser.name}`)
+    console.log(`  - employeeId: ${currentUser.employeeId}`)
+    console.log(`  - qrcode: ${currentUser.qrcode || '(空)'}`)
+    console.log(`  - qrcodeKey: ${currentUser.qrcodeKey || '(空)'}`)
+    console.log(`  - image: ${currentUser.image || '(空)'}`)
 
     const generatePoster = () => {
       // 先卸载scroll-view，强制重置滚动位置
@@ -530,15 +698,11 @@ Page({
   // 图片加载成功
   onImageLoad(e) {
     const name = e.currentTarget.dataset.name
-    console.log('图片加载成功:', name)
     const partners = this.data.partners
     const idx = partners.findIndex(p => p.name === name)
-    if (idx === -1) {
-      console.log('未找到合伙人:', name)
-      return
-    }
+    if (idx === -1) return
 
-    console.log(`设置 partners[${idx}].loaded = true`)
+    // 头像加载成功，设置 loaded: true
     const updates = {
       [`partners[${idx}].loaded`]: true
     }
@@ -548,38 +712,29 @@ Page({
     }
 
     this.setData(updates, () => {
-      console.log(`${name} loaded 状态已更新`)
       this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
-
-      // 如果还没有生成分享图，且有足够的头像，尝试生成
-      if (!this.data.shareImageUrl && this.data.teamCount > 0) {
-        const loadedCount = this.data.partners.filter(p => p.loaded).length
-        if (loadedCount >= 3) { // 至少3个头像加载完成后生成分享图
-          this.generateShareImageIfNeeded()
-        }
-      }
     })
   },
 
   // 图片加载失败
   onImageError(e) {
     const name = e.currentTarget.dataset.name
-    console.log('图片加载失败（可能是临时缓存已清理）:', name)
+    console.log('图片加载失败:', name)
 
     const app = getApp()
     const partners = this.data.partners
     const idx = partners.findIndex(p => p.name === name)
 
     if (idx !== -1) {
-      // 清除失效的图片路径，标记为未加载
+      // 清除失效的图片路径，保持骨架图状态，等待重试
       const updates = {
         [`partners[${idx}].image`]: '',
-        [`partners[${idx}].loaded`]: false
+        [`partners[${idx}].loaded`]: false  // 保持 false，继续显示骨架图
       }
       const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
       if (fidx !== -1) {
         updates[`filteredPartners[${fidx}].image`] = ''
-        updates[`filteredPartners[${fidx}].loaded`] = false
+        updates[`filteredPartners[${fidx}].loaded`] = false  // 保持 false，继续显示骨架图
       }
       this.setData(updates)
 
@@ -589,10 +744,8 @@ Page({
       if (globalIdx !== -1) {
         globalPartners[globalIdx].image = ''
         globalPartners[globalIdx].loaded = false
-        console.log(`清除 ${name} 的失效图片路径，将触发重新下载`)
 
         // 触发 app.js 重新检查并下载缺失的图片
-        // 通过调用 preloadFeishuData，它会检测到图片缺失并重新下载
         setTimeout(() => {
           app.preloadFeishuData()
         }, 100)

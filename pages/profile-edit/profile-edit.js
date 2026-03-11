@@ -216,12 +216,21 @@ Page({
       const partnersData = app.globalData.partnersData || []
       const partner = partnersData.find(p => p.employeeId === employeeId)
       if (partner) {
+        console.log('[ProfileEdit] 找到合伙人数据:', {
+          name: partner.name,
+          hasImage: !!partner.image,
+          hasQrcode: !!partner.qrcode,
+          imageKey: partner.imageKey,
+          qrcodeKey: partner.qrcodeKey
+        })
         if (partner.image) {
           this.setData({ 'formData.avatarImage': { path: partner.image, imageKey: partner.imageKey, isNew: false } })
         }
         if (partner.qrcode) {
-          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, imageKey: partner.qrcodeKey, isNew: false } })
+          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, qrcodeKey: partner.qrcodeKey, isNew: false } })
         }
+      } else {
+        console.log('[ProfileEdit] 未找到合伙人数据，employeeId:', employeeId)
       }
     } else {
       // 新表无记录：显示空表单
@@ -267,6 +276,28 @@ Page({
         'formData.activitiesList':  activitiesList,
         badgeOptions:               buildBadgeOptions(badgesList)
       })
+
+      // 从 globalData 中获取已下载的头像和二维码
+      const app = getApp()
+      const partnersData = app.globalData.partnersData || []
+      const partner = partnersData.find(p => p.wxOpenid === openid || (employeeId && p.employeeId === employeeId))
+      if (partner) {
+        console.log('[ProfileEdit] 找到合伙人数据 (by openid):', {
+          name: partner.name,
+          hasImage: !!partner.image,
+          hasQrcode: !!partner.qrcode,
+          imageKey: partner.imageKey,
+          qrcodeKey: partner.qrcodeKey
+        })
+        if (partner.image) {
+          this.setData({ 'formData.avatarImage': { path: partner.image, imageKey: partner.imageKey, isNew: false } })
+        }
+        if (partner.qrcode) {
+          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, qrcodeKey: partner.qrcodeKey, isNew: false } })
+        }
+      } else {
+        console.log('[ProfileEdit] 未找到合伙人数据 (by openid):', openid, employeeId)
+      }
     } else {
       // 没有找到记录：显示空表单
       console.log('通过openid未找到记录，显示空表单')
@@ -574,6 +605,15 @@ Page({
 
       wx.showToast({ title: '保存成功', icon: 'success' })
 
+      // 保存成功后，触发飞书数据刷新
+      const app = getApp()
+      if (app.preloadFeishuData) {
+        // 延迟刷新，让用户看到成功提示
+        setTimeout(() => {
+          app.preloadFeishuData()
+        }, 500)
+      }
+
       setTimeout(() => {
         wx.navigateBack()
       }, 1500)
@@ -633,10 +673,16 @@ Page({
     const listKey = type === 'timeline' ? 'timelineList' : 'activitiesList'
     const list = [...this.data.formData[listKey]]
 
+    // 计算 timeDisplay
+    const itemWithDisplay = {
+      ...item,
+      timeDisplay: computeTimeDisplay(item.timeStart, item.timeEnd)
+    }
+
     if (index !== undefined && index >= 0) {
-      list[index] = item
+      list[index] = itemWithDisplay
     } else {
-      list.push(item)
+      list.push(itemWithDisplay)
     }
 
     // 按开始时间倒序排列

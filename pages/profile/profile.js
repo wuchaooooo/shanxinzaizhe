@@ -145,7 +145,7 @@ Page({
     showPoster: false,
     posterImage: '',
     canvasHeight: 2000,
-    qrcodeImage: 'https://via.placeholder.com/400x400?text=QR+Code',
+    qrcodeImage: '', // 初始为空，避免加载占位符 URL 失败
     headerClipPath: 'inset(0 0 0 0)',
     avatarScale: 1,
     avatarTop: 384,
@@ -261,6 +261,27 @@ Page({
       }
       if (!partner) partner = partnersData[0]
 
+      // 检查二维码文件是否存在（验证缓存路径的有效性）
+      if (partner.qrcode) {
+        try {
+          const fs = wx.getFileSystemManager()
+          fs.accessSync(partner.qrcode)
+          console.log(`[${partner.name}] 二维码文件验证通过`)
+        } catch (e) {
+          console.log(`[${partner.name}] 二维码文件已失效，清空路径:`, partner.qrcode)
+          partner.qrcode = '' // 清空失效的路径
+        }
+      }
+
+      // 打印二维码状态日志
+      console.log(`[${partner.name}] 二维码状态检查:`, {
+        hasQrcodeKey: !!partner.qrcodeKey,
+        qrcodeKey: partner.qrcodeKey || '无',
+        hasQrcodePath: !!partner.qrcode,
+        qrcodePath: partner.qrcode || '无',
+        needDownload: !!(partner.qrcodeKey && !partner.qrcode)
+      })
+
       // 立即展示文本数据（图片有则展示，无则空白等待）
       const badges = partner.badges || []
       const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school || '']
@@ -285,20 +306,26 @@ Page({
         bio: partner.bio || ''
       })
 
-      // 若头像/二维码还未下载，注册监听，下载完成后自动更新
-      if (!partner.image || !partner.qrcode) {
+      // 按需下载二维码：如果有 qrcodeKey 但没有 qrcode 路径，立即下载
+      if (partner.qrcodeKey && !partner.qrcode) {
+        console.log(`[${partner.name}] 二维码未下载，开始按需下载...`)
+        this.downloadQrcode(partner)
+      }
+
+      // 若头像还未下载，注册监听，下载完成后自动更新
+      if (!partner.image) {
         const partnerName = partner.name
-        this._imageReadyCb = (name, path) => {
+        this._imageReadyCb = (type, name, path) => {
           if (name !== partnerName) return
           // 根据当前合伙人的 image/qrcode 字段判断是头像还是二维码
           const current = (app.globalData.partnersData || []).find(p => p.name === name)
           if (!current) return
           const update = {}
-          if (current.image === path) {
+          if (type === 'avatar' && current.image === path) {
             update.avatar = path
             update.coverImage = path
           }
-          if (current.qrcode === path) {
+          if (type === 'qrcode' && current.qrcode === path) {
             update.qrcodeImage = path
           }
           if (Object.keys(update).length) this.setData(update)
@@ -306,7 +333,7 @@ Page({
         app.globalData.imageReadyListeners.push(this._imageReadyCb)
       }
 
-      // 注册数据变更监听：飞书有更新时刷新当前合伙人的文本信息
+      // 注册数据变更监听：飞书有更新时刷新当前合伙人的文本信息和图片
       this._partnersDataCb = (partnersData) => {
         let updated
         if (this.useEmployeeId) {
@@ -319,7 +346,7 @@ Page({
         const schoolArray = Array.isArray(updated.school) ? updated.school : [updated.school || '']
         const titleArray = Array.isArray(updated.title) ? updated.title : [updated.title || '']
 
-        this.setData({
+        const updateData = {
           name: updated.name,
           school: updated.school,
           title: updated.title,
@@ -333,7 +360,18 @@ Page({
           tenure: this.calculateTenure(updated.joinDate),
           customersServed: updated.customersServed || '',
           bio: updated.bio || ''
-        })
+        }
+
+        // 只在图片有值时才更新，避免清空已显示的图片
+        if (updated.image) {
+          updateData.avatar = updated.image
+          updateData.coverImage = updated.image
+        }
+        if (updated.qrcode) {
+          updateData.qrcodeImage = updated.qrcode
+        }
+
+        this.setData(updateData)
       }
       app.globalData.partnersDataListeners.push(this._partnersDataCb)
 
@@ -347,6 +385,25 @@ Page({
     } catch (error) {
       console.error('加载飞书合伙人数据失败:', error)
       wx.showToast({ title: '加载数据失败', icon: 'error' })
+    }
+  },
+
+  // 按需下载二维码
+  async downloadQrcode(partner) {
+    const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
+
+    try {
+      const qrcodePath = await ensureQrcodeDownloaded(partner.employeeId)
+
+      if (qrcodePath) {
+        // 更新页面显示
+        this.setData({ qrcodeImage: qrcodePath })
+        console.log(`[${partner.name}] 二维码已准备好:`, qrcodePath)
+      } else {
+        console.error(`[${partner.name}] 二维码下载失败`)
+      }
+    } catch (error) {
+      console.error(`[${partner.name}] 下载二维码出错:`, error)
     }
   },
 
@@ -411,10 +468,75 @@ Page({
     })
   },
 
-  onShowQRCode() {
+  async onShowQRCode() {
+    const app = getApp()
+    const partnersData = app.globalData.partnersData || []
+
+    // 查找当前合伙人
+    let partner
+    if (this.useEmployeeId) {
+      partner = partnersData.find(p => p.employeeId === this.partnerId)
+    } else {
+      partner = partnersData[this.partnerId]
+    }
+
+    if (!partner) {
+      wx.showToast({ title: '未找到合伙人信息', icon: 'error' })
+      return
+    }
+
+    console.log(`[${partner.name}] 点击显示二维码，当前状态:`, {
+      hasQrcodeKey: !!partner.qrcodeKey,
+      hasQrcodePath: !!partner.qrcode,
+      qrcodePath: partner.qrcode || '无',
+      pageQrcodeImage: this.data.qrcodeImage || '无'
+    })
+
+    // 检查二维码文件是否存在（如果有路径的话）
+    let qrcodeFileExists = false
+    if (partner.qrcode) {
+      try {
+        const fs = wx.getFileSystemManager()
+        fs.accessSync(partner.qrcode)
+        qrcodeFileExists = true
+        console.log(`[${partner.name}] 二维码文件存在，路径有效`)
+      } catch (e) {
+        console.log(`[${partner.name}] 二维码文件不存在，路径已失效:`, partner.qrcode)
+        // 清空失效的路径
+        partner.qrcode = ''
+        this.setData({ qrcodeImage: '' })
+      }
+    }
+
+    // 先显示弹窗
     this.setData({
       showQRCode: true
     })
+
+    // 如果二维码未下载或文件已失效，显示加载提示并下载
+    if (partner.qrcodeKey && (!partner.qrcode || !qrcodeFileExists)) {
+      console.log(`[${partner.name}] 二维码需要下载，弹窗中开始下载...`)
+
+      // 显示加载中的二维码占位
+      this.setData({
+        qrcodeImage: '' // 清空，显示加载状态
+      })
+
+      try {
+        await this.downloadQrcode(partner)
+        // 下载完成后，qrcodeImage 已在 downloadQrcode 中更新
+        console.log(`[${partner.name}] 二维码下载完成，弹窗已更新显示`)
+      } catch (error) {
+        console.error(`[${partner.name}] 弹窗中下载二维码失败:`, error)
+        wx.showToast({ title: '二维码加载失败', icon: 'error' })
+      }
+    } else if (partner.qrcode && qrcodeFileExists) {
+      console.log(`[${partner.name}] 二维码已缓存且文件有效，直接显示`)
+      // 确保页面数据是最新的
+      this.setData({ qrcodeImage: partner.qrcode })
+    } else {
+      console.log(`[${partner.name}] 无 qrcodeKey，无法下载二维码`)
+    }
   },
 
   onHideQRCode() {
@@ -435,7 +557,7 @@ Page({
     // 阻止事件冒泡，防止点击卡片时关闭弹窗
   },
 
-  onGeneratePoster() {
+  async onGeneratePoster() {
     const app = getApp()
     const partners = app.globalData.partnersData || []
 
@@ -448,11 +570,45 @@ Page({
       ? (currentPartnerIndex >= 0 ? partners[currentPartnerIndex] : null)
       : (partners[currentPartnerIndex] || partners[0])
 
-    // 同步页面中已加载的图片路径
-    if (currentPartner) {
-      if (this.data.avatar) currentPartner.image = this.data.avatar
-      if (this.data.qrcodeImage) currentPartner.qrcode = this.data.qrcodeImage
+    if (!currentPartner) {
+      wx.showToast({ title: '未找到合伙人信息', icon: 'error' })
+      return
     }
+
+    // 同步页面中已加载的图片路径
+    if (this.data.avatar) currentPartner.image = this.data.avatar
+
+    // 确保二维码已下载（使用统一接口）
+    const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
+
+    if (currentPartner.qrcodeKey) {
+      wx.showLoading({ title: '准备中...', mask: true })
+
+      try {
+        const qrcodePath = await ensureQrcodeDownloaded(currentPartner.employeeId)
+
+        if (qrcodePath) {
+          currentPartner.qrcode = qrcodePath
+          console.log(`[${currentPartner.name}] 二维码已准备好:`, qrcodePath)
+        } else {
+          console.log(`[${currentPartner.name}] 二维码下载失败，将不显示个人二维码`)
+        }
+
+        wx.hideLoading()
+      } catch (error) {
+        wx.hideLoading()
+        console.error('下载二维码失败:', error)
+        // 即使下载失败也继续生成海报
+      }
+    }
+
+    // 调试日志：确认传递给海报生成器的数据
+    console.log(`[生成海报] 准备生成海报，当前合伙人信息:`)
+    console.log(`  - 姓名: ${currentPartner.name}`)
+    console.log(`  - employeeId: ${currentPartner.employeeId}`)
+    console.log(`  - qrcode: ${currentPartner.qrcode || '(空)'}`)
+    console.log(`  - qrcodeKey: ${currentPartner.qrcodeKey || '(空)'}`)
+    console.log(`  - image: ${currentPartner.image || '(空)'}`)
 
     // 先卸载scroll-view，强制重置滚动位置
     this.setData({ posterScrollReady: false }, () => {
@@ -498,9 +654,9 @@ Page({
 
   onScroll(e) {
     const scrollTop = e.detail.scrollTop
-    const systemInfo = wx.getSystemInfoSync()
-    const screenHeight = systemInfo.windowHeight
-    const rpxRatio = systemInfo.windowWidth / 750
+    const windowInfo = wx.getWindowInfo()
+    const screenHeight = windowInfo.windowHeight
+    const rpxRatio = windowInfo.windowWidth / 750
 
     // 初始高度512rpx，目标高度为屏幕的1/5
     const initialHeightPx = 512 * rpxRatio

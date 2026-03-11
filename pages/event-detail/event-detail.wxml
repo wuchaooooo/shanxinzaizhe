@@ -52,7 +52,7 @@
       autoplay="{{false}}"
       circular="{{true}}"
     >
-      <swiper-item wx:for="{{event.images || [event.image]}}" wx:key="index">
+      <swiper-item wx:for="{{event.images.length > 0 ? event.images : ['/images/placeholder.png']}}" wx:key="index">
         <image
           class="event-image"
           src="{{item || '/images/placeholder.png'}}"
@@ -152,19 +152,19 @@
   </view>
   <view class="action-sheet-body">
     <view class="action-icons-row">
-      <view class="action-icon-item" bindtap="onShare">
+      <view class="action-icon-item" catchtap="onShare">
         <view class="action-icon-circle">
           <text class="action-icon-emoji">📤</text>
         </view>
         <text class="action-icon-label">分享</text>
       </view>
-      <view wx:if="{{canEdit}}" class="action-icon-item" bindtap="onEdit">
+      <view wx:if="{{canEdit}}" class="action-icon-item" catchtap="onEdit">
         <view class="action-icon-circle">
           <text class="action-icon-emoji">✏️</text>
         </view>
         <text class="action-icon-label">编辑</text>
       </view>
-      <view wx:if="{{canEdit}}" class="action-icon-item" bindtap="onDelete">
+      <view wx:if="{{canEdit}}" class="action-icon-item" catchtap="onDelete">
         <view class="action-icon-circle danger">
           <text class="action-icon-emoji">🗑️</text>
         </view>

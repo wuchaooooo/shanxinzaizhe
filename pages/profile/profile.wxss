@@ -282,24 +282,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16rpx;
+  gap: 12rpx;
   margin-bottom: 32rpx;
   flex-wrap: wrap;
-}
-
-.profile-title-container,
-.profile-school-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-  align-items: center;
+  padding: 0 32rpx;
 }
 
 .tag {
-  padding: 8rpx 24rpx;
-  border-radius: 24rpx;
-  font-size: 24rpx;
-  font-weight: bold;
+  padding: 10rpx 20rpx;
+  border-radius: 20rpx;
+  font-size: 22rpx;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .tag-primary {
@@ -950,6 +944,37 @@
   align-items: center;
   gap: 24rpx;
   padding: 40rpx;
+}
+
+/* 二维码加载状态 */
+.qrcode-loading {
+  width: 400rpx;
+  height: 400rpx;
+  border-radius: 16rpx;
+  background-color: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 24rpx;
+  color: #64748b;
 }
 
 .qrcode-image {

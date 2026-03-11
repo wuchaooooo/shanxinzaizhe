@@ -5,13 +5,8 @@ const DATA_SOURCE_CONFIG = {
   // 数据源类型: 'local' 或 'feishu'
   source: 'feishu',
 
-  // 图片加载模式
-  // 'async' — 文本数据立即展示，图片后台渐进加载（默认体验）
-  // 'sync'  — 等所有图片下载完成后一次性展示（对比测试用）
-  imageLoadMode: 'async',
-
-  // 图片下载并发数（降低并发数可以避免飞书限流）
-  imageConcurrency: 2,
+  // 图片下载并发数
+  imageConcurrency: 30,
 
   // 自助编辑功能开关（false = 原有逻辑完全不变，true = 详情页从新表读取数据并显示编辑按钮）
   useNewProfileTable: true,

@@ -19,7 +19,7 @@ Page({
       latitude: null,
       longitude: null
     },
-    typeOptions: ['星享会', '午餐会', '销售门诊', '销售建设'],
+    typeOptions: ['星享会', '午餐会', '销售门诊', '销售建设', '客户活动'],
     saving: false
   },
 
@@ -45,9 +45,13 @@ Page({
       this.loadEventData(options.eventId)
     } else {
       // 新建模式，设置默认组织者为当前用户
+      // 解码 URL 参数
+      const defaultType = options.defaultType
+        ? decodeURIComponent(options.defaultType)
+        : (options.type ? decodeURIComponent(options.type) : '星享会')
       const defaultData = {
         'formData.organizer': app.globalData.currentUser.name || '',
-        'formData.type': options.type || '星享会'
+        'formData.type': defaultType
       }
       console.log('新建活动，初始化表单数据:', defaultData)
       this.setData(defaultData)
@@ -322,20 +326,28 @@ Page({
 
       // 确定使用哪个表格
       const config = feishuApi.FEISHU_CONFIG
-      const appToken = formData.type === '星享会'
-        ? config.starClubAppToken
-        : formData.type === '午餐会'
-        ? config.lunchAppToken
-        : formData.type === '销售门诊'
-        ? config.salesClinicAppToken
-        : config.salesBuildingAppToken
-      const tableId = formData.type === '星享会'
-        ? config.starClubTableId
-        : formData.type === '午餐会'
-        ? config.lunchTableId
-        : formData.type === '销售门诊'
-        ? config.salesClinicTableId
-        : config.salesBuildingTableId
+      let appToken, tableId
+
+      if (formData.type === '星享会') {
+        appToken = config.starClubAppToken
+        tableId = config.starClubTableId
+      } else if (formData.type === '午餐会') {
+        appToken = config.lunchAppToken
+        tableId = config.lunchTableId
+      } else if (formData.type === '销售门诊') {
+        appToken = config.salesClinicAppToken
+        tableId = config.salesClinicTableId
+      } else if (formData.type === '销售建设') {
+        appToken = config.salesBuildingAppToken
+        tableId = config.salesBuildingTableId
+      } else if (formData.type === '客户活动') {
+        appToken = config.otherActivitiesAppToken
+        tableId = config.otherActivitiesTableId
+      } else {
+        // 默认使用客户活动表格
+        appToken = config.otherActivitiesAppToken
+        tableId = config.otherActivitiesTableId
+      }
 
       // 调试：获取表格字段列表
       try {

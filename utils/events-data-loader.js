@@ -3,6 +3,25 @@
 
 const feishuApi = require('./feishu-api.js')
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
+const { downloadImageByKey } = require('./image-downloader.js')
+const {
+  createCacheManager,
+  validateFilePath,
+  isRecordChanged
+} = require('./cache-helper.js')
+
+// ─── 本地缓存：基于 record_id + Last Modified Date 增量更新 ─────────────────
+const CACHE_VERSION = 'v1'
+const CACHE_KEY = `events_cache_${CACHE_VERSION}`
+const cacheManager = createCacheManager(CACHE_KEY)
+
+function loadEventsCache() {
+  return cacheManager.get()
+}
+
+function saveEventsCache(cache) {
+  cacheManager.save(cache)
+}
 
 /**
  * 根据开始时间和结束时间计算活动状态
@@ -40,19 +59,6 @@ function transformFeishuEventRecord(record, eventType) {
   const fields = record.fields
   const mapping = DATA_SOURCE_CONFIG.eventsFieldMapping
 
-  console.log(`[${eventType}] 原始飞书记录:`, {
-    record_id: record.record_id,
-    所有字段名: Object.keys(fields),
-    活动名称映射: mapping.name,
-    活动名称值: fields[mapping.name],
-    组织者映射: mapping.organizer,
-    组织者值: fields[mapping.organizer],
-    开始时间映射: mapping.time,
-    开始时间值: fields[mapping.time],
-    结束时间映射: mapping.endTime,
-    结束时间值: fields[mapping.endTime]
-  })
-
   // 解析时间字段（飞书返回的是时间戳）
   const parseTime = (timestamp) => {
     if (!timestamp) return ''
@@ -68,25 +74,12 @@ function transformFeishuEventRecord(record, eventType) {
   const startTime = parseTime(fields[mapping.time])
   const endTime = parseTime(fields[mapping.endTime])
 
-  console.log(`[${eventType}] 时间字段:`, {
-    原始开始时间: fields[mapping.time],
-    解析后开始时间: startTime,
-    原始结束时间: fields[mapping.endTime],
-    解析后结束时间: endTime
-  })
-
   // 自动计算活动状态
   const autoStatus = calculateEventStatus(startTime, endTime)
 
   // 处理多张图片的 imageKey（可能是逗号分隔的字符串）
   const imageKeyStr = fields[mapping.imageKey] || ''
   const imageKeys = imageKeyStr ? imageKeyStr.split(',').map(k => k.trim()).filter(k => k) : []
-
-  console.log(`[${eventType}] 图片字段解析:`, {
-    原始字段值: imageKeyStr,
-    解析后数组: imageKeys,
-    数组长度: imageKeys.length
-  })
 
   const transformed = {
     id: record.record_id, // 使用 record_id 作为唯一标识
@@ -107,143 +100,7 @@ function transformFeishuEventRecord(record, eventType) {
     lastModified: String(fields[mapping.lastModifiedDate] || '')
   }
 
-  console.log(`[${eventType}] 转换后数据:`, {
-    id: transformed.id,
-    name: transformed.name,
-    organizer: transformed.organizer,
-    status: transformed.status
-  })
-
   return transformed
-}
-
-/**
- * 根据 image_key 获取图片下载 URL
- * @param {string} imageKey - 飞书图片的 image_key
- * @returns {string} - 返回下载链接
- */
-function getImageDownloadUrl(imageKey) {
-  // 直接使用 image_key 构建下载链接
-  // 飞书 IM 图片 API 直接返回图片二进制数据，无需两步转换
-  const downloadUrl = `https://open.feishu.cn/open-apis/im/v1/images/${imageKey}`
-  console.log('[getImageDownloadUrl] 使用 image_key 构建下载链接:', downloadUrl)
-  return downloadUrl
-}
-
-/**
- * 带重试的下载（失败后最多重试 maxRetries 次，间隔递增）
- */
-function downloadWithRetry(url, token, eventId = '', maxRetries = 3) {
-  return new Promise((resolve, reject) => {
-    let attempt = 0
-    const tryDownload = () => {
-      attempt++
-      downloadImageWithAuth(url, token, eventId)
-        .then(resolve)
-        .catch(error => {
-          if (attempt < maxRetries) {
-            const delay = attempt * 1000 // 1s, 2s, 3s...
-            console.warn(`下载失败，${delay}ms 后重试 (${attempt}/${maxRetries}):`, url)
-            setTimeout(tryDownload, delay)
-          } else {
-            console.error(`下载失败，已重试 ${maxRetries} 次，放弃:`, url)
-            reject(error)
-          }
-        })
-    }
-    tryDownload()
-  })
-}
-
-/**
- * 下载图片到本地（带认证）并保存到持久化存储
- */
-function downloadImageWithAuth(url, token, eventId = '') {
-  return new Promise((resolve, reject) => {
-    wx.downloadFile({
-      url: url,
-      header: {
-        'Authorization': `Bearer ${token}`
-      },
-      success: (res) => {
-        if (res.statusCode === 200) {
-          const fs = wx.getFileSystemManager()
-          const fileName = `event_${eventId}_${Date.now()}.png`
-          const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
-
-          fs.saveFile({
-            tempFilePath: res.tempFilePath,
-            filePath: filePath,
-            success: (saveRes) => {
-              console.log(`[${eventId}] 活动图片持久化成功:`, saveRes.savedFilePath)
-              resolve(saveRes.savedFilePath)
-            },
-            fail: (saveErr) => {
-              console.error(`[${eventId}] 活动图片持久化失败,使用临时路径:`, saveErr)
-              resolve(res.tempFilePath)
-            }
-          })
-        } else {
-          reject({
-            statusCode: res.statusCode,
-            errMsg: `HTTP ${res.statusCode}`,
-            url: url
-          })
-        }
-      },
-      fail: (err) => {
-        reject({
-          statusCode: 0,
-          errMsg: err.errMsg || '网络请求失败',
-          url: url
-        })
-      }
-    })
-  })
-}
-
-/**
- * 并发控制下载图片
- */
-async function downloadWithLimit(tasks, limit = 5) {
-  const results = []
-  const executing = []
-
-  for (const task of tasks) {
-    if (results.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, 50))
-    }
-
-    const promise = task().then(result => {
-      executing.splice(executing.indexOf(promise), 1)
-      return result
-    })
-
-    results.push(promise)
-    executing.push(promise)
-
-    if (executing.length >= limit) {
-      await Promise.race(executing)
-    }
-  }
-
-  return Promise.all(results)
-}
-
-// ─── 本地缓存：基于 record_id + Last Modified Date 增量更新 ─────────────────
-const CACHE_VERSION = 'v1'
-const CACHE_KEY = `events_cache_${CACHE_VERSION}`
-
-function loadEventsCache() {
-  try { return wx.getStorageSync(CACHE_KEY) || {} } catch (e) { return {} }
-}
-
-function saveEventsCache(cache) {
-  try {
-    wx.setStorageSync(CACHE_KEY, cache)
-  } catch (e) {
-    console.error('保存活动缓存失败:', e)
-  }
 }
 
 /**
@@ -251,9 +108,6 @@ function saveEventsCache(cache) {
  */
 function getEventsFromCache() {
   const cache = loadEventsCache()
-  const fs = wx.getFileSystemManager()
-
-  console.log(`getEventsFromCache: 缓存中有 ${Object.keys(cache).length} 条记录`)
 
   return Object.values(cache).map(entry => {
     const event = { ...entry.data }
@@ -264,13 +118,8 @@ function getEventsFromCache() {
 
     // 验证每张图片路径是否有效
     imagePaths.forEach(path => {
-      if (path) {
-        try {
-          fs.accessSync(path)
-          validImages.push(path)
-        } catch (e) {
-          console.warn(`[${event.name}] 图片路径文件不存在:`, path)
-        }
+      if (validateFilePath(path)) {
+        validImages.push(path)
       }
     })
 
@@ -280,7 +129,6 @@ function getEventsFromCache() {
 
     // 清除无效的临时图片路径
     if (event.image && event.image.includes('tmp')) {
-      console.warn(`[${event.name}] 清除无效的临时图片路径: ${event.image}`)
       event.image = ''
       event.images = []
     }
@@ -305,23 +153,135 @@ function getEventsDataSync() {
 }
 
 /**
+ * 处理单个活动记录的缓存逻辑
+ * @param {Object} record - 飞书记录
+ * @param {string} eventType - 活动类型
+ * @param {Object} cache - 缓存对象
+ * @param {Object} newCache - 新缓存对象
+ * @param {Object} currentMap - 当前数据映射
+ * @param {Set} changedTextIds - 文字变更ID集合
+ * @param {Set} changedImageIds - 图片变更ID集合
+ * @returns {Object} - 处理后的活动数据
+ */
+function processEventRecord(record, eventType, cache, newCache, changedTextIds, changedImageIds) {
+  const cacheKey = record.record_id
+  const transformed = transformFeishuEventRecord(record, eventType)
+  const lastModified = transformed.lastModified
+
+  // 检查文字数据是否变化
+  const isTextChanged = isRecordChanged(cache, cacheKey, lastModified)
+
+  // 检查图片 key 是否变化
+  const imageKeyChanged = cache[cacheKey] && (
+    JSON.stringify(cache[cacheKey].imageKeys) !== JSON.stringify(transformed.imageKeys)
+  )
+
+  // 记录变化
+  if (isTextChanged && cacheKey) {
+    changedTextIds.add(cacheKey)
+  }
+  if (imageKeyChanged && cacheKey) {
+    changedImageIds.add(cacheKey)
+  }
+
+  // 检查缓存是否有效（记录未变更且图片路径有效）
+  const cachedImagePaths = cache[cacheKey]?.imagePaths || []
+  const isCacheValid = !isTextChanged && !imageKeyChanged && cache[cacheKey]
+
+  if (isCacheValid) {
+    // 未变更：复用缓存数据和图片路径
+    newCache[cacheKey] = cache[cacheKey]
+
+    // 验证缓存的图片路径是否仍然有效
+    const validImagePaths = []
+    for (const path of cachedImagePaths) {
+      if (path && validateFilePath(path)) {
+        validImagePaths.push(path)
+      }
+    }
+
+    // 检查第一张图片是否缺失（列表页只需要第一张）
+    const hasImageKeys = transformed.imageKeys && transformed.imageKeys.length > 0
+    const firstImageMissing = hasImageKeys && validImagePaths.length === 0
+
+    if (firstImageMissing) {
+      // 第一张图片缺失，标记为图片变更，触发重新下载
+      changedImageIds.add(cacheKey)
+    }
+
+    // 如果没有图片，则设置为 true（与团队页面逻辑一致）
+    const hasNoImages = !hasImageKeys
+
+    // 只使用验证通过的路径，不保留无效路径（确保 app.js 能正确判断需要下载）
+    const imagePaths = validImagePaths
+    // 如果没有图片或图片路径有效，则 loaded=true；否则 loaded=false
+    const loaded = hasNoImages || validImagePaths.length > 0
+
+    return {
+      ...cache[cacheKey].data,
+      imagePaths: imagePaths,
+      images: imagePaths,
+      image: imagePaths[0] || '',
+      loaded: loaded
+    }
+  }
+
+  // 有变更：重新 transform，但保留有效的图片路径（如果 imageKey 没变）
+  let preservedImagePaths = []
+  if (!imageKeyChanged && cachedImagePaths.length > 0) {
+    // imageKey 没变，验证并保留缓存的图片路径
+    const validPaths = []
+    for (const path of cachedImagePaths) {
+      if (path && validateFilePath(path)) {
+        validPaths.push(path)
+      }
+    }
+    // 只使用验证通过的路径，不保留无效路径（确保 app.js 能正确判断需要下载）
+    preservedImagePaths = validPaths
+  }
+
+  // 如果没有图片，则设置为 true
+  // 如果有图片且有路径，保留原有的 loaded 状态（避免已加载的活动因临时文件验证失败而消失）
+  const hasNoImages = !transformed.imageKeys || transformed.imageKeys.length === 0
+  const cachedLoaded = cache[cacheKey]?.data?.loaded
+  const loaded = hasNoImages ? true : (preservedImagePaths.length > 0 && cachedLoaded !== undefined ? cachedLoaded : false)
+
+  newCache[cacheKey] = {
+    lastModified,
+    data: {
+      ...transformed,
+      imagePaths: preservedImagePaths,
+      images: preservedImagePaths,
+      image: preservedImagePaths[0] || '',
+      loaded: loaded
+    },
+    imageKeys: transformed.imageKeys,
+    imagePaths: preservedImagePaths
+  }
+
+  return {
+    ...transformed,
+    imagePaths: preservedImagePaths,
+    images: preservedImagePaths,
+    image: preservedImagePaths[0] || '',
+    loaded: loaded  // 使用计算的 loaded 状态，考虑保留的图片路径
+  }
+}
+
+/**
  * 获取飞书活动数据，从两张表格（星享会和午餐会）合并数据
  * @returns {{ events: Array, hasChanges: boolean, changedIds: Set }}
  */
 async function fetchFeishuEventsText() {
   try {
-    console.log('获取飞书活动数据...')
     const config = feishuApi.FEISHU_CONFIG
     const cache = loadEventsCache()
     const newCache = {}
-    let hasChanges = false
-    const changedIds = new Set()
-    const currentMap = {}
+    const changedTextIds = new Set()
+    const changedImageIds = new Set()
 
-    getEventsDataSync().forEach(e => { if (e.id) currentMap[e.id] = e })
-
-    // 并行获取四张表格的数据
-    const [starClubRecords, lunchRecords, salesClinicRecords, salesBuildingRecords] = await Promise.all([
+    // 并行获取五张表格的数据
+    const [starClubRecords, lunchRecords, salesClinicRecords, salesBuildingRecords, otherActivitiesRecords] = await Promise.all([
       feishuApi.getAllRecords({
         appToken: config.starClubAppToken,
         tableId: config.starClubTableId
@@ -337,223 +297,31 @@ async function fetchFeishuEventsText() {
       feishuApi.getAllRecords({
         appToken: config.salesBuildingAppToken,
         tableId: config.salesBuildingTableId
+      }),
+      feishuApi.getAllRecords({
+        appToken: config.otherActivitiesAppToken,
+        tableId: config.otherActivitiesTableId
       })
     ])
 
-    console.log(`获取到 ${starClubRecords.length} 条星享会记录, ${lunchRecords.length} 条午餐会记录, ${salesClinicRecords.length} 条销售门诊记录, ${salesBuildingRecords.length} 条销售建设记录`)
+    // 转换各类活动数据
+    const starClubEvents = starClubRecords.map(record =>
+      processEventRecord(record, '星享会', cache, newCache, changedTextIds, changedImageIds)
+    )
+    const lunchEvents = lunchRecords.map(record =>
+      processEventRecord(record, '午餐会', cache, newCache, changedTextIds, changedImageIds)
+    )
+    const salesClinicEvents = salesClinicRecords.map(record =>
+      processEventRecord(record, '销售门诊', cache, newCache, changedTextIds, changedImageIds)
+    )
+    const salesBuildingEvents = salesBuildingRecords.map(record =>
+      processEventRecord(record, '销售建设', cache, newCache, changedTextIds, changedImageIds)
+    )
+    const otherActivitiesEvents = otherActivitiesRecords.map(record =>
+      processEventRecord(record, '客户活动', cache, newCache, changedTextIds, changedImageIds)
+    )
 
-    // 转换星享会数据
-    const starClubEvents = starClubRecords.map(record => {
-      const cacheKey = record.record_id
-      const transformed = transformFeishuEventRecord(record, '星享会')
-      const lastModified = transformed.lastModified
-      const fs = wx.getFileSystemManager()
-
-      console.log(`[星享会] 处理记录: ${transformed.name} (ID: ${cacheKey})`)
-
-      // 检查缓存是否有效
-      let isCacheValid = false
-      if (cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
-        const cachedPath = cache[cacheKey].data.image
-        if (cachedPath) {
-          try {
-            fs.accessSync(cachedPath)
-            isCacheValid = true
-          } catch (e) {
-            console.warn(`[${cacheKey}] 缓存路径失效:`, cachedPath)
-          }
-        } else {
-          isCacheValid = true
-        }
-      }
-
-      if (isCacheValid) {
-        // 未变更：复用缓存
-        newCache[cacheKey] = cache[cacheKey]
-        const existing = currentMap[cacheKey]
-        let imagePath = existing ? existing.image : ''
-
-        if (!imagePath && cache[cacheKey].imagePath) {
-          try {
-            fs.accessSync(cache[cacheKey].imagePath)
-            imagePath = cache[cacheKey].imagePath
-          } catch (e) {
-            // 文件不存在
-          }
-        }
-
-        return { ...cache[cacheKey].data, image: imagePath }
-      }
-
-      // 有变更：重新 transform，但保留 imageKeys 用于后续判断
-      hasChanges = true
-      changedIds.add(cacheKey)
-      newCache[cacheKey] = {
-        lastModified,
-        data: { ...transformed, images: [] },
-        imageKeys: transformed.imageKeys, // 保存 imageKeys 用于判断图片是否变化
-        imagePaths: cache[cacheKey]?.imagePaths || [] // 保留旧的图片路径数组
-      }
-      return transformed
-    })
-
-    // 转换午餐会数据
-    const lunchEvents = lunchRecords.map(record => {
-      const cacheKey = record.record_id
-      const transformed = transformFeishuEventRecord(record, '午餐会')
-      const lastModified = transformed.lastModified
-      const fs = wx.getFileSystemManager()
-
-      console.log(`[午餐会] 处理记录: ${transformed.name} (ID: ${cacheKey})`)
-
-      let isCacheValid = false
-      if (cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
-        const cachedPath = cache[cacheKey].data.image
-        if (cachedPath) {
-          try {
-            fs.accessSync(cachedPath)
-            isCacheValid = true
-          } catch (e) {
-            console.warn(`[${cacheKey}] 缓存路径失效:`, cachedPath)
-          }
-        } else {
-          isCacheValid = true
-        }
-      }
-
-      if (isCacheValid) {
-        newCache[cacheKey] = cache[cacheKey]
-        const existing = currentMap[cacheKey]
-        let imagePath = existing ? existing.image : ''
-
-        if (!imagePath && cache[cacheKey].imagePath) {
-          try {
-            fs.accessSync(cache[cacheKey].imagePath)
-            imagePath = cache[cacheKey].imagePath
-          } catch (e) {
-            // 文件不存在
-          }
-        }
-
-        return { ...cache[cacheKey].data, image: imagePath }
-      }
-
-      hasChanges = true
-      changedIds.add(cacheKey)
-      newCache[cacheKey] = {
-        lastModified,
-        data: { ...transformed, images: [] },
-        imageKeys: transformed.imageKeys,
-        imagePaths: cache[cacheKey]?.imagePaths || []
-      }
-      return transformed
-    })
-
-    // 转换销售门诊数据
-    const salesClinicEvents = salesClinicRecords.map(record => {
-      const cacheKey = record.record_id
-      const transformed = transformFeishuEventRecord(record, '销售门诊')
-      const lastModified = transformed.lastModified
-      const fs = wx.getFileSystemManager()
-
-      console.log(`[销售门诊] 处理记录: ${transformed.name} (ID: ${cacheKey})`)
-
-      let isCacheValid = false
-      if (cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
-        const cachedPath = cache[cacheKey].data.image
-        if (cachedPath) {
-          try {
-            fs.accessSync(cachedPath)
-            isCacheValid = true
-          } catch (e) {
-            console.warn(`[${cacheKey}] 缓存路径失效:`, cachedPath)
-          }
-        } else {
-          isCacheValid = true
-        }
-      }
-
-      if (isCacheValid) {
-        newCache[cacheKey] = cache[cacheKey]
-        const existing = currentMap[cacheKey]
-        let imagePath = existing ? existing.image : ''
-
-        if (!imagePath && cache[cacheKey].imagePath) {
-          try {
-            fs.accessSync(cache[cacheKey].imagePath)
-            imagePath = cache[cacheKey].imagePath
-          } catch (e) {
-            // 文件不存在
-          }
-        }
-
-        return { ...cache[cacheKey].data, image: imagePath }
-      }
-
-      hasChanges = true
-      changedIds.add(cacheKey)
-      newCache[cacheKey] = {
-        lastModified,
-        data: { ...transformed, images: [] },
-        imageKeys: transformed.imageKeys,
-        imagePaths: cache[cacheKey]?.imagePaths || []
-      }
-      return transformed
-    })
-
-    // 转换销售建设数据
-    const salesBuildingEvents = salesBuildingRecords.map(record => {
-      const cacheKey = record.record_id
-      const transformed = transformFeishuEventRecord(record, '销售建设')
-      const lastModified = transformed.lastModified
-      const fs = wx.getFileSystemManager()
-
-      console.log(`[销售建设] 处理记录: ${transformed.name} (ID: ${cacheKey})`)
-
-      let isCacheValid = false
-      if (cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
-        const cachedPath = cache[cacheKey].data.image
-        if (cachedPath) {
-          try {
-            fs.accessSync(cachedPath)
-            isCacheValid = true
-          } catch (e) {
-            console.warn(`[${cacheKey}] 缓存路径失效:`, cachedPath)
-          }
-        } else {
-          isCacheValid = true
-        }
-      }
-
-      if (isCacheValid) {
-        newCache[cacheKey] = cache[cacheKey]
-        const existing = currentMap[cacheKey]
-        let imagePath = existing ? existing.image : ''
-
-        if (!imagePath && cache[cacheKey].imagePath) {
-          try {
-            fs.accessSync(cache[cacheKey].imagePath)
-            imagePath = cache[cacheKey].imagePath
-          } catch (e) {
-            // 文件不存在
-          }
-        }
-
-        return { ...cache[cacheKey].data, image: imagePath }
-      }
-
-      hasChanges = true
-      changedIds.add(cacheKey)
-      newCache[cacheKey] = {
-        lastModified,
-        data: { ...transformed, images: [] },
-        imageKeys: transformed.imageKeys,
-        imagePaths: cache[cacheKey]?.imagePaths || []
-      }
-      return transformed
-    })
-
-    // 合并四个数组并去重（基于 record_id）
+    // 合并五个数组并去重（基于 record_id）
     const eventsMap = new Map()
 
     // 先添加星享会记录
@@ -588,13 +356,16 @@ async function fetchFeishuEventsText() {
       }
     })
 
-    const events = Array.from(eventsMap.values())
-
-    console.log(`合并后总数: ${events.length} 条（去重前: ${starClubEvents.length + lunchEvents.length + salesClinicEvents.length + salesBuildingEvents.length} 条）`)
-    console.log('活动列表:')
-    events.forEach((e, i) => {
-      console.log(`  ${i + 1}. [${e.type}] ${e.name} (ID: ${e.id})`)
+    // 添加其他活动记录
+    otherActivitiesEvents.forEach(event => {
+      if (eventsMap.has(event.id)) {
+        console.warn(`发现重复记录 ID: ${event.id}，已跳过`)
+      } else {
+        eventsMap.set(event.id, event)
+      }
     })
+
+    const events = Array.from(eventsMap.values())
 
     // 按时间倒序排列（最新的在前面）
     events.sort((a, b) => {
@@ -603,13 +374,12 @@ async function fetchFeishuEventsText() {
     })
 
     // 检查是否有记录被删除
-    if (!hasChanges && Object.keys(cache).some(k => !newCache[k])) {
-      hasChanges = true
-    }
+    const changedIds = new Set([...changedTextIds, ...changedImageIds])
+    const hasChanges = changedIds.size > 0 || Object.keys(cache).some(k => !newCache[k])
 
     saveEventsCache(newCache)
-    console.log(`活动数据加载完成，共 ${events.length} 条，${hasChanges ? `有变更(${changedIds.size}条)` : '无变更'}`)
-    return { events, hasChanges, changedIds }
+    console.log(`[飞书] 活动加载${events.length}条 | 文字变更${changedTextIds.size}条 | 图片变更${changedImageIds.size}条`)
+    return { events, hasChanges, changedIds, changedImageIds }
   } catch (error) {
     console.error('获取飞书活动数据失败:', error)
     throw error
@@ -617,234 +387,170 @@ async function fetchFeishuEventsText() {
 }
 
 /**
- * 在后台下载活动图片
- * @param {Array} eventsData
- * @param {Function} onImageReady (eventName, localPath) - 图片下载完成后回调
- * @param {Set} changedIds - 有变更的活动 ID 集合
+ * 下载单个活动的图片（列表页只下载第一张）
+ * @param {Object} event - 活动对象
+ * @param {Function} onImageReady - 图片下载完成回调 (eventId, path)
+ * @param {boolean} downloadAll - 是否下载所有图片（详情页使用），默认 false（列表页只下载第一张）
  */
-async function downloadEventImagesBackground(eventsData, onImageReady, changedIds) {
-  console.log('[downloadEventImagesBackground] ===== 开始下载活动图片 =====')
-  console.log('[downloadEventImagesBackground] 活动数量:', eventsData.length)
-  console.log('[downloadEventImagesBackground] changedIds:', changedIds)
+async function downloadEventImages(event, onImageReady, downloadAll = false, startIndex = 0) {
+  const { id, name, imageKeys } = event
+  const cache = loadEventsCache()
 
-  try {
-    const token = await feishuApi.getTenantAccessToken()
-    console.log('[downloadEventImagesBackground] 获取 token 成功')
+  // 处理多张图片
+  if (imageKeys && imageKeys.length > 0) {
+    const cachedImagePaths = cache[id]?.imagePaths || []
+    const cachedImageKeys = cache[id]?.imageKeys || []
+    const downloadedPaths = []
+    let needsCacheUpdate = false
 
-    const imageTasks = []
-    const cache = loadEventsCache()
+    // 列表页只下载第一张，详情页下载所有
+    const imagesToDownload = downloadAll ? imageKeys.length : 1
 
-    for (const event of eventsData) {
-      const isChanged = !changedIds || changedIds.has(event.id)
+    // 如果指定了 startIndex，从该索引开始下载
+    const actualStartIndex = Math.max(0, startIndex)
+    console.log(`[${name}] 下载图片范围: ${actualStartIndex} 到 ${imagesToDownload - 1}`)
 
-      console.log(`[${event.name}] ===== 检查图片 =====`)
-      console.log(`[${event.name}] isChanged: ${isChanged}`)
-      console.log(`[${event.name}] imageKeys:`, event.imageKeys)
+    for (let i = actualStartIndex; i < imagesToDownload; i++) {
+      const imageKey = imageKeys[i]
+      const cachedPath = cachedImagePaths[i]
+      const cachedKey = cachedImageKeys[i]
 
-      // 处理多张图片下载
-      if (event.imageKeys && event.imageKeys.length > 0) {
-        const cachedImagePaths = cache[event.id]?.imagePaths || []
-        const cachedImageKeys = cache[event.id]?.imageKeys || []
-        // 初始化数组，先用缓存路径填充（如果有的话）
-        const downloadedPaths = Array.from({ length: event.imageKeys.length }, (_, i) => cachedImagePaths[i] || null)
+      // 检查缓存是否有效：
+      // 1. imageKey 没有变化
+      // 2. 缓存路径存在且文件可访问
+      let useCache = false
+      if (cachedPath && cachedKey === imageKey) {
+        try {
+          const fs = wx.getFileSystemManager()
+          fs.accessSync(cachedPath)
+          useCache = true
+          downloadedPaths.push(cachedPath)
+          console.log(`[${name}] 图片 ${i + 1} 使用缓存: ${cachedPath}`)
 
-        // 遍历每个 imageKey
-        for (let i = 0; i < event.imageKeys.length; i++) {
-          const imageKey = event.imageKeys[i]
-          const cachedPath = cachedImagePaths[i]
-          const cachedKey = cachedImageKeys[i]
-
-          let cacheExists = false
-
-          // 检查缓存文件是否存在
-          if (cachedPath) {
-            try {
-              const fs = wx.getFileSystemManager()
-              fs.accessSync(cachedPath)
-              cacheExists = true
-              downloadedPaths[i] = cachedPath
-              console.log(`[${event.name}] 图片 ${i + 1} 缓存存在: ${cachedPath}`)
-            } catch (e) {
-              console.log(`[${event.name}] 图片 ${i + 1} 缓存不存在`)
-              downloadedPaths[i] = null
-            }
+          // 通知每张图片（包括缓存的）
+          if (onImageReady) {
+            onImageReady(id, cachedPath)
           }
+        } catch (e) {
+          console.log(`[${name}] 图片 ${i + 1} 缓存文件不存在，需要重新下载`)
+        }
+      }
 
-          // 判断是否需要下载
-          const imageKeyChanged = cachedKey && cachedKey !== imageKey
-          const needDownload = !cacheExists || imageKeyChanged
+      // 如果缓存无效，重新下载
+      if (!useCache) {
+        try {
+          const path = await downloadImageByKey(imageKey, 'event', `${id}_${i}`)
+          downloadedPaths.push(path)
+          needsCacheUpdate = true
 
-          if (!isChanged && cacheExists) {
-            console.log(`[${event.name}] 图片 ${i + 1} ⏭️ 跳过下载: 数据未变更且缓存存在`)
-          } else if (isChanged && !imageKeyChanged && cacheExists) {
-            console.log(`[${event.name}] 图片 ${i + 1} ⏭️ 跳过下载: imageKey 未变化且缓存存在`)
-          } else if (needDownload) {
-            const needNotify = isChanged || downloadedPaths.length === 0
-            console.log(`[${event.name}] 图片 ${i + 1} ✅ 需要下载`)
+          console.log(`[${name}] 图片 ${i + 1} 下载完成: ${path}`)
 
-            imageTasks.push(async () => {
-              try {
-                console.log(`[${event.name}] 图片 ${i + 1} 📥 开始下载...`)
-                const downloadUrl = getImageDownloadUrl(imageKey)
-                const path = await downloadWithRetry(downloadUrl, token, `${event.id}_${i}`)
-                console.log(`[${event.name}] 图片 ${i + 1} ✅ 下载成功:`, path)
-
-                // 删除旧文件
-                if (cachedPath && cachedPath !== path) {
-                  try {
-                    const fs = wx.getFileSystemManager()
-                    fs.unlinkSync(cachedPath)
-                    console.log(`[${event.name}] 图片 ${i + 1} 🗑️ 已删除旧图片`)
-                  } catch (e) {
-                    console.warn(`[${event.name}] 图片 ${i + 1} ⚠️ 删除旧图片失败`)
-                  }
-                }
-
-                // 更新下载路径数组
-                downloadedPaths[i] = path
-
-                // 更新缓存（过滤掉 null）
-                const validPaths = downloadedPaths.filter(p => p !== null)
-                if (!cache[event.id]) {
-                  cache[event.id] = { data: event }
-                }
-                cache[event.id].imagePaths = validPaths
-                cache[event.id].imageKeys = event.imageKeys
-                cache[event.id].data = { ...event, images: validPaths, image: validPaths[0] }
-                saveEventsCache(cache)
-
-                // 更新 event 对象（过滤掉 null）
-                event.images = validPaths
-                event.image = validPaths[0]
-
-                console.log(`[${event.name}] 图片 ${i + 1} 下载完成，更新 images:`, validPaths)
-
-                if (needNotify && onImageReady && i === 0) {
-                  console.log(`[${event.name}] 📢 触发图片就绪回调`)
-                  onImageReady(event.name, validPaths[0])
-                }
-              } catch (err) {
-                console.error(`[${event.name}] 图片 ${i + 1} ❌ 下载失败:`, err)
-              }
-            })
+          // 通知每张图片下载完成
+          if (onImageReady) {
+            onImageReady(id, path)
           }
+        } catch (error) {
+          console.error(`[${name}] 图片 ${i + 1} 下载失败:`, error)
         }
-
-        // 立即设置 event.images（包含已缓存的图片和 null 占位符）
-        // 过滤掉 null，只保留已下载的图片
-        const validPaths = downloadedPaths.filter(p => p !== null)
-        if (validPaths.length > 0) {
-          event.images = validPaths
-          event.image = validPaths[0]
-          console.log(`[${event.name}] 设置 images 数组:`, validPaths)
-        }
-      } else if (event.imageKey) {
-        const cachedImagePath = cache[event.id]?.imagePath
-        const cachedImageKey = cache[event.id]?.imageKey
-        let cacheExists = false
-
-        // 检查缓存文件是否存在
-        if (cachedImagePath) {
-          try {
-            const fs = wx.getFileSystemManager()
-            fs.accessSync(cachedImagePath)
-            cacheExists = true
-            if (!event.image) {
-              event.image = cachedImagePath
-            }
-            console.log(`[${event.name}] 缓存文件存在: ${cachedImagePath}`)
-          } catch (e) {
-            console.log(`[${event.name}] 缓存文件不存在`)
-          }
-        }
-
-        // 判断是否需要下载图片
-        // 1. 如果记录未变更且缓存存在，跳过下载
-        // 2. 如果记录变更了，但 imageKey 没变且缓存存在，也跳过下载
-        // 3. 只有当 imageKey 变化或缓存不存在时，才下载
-        const imageKeyChanged = cachedImageKey && cachedImageKey !== event.imageKey
-        const needDownload = !cacheExists || imageKeyChanged
-
-        if (!isChanged && cacheExists) {
-          console.log(`[${event.name}] ⏭️ 跳过下载: 数据未变更且缓存文件存在`)
-        } else if (isChanged && !imageKeyChanged && cacheExists) {
-          console.log(`[${event.name}] ⏭️ 跳过下载: imageKey 未变化且缓存文件存在`)
-        } else if (needDownload) {
-          const needNotify = isChanged || !event.image
-          console.log(`[${event.name}] ✅ 需要下载图片: imageKeyChanged=${imageKeyChanged}, cacheExists=${cacheExists}, needNotify=${needNotify}`)
-
-          imageTasks.push(async () => {
-            try {
-              console.log(`[${event.name}] 📥 开始下载流程...`)
-
-              console.log(`[${event.name}] 🔑 使用 imageKey 下载图片:`, event.imageKey)
-              const downloadUrl = getImageDownloadUrl(event.imageKey)
-              console.log(`[${event.name}] 🔗 下载链接:`, downloadUrl)
-
-              console.log(`[${event.name}] 🚀 开始下载图片...`)
-              const path = await downloadWithRetry(downloadUrl, token, event.id)
-              console.log(`[${event.name}] ✅ 图片下载成功:`, path)
-
-              // 删除旧文件
-              const oldPath = cache[event.id]?.imagePath
-              if (oldPath && oldPath !== path) {
-                try {
-                  const fs = wx.getFileSystemManager()
-                  fs.unlinkSync(oldPath)
-                  console.log(`[${event.name}] 🗑️ 已删除旧图片:`, oldPath)
-                } catch (e) {
-                  console.warn(`[${event.name}] ⚠️ 删除旧图片失败:`, oldPath, e)
-                }
-              }
-
-              // 更新缓存
-              event.image = path
-              if (!cache[event.id]) {
-                cache[event.id] = { data: event }
-              }
-              cache[event.id].imagePath = path
-              cache[event.id].imageKey = event.imageKey // 保存 imageKey
-              cache[event.id].data = event
-              saveEventsCache(cache)
-
-              if (needNotify && onImageReady) {
-                console.log(`[${event.name}] 📢 触发图片就绪回调`)
-                onImageReady(event.name, path)
-              }
-            } catch (err) {
-              console.error(`[${event.name}] ❌ 图片下载失败:`, err)
-              console.error(`[${event.name}] 错误详情:`, {
-                message: err.message,
-                stack: err.stack
-              })
-            }
-          })
-        }
-      } else {
-        console.log(`[${event.name}] ⚠️ 没有 imageKey，跳过图片下载`)
       }
     }
 
-    console.log(`[downloadEventImagesBackground] 📊 准备下载 ${imageTasks.length} 张活动图片`)
+    // 只在有新下载时才更新缓存（避免不必要的写入）
+    if (needsCacheUpdate && downloadedPaths.length > 0) {
+      if (!cache[id]) {
+        cache[id] = { data: event }
+      }
 
-    const concurrency = DATA_SOURCE_CONFIG.imageLoadMode === 'sync' ? 1 : (DATA_SOURCE_CONFIG.imageConcurrency || 2)
-    console.log(`[downloadEventImagesBackground] 并发数: ${concurrency}`)
+      // 重新构建完整的图片路径数组
+      const allPaths = []
 
-    await downloadWithLimit(imageTasks, concurrency)
+      // 遍历所有 imageKeys，收集已下载的图片路径
+      for (let i = 0; i < imageKeys.length; i++) {
+        let pathForIndex = null
 
-    if (imageTasks.length === 0) {
-      console.log('[downloadEventImagesBackground] ✅ 所有图片已从缓存加载')
-    } else {
-      console.log(`[downloadEventImagesBackground] ✅ 所有图片下载完成（共${imageTasks.length}张）`)
+        // 1. 检查是否在本次下载的路径中（downloadedPaths 对应 actualStartIndex 开始的索引）
+        if (i >= actualStartIndex && i < actualStartIndex + downloadedPaths.length) {
+          pathForIndex = downloadedPaths[i - actualStartIndex]
+        }
+
+        // 2. 如果本次没下载，检查缓存中是否有
+        if (!pathForIndex) {
+          const cachedPaths = cache[id].imagePaths || []
+          if (i < cachedPaths.length) {
+            pathForIndex = cachedPaths[i]
+          }
+        }
+
+        // 3. 添加到数组（可能是 undefined）
+        allPaths.push(pathForIndex)
+      }
+
+      // 过滤掉 undefined，只保留有效路径
+      const validPaths = allPaths.filter(p => p !== undefined && p !== null)
+
+      cache[id].imagePaths = validPaths
+      cache[id].imageKeys = imageKeys
+      saveEventsCache(cache)
+
+      console.log(`[${name}] 缓存已更新，共 ${validPaths.length}/${imageKeys.length} 张图片`)
     }
-  } catch (error) {
-    console.error('[downloadEventImagesBackground] ❌ 后台下载图片出错:', error)
+
+    // 更新 event 对象（从缓存获取完整的图片路径数组）
+    if (downloadedPaths.length > 0 || actualStartIndex > 0) {
+      const finalImagePaths = cache[id]?.imagePaths || downloadedPaths
+
+      event.imagePaths = finalImagePaths
+      event.images = finalImagePaths
+      event.image = finalImagePaths[0] || ''
+      event.loaded = finalImagePaths.length >= imageKeys.length
+    }
   }
+}
+
+/**
+ * 在后台下载活动图片（串行或并发）
+ * @param {Array} eventsData - 活动数据数组
+ * @param {Function} onImageReady - 图片下载完成回调
+ */
+async function downloadEventImagesBackground(eventsData, onImageReady) {
+  if (eventsData.length === 0) return
+
+  console.log(`开始下载 ${eventsData.length} 个活动图片`)
+
+  const concurrency = DATA_SOURCE_CONFIG.imageConcurrency || 5
+
+  if (concurrency === 1) {
+    // 串行下载
+    for (const event of eventsData) {
+      await downloadEventImages(event, onImageReady)
+    }
+  } else {
+    // 并发下载
+    const queue = [...eventsData]
+    const workers = []
+
+    for (let i = 0; i < concurrency; i++) {
+      workers.push((async () => {
+        while (queue.length > 0) {
+          const event = queue.shift()
+          if (event) {
+            await downloadEventImages(event, onImageReady)
+          }
+        }
+      })())
+    }
+
+    await Promise.all(workers)
+  }
+
+  console.log('活动图片下载完成')
 }
 
 module.exports = {
   getEventsFromCache,
   getEventsDataSync,
   fetchFeishuEventsText,
-  downloadEventImagesBackground
+  downloadEventImagesBackground,
+  downloadEventImages,  // 导出供详情页使用
+  downloadImageByKey    // 导出供详情页下载剩余图片使用
 }

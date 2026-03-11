@@ -25,22 +25,20 @@ async function generateEventPoster(page, canvasId, event) {
 
     // 根据组织者姓名查找对应的合伙人数据
     const organizer = partnersData.find(p => p.name === event.organizer)
-    const organizerBadges = organizer?.badges || []
+
+    // 组织者的微信二维码（用于海报）
+    const organizerQRCode = organizer?.qrcode || ''
 
     // 生成动态小程序码（如果是联合创始人）
     let qrcodeImageUrl = null
     if (currentUser && currentUser.employeeId) {
-      wx.showLoading({ title: '生成小程序码...', mask: true })
       qrcodeImageUrl = await generateMiniProgramCode(currentUser.employeeId)
-      wx.hideLoading()
     }
 
     // 如果动态生成失败，降级到静态小程序码
     if (!qrcodeImageUrl) {
       qrcodeImageUrl = getAssetPath('mini_program_qr_code')
     }
-
-    const userQRCode = currentUser?.qrcode || ''
 
     if (!qrcodeImageUrl) {
       wx.showToast({ title: '资源加载中，请稍后重试', icon: 'none' })
@@ -105,39 +103,23 @@ async function generateEventPoster(page, canvasId, event) {
 
     let currentY = imageHeight + 50
 
-    // 组织者
-    if (event.organizer) {
-      ctx.setFillStyle('#0f172a')
-      ctx.setFontSize(36)
+    // 活动名称（加粗、大字号、深色）
+    if (event.name) {
+      ctx.setFillStyle('#1e293b')
+      ctx.font = 'bold 38px sans-serif'
       ctx.setTextAlign('left')
       ctx.setTextBaseline('top')
-      ctx.fillText(`👤 ${event.organizer}`, padding, currentY)
-      currentY += 50
-
-      // 绘制荣誉徽章（最多显示前3个）
-      if (organizerBadges.length > 0) {
-        const badgesToShow = organizerBadges.slice(0, 3)
-        ctx.setFillStyle('#64748b')
-        ctx.setFontSize(24)
-
-        badgesToShow.forEach((badge, index) => {
-          const badgeText = `${badge.icon} ${badge.title}`
-          ctx.fillText(badgeText, padding + 60, currentY + index * 35)
-        })
-
-        currentY += badgesToShow.length * 35 + 10
-      } else {
-        currentY += 10
-      }
+      ctx.fillText(event.name, padding, currentY)
+      currentY += 65
     }
 
-    // 活动时间
+    // 活动时间（中等字号、醒目颜色）
     if (event.time) {
-      ctx.setFillStyle('#64748b')
-      ctx.setFontSize(28)
+      ctx.setFillStyle('#475569')
+      ctx.font = '28px sans-serif'
       const timeStr = formatTime(event.time)
       ctx.fillText(`📅 ${timeStr}`, padding, currentY)
-      currentY += 50
+      currentY += 55
     }
 
     // 活动地点（星享会固定地点）
@@ -145,37 +127,37 @@ async function generateEventPoster(page, canvasId, event) {
       ? '杭州市英蓝中心B座'
       : (event.address || '待定')
 
-    ctx.setFillStyle('#64748b')
-    ctx.setFontSize(28)
+    ctx.setFillStyle('#475569')
+    ctx.font = '28px sans-serif'
 
     // 计算地址文字的最大宽度（左侧文字区域宽度 - 图标宽度）
     const maxTextWidth = textAreaWidth - 60 // 减去图标和间距
     const locationText = `📍 ${location}`
 
     // 绘制地址（支持换行）
-    drawWrappedText(ctx, locationText, padding, currentY, maxTextWidth, 40)
+    drawWrappedText(ctx, locationText, padding, currentY, maxTextWidth, 45)
 
     // 4. 绘制二维码区域（右侧，与文字信息同一水平线）
     const qrStartY = imageHeight + 50
     const qrStartX = canvasWidth - qrSize * 2 - qrGap - padding
 
-    // 绘制用户二维码（左边）
-    if (userQRCode) {
+    // 绘制组织者二维码（左边）
+    if (organizerQRCode) {
       try {
         // 白色背景
         ctx.setFillStyle('#ffffff')
         ctx.fillRect(qrStartX - 10, qrStartY - 10, qrSize + 20, qrSize + 20)
 
-        // 绘制用户二维码
-        ctx.drawImage(userQRCode, qrStartX, qrStartY, qrSize, qrSize)
+        // 绘制组织者二维码
+        ctx.drawImage(organizerQRCode, qrStartX, qrStartY, qrSize, qrSize)
 
-        // 提示文字
-        ctx.setFillStyle('#94a3b8')
-        ctx.setFontSize(20)
+        // 提示文字（更清晰的字体）
+        ctx.setFillStyle('#64748b')
+        ctx.font = 'bold 22px sans-serif'
         ctx.setTextAlign('center')
-        ctx.fillText('联系我', qrStartX + qrSize / 2, qrStartY + qrSize + 25)
+        ctx.fillText('联系组织者', qrStartX + qrSize / 2, qrStartY + qrSize + 25)
       } catch (e) {
-        console.error('绘制用户二维码失败:', e)
+        console.error('绘制组织者二维码失败:', e)
       }
     }
 
@@ -191,11 +173,11 @@ async function generateEventPoster(page, canvasId, event) {
         // 绘制小程序码
         ctx.drawImage(qrcodeImageUrl, miniQrX, qrStartY, qrSize, qrSize)
 
-        // 提示文字
-        ctx.setFillStyle('#94a3b8')
-        ctx.setFontSize(20)
+        // 提示文字（更清晰的字体）
+        ctx.setFillStyle('#64748b')
+        ctx.font = 'bold 22px sans-serif'
         ctx.setTextAlign('center')
-        ctx.fillText('扫码查看', miniQrX + qrSize / 2, qrStartY + qrSize + 25)
+        ctx.fillText('查看更多', miniQrX + qrSize / 2, qrStartY + qrSize + 25)
       } catch (e) {
         console.error('绘制小程序码失败:', e)
       }

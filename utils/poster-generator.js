@@ -1,6 +1,6 @@
 // utils/poster-generator.js
 // 团队海报生成逻辑，供 profile 和 team 页面共用
-const { getPartnersDataSync } = require('./partners-data-loader.js')
+const { getProfilesDataSync } = require('./profile-loader.js')
 const { getAssetPath } = require('./assets-loader.js')
 const { generateMiniProgramCode } = require('./qrcode-generator.js')
 const feishuApi = require('./feishu-api.js')
@@ -10,7 +10,7 @@ const feishuApi = require('./feishu-api.js')
  * @param {Object} page         - 调用页面的 this（用于 createCanvasContext / setData）
  * @param {string} canvasId     - 页面内 canvas 的 canvas-id
  * @param {Object|null} currentPartner - 需要排在第一的联合创始人，null 则不置顶
- * @param {Array|null} partnersData - 合伙人数据数组，如果不传则使用 getPartnersDataSync()
+ * @param {Array|null} partnersData - 合伙人数据数组，如果不传则使用 getProfilesDataSync()
  */
 async function generateTeamPoster(page, canvasId, currentPartner, partnersData = null) {
     try {
@@ -20,7 +20,7 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
             posterImage: ''
         })
 
-        let partners = partnersData || getPartnersDataSync()
+        let partners = partnersData || getProfilesDataSync()
 
         // 将当前合伙人移到第一个位置
         if (currentPartner) {
@@ -37,12 +37,17 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
         const personalQRCode = currentPartner ? currentPartner.qrcode : ''
         const headerImageUrl = getAssetPath('team_post_header')
 
+        // 调试日志：检查个人二维码路径
+        if (currentPartner) {
+            console.log(`[海报生成] 当前合伙人: ${currentPartner.name}`)
+            console.log(`[海报生成] 个人二维码路径: ${personalQRCode || '(空)'}`)
+            console.log(`[海报生成] qrcodeKey: ${currentPartner.qrcodeKey || '(空)'}`)
+        }
+
         // 生成动态小程序码（如果是联合创始人）
         let qrcodeImageUrl = null
         if (currentPartner && currentPartner.employeeId) {
-            wx.showLoading({ title: '生成小程序码...', mask: true })
             qrcodeImageUrl = await generateMiniProgramCode(currentPartner.employeeId)
-            wx.hideLoading()
         }
 
         // 如果动态生成失败，降级到静态小程序码

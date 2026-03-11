@@ -13,12 +13,12 @@ function getImageDownloadUrl(imageKey) {
 }
 
 /**
- * 下载图片到临时缓存（带认证）
+ * 下载图片并持久化存储（带认证）
  * @param {string} url - 图片下载URL
  * @param {string} token - 飞书访问令牌
  * @param {string} prefix - 文件名前缀（如 'profile', 'event'）
  * @param {string} id - 标识符（如 employeeId, eventId）
- * @returns {Promise<string>} - 返回临时文件路径
+ * @returns {Promise<string>} - 返回持久化文件路径
  */
 function downloadImageWithAuth(url, token, prefix = 'image', id = '') {
   return new Promise((resolve, reject) => {
@@ -30,7 +30,25 @@ function downloadImageWithAuth(url, token, prefix = 'image', id = '') {
       success: (res) => {
         if (res.statusCode === 200) {
           console.log(`[${prefix}_${id}] 图片下载成功（临时文件）:`, res.tempFilePath)
-          resolve(res.tempFilePath)
+
+          // 持久化存储到 USER_DATA_PATH
+          const fs = wx.getFileSystemManager()
+          const fileName = `${prefix}_${id}_${Date.now()}.png`
+          const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
+
+          fs.saveFile({
+            tempFilePath: res.tempFilePath,
+            filePath: filePath,
+            success: (saveRes) => {
+              console.log(`[${prefix}_${id}] 图片持久化成功:`, saveRes.savedFilePath)
+              resolve(saveRes.savedFilePath)
+            },
+            fail: (saveErr) => {
+              console.error(`[${prefix}_${id}] 图片持久化失败，使用临时路径:`, saveErr)
+              // 持久化失败，返回临时路径（虽然可能会失效）
+              resolve(res.tempFilePath)
+            }
+          })
         } else {
           console.error(`[${prefix}_${id}] 图片下载失败，状态码:`, res.statusCode)
           reject(new Error(`下载失败: ${res.statusCode}`))

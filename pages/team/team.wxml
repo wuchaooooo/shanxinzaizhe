@@ -31,11 +31,19 @@
         <text class="team-stat-label">专业技能</text>
       </view>
     </view>
-    <view class="team-stats-poster-btn {{!isCofounder || !posterBtnLogoLoaded ? 'team-stats-poster-btn-hidden' : ''}}" catchtap="{{isCofounder ? 'onPosterBtnTap' : ''}}">
-      <view class="poster-btn-icon">
-        <image class="poster-btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit" bindload="onPosterBtnLogoLoad"></image>
+
+    <!-- 生成海报按钮（仅联合创始人可见） -->
+    <view wx:if="{{!identityChecked || isCofounder}}">
+      <!-- 骨架图（身份识别中或logo加载中） -->
+      <view class="team-stats-poster-btn-skeleton" wx:if="{{!identityChecked || (isCofounder && !posterBtnLogoLoaded)}}"></view>
+
+      <!-- 实际按钮（联合创始人） -->
+      <view class="team-stats-poster-btn {{!isCofounder || !posterBtnLogoLoaded ? 'team-stats-poster-btn-hidden' : ''}}" catchtap="{{isCofounder ? 'onPosterBtnTap' : ''}}">
+        <view class="poster-btn-icon-wrapper">
+          <image class="poster-btn-icon-img" src="{{shanxinLogoUrl}}" mode="aspectFit" bindload="onPosterBtnLogoLoad"></image>
+        </view>
+        <text class="poster-btn-text">{{allImagesLoaded ? '生成团队海报' : '头像加载中...'}}</text>
       </view>
-      <text class="poster-btn-text">{{allImagesLoaded ? '生成团队海报' : '头像加载中...'}}</text>
     </view>
   </view>
 
@@ -54,7 +62,7 @@
     </view>
     
     <!-- 正常的合伙人列表 -->
-    <view class="partner-item" wx:for="{{filteredPartners}}" wx:key="employeeId" bindtap="onPartnerTap" data-name="{{item.name}}">
+    <view class="partner-item {{enableItemAnimation ? 'item-animating' : ''}}" style="{{enableItemAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}" wx:for="{{filteredPartners}}" wx:key="employeeId" wx:for-index="index" bindtap="{{item.loaded ? 'onPartnerTap' : ''}}" data-name="{{item.name}}">
       <view class="partner-avatar {{!item.loaded ? 'partner-avatar-loading' : 'partner-avatar-loaded'}}">
         <view class="partner-avatar-img-wrapper">
           <image class="partner-avatar-img {{item.loaded ? 'partner-avatar-img-show' : ''}}" src="{{item.image}}" mode="aspectFill" bindload="onImageLoad" binderror="onImageError" data-name="{{item.name}}"></image>
@@ -80,13 +88,6 @@
     <text class="motto-title">善心浙里与您共创丰盛未来！</text>
     <text class="motto-desc">以合作互助的态度实现伙伴完美人生</text>
     <text class="motto-desc">以专业用心的态度锁住客户幸福生活</text>
-  </view>
-
-  <!-- 加入团队按钮（仅非合伙人可见） -->
-  <view class="join-btn-section" wx:if="{{!isCofounder}}">
-    <view class="join-btn" catchtap="onApplyPartner">
-      <text class="btn-text">申请加入团队</text>
-    </view>
   </view>
 </view>
 

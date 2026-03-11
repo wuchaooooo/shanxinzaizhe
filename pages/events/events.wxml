@@ -44,9 +44,9 @@
   }
 </wxs>
 
-<view class="events-container">
+<view class="events-page">
   <!-- 搜索框 -->
-  <view class="search-container">
+  <view class="search-container-fixed">
     <view class="search-box">
       <text class="search-icon">🔍</text>
       <input
@@ -59,155 +59,146 @@
     </view>
   </view>
 
-  <!-- 活动统计 -->
-  <view class="events-stats-section">
-    <view class="events-stats-content">
-      <view class="event-stat-item">
-        <text class="event-stat-number">{{starClubCount}}</text>
-        <text class="event-stat-label">星享会</text>
-      </view>
-      <view class="event-stat-item event-stat-border">
-        <text class="event-stat-number">{{lunchCount}}</text>
-        <text class="event-stat-label">午餐会</text>
-      </view>
-      <view class="event-stat-item">
-        <text class="event-stat-number">{{totalCount}}</text>
-        <text class="event-stat-label">全部活动</text>
-      </view>
-    </view>
-    <view wx:if="{{isCofounder}}" class="events-create-btn" catchtap="onCreateEvent">
-      <view class="create-btn-icon">
-        <text class="create-icon">✨</text>
-      </view>
-      <text class="create-btn-text">创建活动</text>
-    </view>
-  </view>
-
-  <!-- 标签页 -->
-  <view class="tabs-container">
-    <view class="tabs">
-      <view
-        class="tab-item {{activeTab === item ? 'tab-active' : ''}}"
-        wx:for="{{tabs}}"
-        wx:key="index"
-        bindtap="onTabChange"
-        data-tab="{{item}}"
-      >
-        <text class="tab-text">{{item}}</text>
-      </view>
-    </view>
-  </view>
-
-  <!-- 活动列表 -->
-  <view class="events-list">
-    <!-- 骨架屏 -->
-    <view wx:if="{{loading}}" class="skeleton-waterfall">
-      <view class="skeleton-column">
-        <view class="skeleton-card">
-          <view class="skeleton-image"></view>
-          <view class="skeleton-content">
-            <view class="skeleton-title"></view>
-            <view class="skeleton-text"></view>
-          </view>
-        </view>
-        <view class="skeleton-card">
-          <view class="skeleton-image"></view>
-          <view class="skeleton-content">
-            <view class="skeleton-title"></view>
-            <view class="skeleton-text"></view>
-          </view>
-        </view>
-      </view>
-      <view class="skeleton-column">
-        <view class="skeleton-card">
-          <view class="skeleton-image"></view>
-          <view class="skeleton-content">
-            <view class="skeleton-title"></view>
-            <view class="skeleton-text"></view>
-          </view>
-        </view>
-        <view class="skeleton-card">
-          <view class="skeleton-image"></view>
-          <view class="skeleton-content">
-            <view class="skeleton-title"></view>
-            <view class="skeleton-text"></view>
-          </view>
-        </view>
-      </view>
-    </view>
-
-    <!-- 瀑布流布局 -->
-    <view wx:if="{{!loading && filteredEvents.length > 0}}" class="waterfall-container">
-      <!-- 左列 -->
-      <view class="waterfall-column">
+  <!-- 标签页（固定在搜索框下方）-->
+  <view class="tabs-fixed-wrapper">
+    <scroll-view class="tabs-container" scroll-x="{{true}}" show-scrollbar="{{false}}" scroll-with-animation="{{true}}" scroll-left="{{tabScrollLeft}}">
+      <view class="tabs">
         <view
-          class="event-card"
-          wx:for="{{leftColumn}}"
-          wx:key="id"
-          bindtap="onEventTap"
-          data-id="{{item.id}}"
-          data-type="{{item.type}}"
+          class="tab-item {{activeTab === item ? 'tab-active' : ''}}"
+          wx:for="{{tabs}}"
+          wx:key="index"
+          bindtap="onTabChange"
+          data-tab="{{item}}"
         >
-          <image
-            class="event-image"
-            src="{{item.image || '/images/placeholder.png'}}"
-            mode="widthFix"
-          ></image>
-          <view class="event-content">
-            <view class="event-title-row">
-              <text class="event-title">{{item.name || '活动'}}</text>
-            </view>
-            <view class="event-info">
-              <view class="info-item organizer-item">
-                <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
-                <text class="info-text">{{item.organizer || '待定'}}</text>
-              </view>
-              <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
-                <text class="status-text">{{item.status || '待定'}}</text>
-              </view>
-            </view>
-          </view>
+          <text class="tab-text">{{item}}</text>
         </view>
       </view>
-
-      <!-- 右列 -->
-      <view class="waterfall-column">
-        <view
-          class="event-card"
-          wx:for="{{rightColumn}}"
-          wx:key="id"
-          bindtap="onEventTap"
-          data-id="{{item.id}}"
-          data-type="{{item.type}}"
-        >
-          <image
-            class="event-image"
-            src="{{item.image || '/images/placeholder.png'}}"
-            mode="widthFix"
-          ></image>
-          <view class="event-content">
-            <view class="event-title-row">
-              <text class="event-title">{{item.name || '活动'}}</text>
-            </view>
-            <view class="event-info">
-              <view class="info-item organizer-item">
-                <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
-                <text class="info-text">{{item.organizer || '待定'}}</text>
-              </view>
-              <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
-                <text class="status-text">{{item.status || '待定'}}</text>
-              </view>
-            </view>
-          </view>
-        </view>
-      </view>
-    </view>
-
-    <!-- 空状态 -->
-    <view wx:if="{{!loading && filteredEvents.length === 0}}" class="empty-state">
-      <text class="empty-icon">📭</text>
-      <text class="empty-text">暂无活动</text>
-      <text class="empty-desc">敬请期待精彩活动</text>
-    </view>
+    </scroll-view>
   </view>
+
+  <!-- 可滚动内容区域 -->
+  <scroll-view class="events-scroll-container" scroll-y="{{true}}" scroll-top="{{scrollTop}}" scroll-with-animation="{{true}}">
+    <!-- 活动统计 -->
+    <view class="events-stats-section">
+      <view class="events-stats-content">
+        <view class="event-stat-item">
+          <text class="event-stat-number">{{currentTabInProgress}}</text>
+          <text class="event-stat-label">进行中</text>
+        </view>
+        <view class="event-stat-item event-stat-border">
+          <text class="event-stat-number">{{currentTabUpcoming}}</text>
+          <text class="event-stat-label">即将开始</text>
+        </view>
+        <view class="event-stat-item">
+          <text class="event-stat-number">{{currentTabFinished}}</text>
+          <text class="event-stat-label">已结束</text>
+        </view>
+      </view>
+      <view wx:if="{{isCofounder}}" class="events-create-btn" catchtap="onCreateEvent">
+        <view class="create-btn-icon">
+          <text class="create-icon">✨</text>
+        </view>
+        <text class="create-btn-text">创建活动</text>
+      </view>
+    </view>
+
+    <!-- 活动列表 -->
+    <view class="events-content-wrapper">
+      <!-- 骨架屏 -->
+      <view wx:if="{{loading}}" class="skeleton-waterfall">
+        <view class="skeleton-column">
+          <view class="skeleton-card">
+            <view class="skeleton-image"></view>
+            <view class="skeleton-content">
+              <view class="skeleton-title"></view>
+              <view class="skeleton-text"></view>
+            </view>
+          </view>
+        </view>
+        <view class="skeleton-column">
+          <view class="skeleton-card">
+            <view class="skeleton-image"></view>
+            <view class="skeleton-content">
+              <view class="skeleton-title"></view>
+              <view class="skeleton-text"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 瀑布流布局 -->
+      <view wx:if="{{!loading && leftColumn.length + rightColumn.length > 0}}" class="waterfall-container">
+        <!-- 左列 -->
+        <view class="waterfall-column left-column">
+          <view
+            class="event-card"
+            wx:for="{{leftColumn}}"
+            wx:key="id"
+            bindtap="onEventTap"
+            data-id="{{item.id}}"
+            data-type="{{item.type}}"
+          >
+            <image
+              class="event-image"
+              src="{{item.image || '/images/placeholder.png'}}"
+              mode="widthFix"
+            ></image>
+            <view class="event-content">
+              <view class="event-title-row">
+                <text class="event-title">{{item.name || '活动'}}</text>
+              </view>
+              <view class="event-info">
+                <view class="info-item organizer-item">
+                  <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+                  <text class="info-text">{{item.organizer || '待定'}}</text>
+                </view>
+                <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
+                  <text class="status-text">{{item.status || '待定'}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 右列 -->
+        <view class="waterfall-column right-column">
+          <view
+            class="event-card"
+            wx:for="{{rightColumn}}"
+            wx:key="id"
+            bindtap="onEventTap"
+            data-id="{{item.id}}"
+            data-type="{{item.type}}"
+          >
+            <image
+              class="event-image"
+              src="{{item.image || '/images/placeholder.png'}}"
+              mode="widthFix"
+            ></image>
+            <view class="event-content">
+              <view class="event-title-row">
+                <text class="event-title">{{item.name || '活动'}}</text>
+              </view>
+              <view class="event-info">
+                <view class="info-item organizer-item">
+                  <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+                  <text class="info-text">{{item.organizer || '待定'}}</text>
+                </view>
+                <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
+                  <text class="status-text">{{item.status || '待定'}}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 空状态 -->
+      <view wx:if="{{!loading && leftColumn.length + rightColumn.length === 0}}" class="empty-state">
+        <text class="empty-icon">📭</text>
+        <text class="empty-text">暂无活动</text>
+        <text class="empty-desc">敬请期待精彩活动</text>
+      </view>
+    </view>
+  </scroll-view>
 </view>

@@ -15,11 +15,18 @@
     "miniprogram": {
       "list": [
         {
+          "name": "events",
+          "pathName": "pages/events/events",
+          "query": "",
+          "scene": null,
+          "launchMode": "default"
+        },
+        {
           "name": "pages/profile/profile",
           "pathName": "pages/profile/profile",
           "query": "employeeId=190005889",
-          "scene": null,
-          "launchMode": "default"
+          "launchMode": "default",
+          "scene": null
         },
         {
           "name": "team",

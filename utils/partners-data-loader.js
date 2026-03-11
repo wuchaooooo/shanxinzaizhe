@@ -116,11 +116,28 @@ function transformFeishuRecord(record) {
 
       // 如果是JSON字符串，尝试解析
       if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
-        return JSON.parse(data)
+        const parsed = JSON.parse(data)
+        // 排序后返回（按时间倒序，最新的在前面）
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          parsed.sort((a, b) => {
+            const timeA = a.timeStart || a.time || ''
+            const timeB = b.timeStart || b.time || ''
+            if (!timeA || !timeB) return 0
+            return timeB.localeCompare(timeA)
+          })
+        }
+        return parsed
       }
-      // 如果已经是对象数组，直接返回
+      // 如果已经是对象数组，排序后返回
       if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
-        return data
+        const sorted = [...data]
+        sorted.sort((a, b) => {
+          const timeA = a.timeStart || a.time || ''
+          const timeB = b.timeStart || b.time || ''
+          if (!timeA || !timeB) return 0
+          return timeB.localeCompare(timeA)
+        })
+        return sorted
       }
       // 如果是字符串数组，转换为对象数组
       if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'string') {
@@ -229,11 +246,30 @@ function transformFeishuRecord(record) {
 
       // 如果是JSON字符串，尝试解析
       if (typeof data === 'string' && (data.startsWith('[') || data.startsWith('{'))) {
-        return JSON.parse(data)
+        const parsed = JSON.parse(data)
+        // 排序后返回（按时间倒序，最新的在前面）
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          parsed.sort((a, b) => {
+            const timeA = a.timeStart || a.time || ''
+            const timeB = b.timeStart || b.time || ''
+            if (!timeA || !timeB) return 0
+            return timeB.localeCompare(timeA)
+          })
+        }
+        return parsed
       }
-      // 如果已经是数组，直接返回
+      // 如果已经是数组，排序后返回
       if (Array.isArray(data)) {
-        return data
+        const sorted = [...data]
+        if (sorted.length > 0 && typeof sorted[0] === 'object') {
+          sorted.sort((a, b) => {
+            const timeA = a.timeStart || a.time || ''
+            const timeB = b.timeStart || b.time || ''
+            if (!timeA || !timeB) return 0
+            return timeB.localeCompare(timeA)
+          })
+        }
+        return sorted
       }
 
       // 新格式：$2026-01$主标题$副标题$
@@ -507,7 +543,7 @@ async function downloadWithLimit(tasks, limit = 5) {
 
 // ─── 本地缓存：基于 employeeId + Last Modified Date 增量更新 ─────────────────
 // 缓存版本号：新增字段映射或修改 transform 逻辑时手动递增，旧缓存自动失效
-const CACHE_VERSION = 'v2'
+const CACHE_VERSION = 'v3'
 const CACHE_KEY = `partners_cache_${CACHE_VERSION}`
 
 function loadPartnersCache() {
@@ -526,7 +562,7 @@ function getPartnersFromCache() {
   const cache = loadPartnersCache()
   const fs = wx.getFileSystemManager()
 
-  console.log(`getPartnersFromCache: 缓存中有 ${Object.keys(cache).length} 条记录`)
+  console.log(`[缓存] 加载 ${Object.keys(cache).length} 条记录`)
 
   return Object.values(cache).map(entry => {
     const partner = { ...entry.data }
@@ -536,21 +572,14 @@ function getPartnersFromCache() {
       try {
         fs.accessSync(entry.imagePath)
         partner.image = entry.imagePath
-        console.log(`[${partner.name}] 从 imagePath 恢复头像: ${entry.imagePath}`)
       } catch (e) {
-        console.warn(`[${partner.name}] imagePath 文件不存在:`, entry.imagePath)
         // 文件不存在，清空路径以触发重新下载
         partner.image = ''
       }
     } else if (!partner.image) {
-      // 既没有 imagePath 也没有 data.image，设为空
       partner.image = ''
-      console.log(`[${partner.name}] 没有头像路径`)
     } else if (partner.image && partner.image.includes('tmp')) {
-      console.warn(`[${partner.name}] 清除无效的临时头像路径: ${partner.image}`)
       partner.image = ''
-    } else {
-      console.log(`[${partner.name}] 从 data.image 保留头像: ${partner.image}`)
     }
 
     if (entry.qrcodePath) {
@@ -558,15 +587,11 @@ function getPartnersFromCache() {
         fs.accessSync(entry.qrcodePath)
         partner.qrcode = entry.qrcodePath
       } catch (e) {
-        console.warn(`[${partner.name}] qrcodePath 文件不存在:`, entry.qrcodePath)
-        // 文件不存在，清空路径以触发重新下载
         partner.qrcode = ''
       }
     } else if (!partner.qrcode) {
-      // 既没有 qrcodePath 也没有 data.qrcode，设为空
       partner.qrcode = ''
     } else if (partner.qrcode && partner.qrcode.includes('tmp')) {
-      console.warn(`[${partner.name}] 清除无效的临时二维码路径: ${partner.qrcode}`)
       partner.qrcode = ''
     }
 
@@ -592,11 +617,11 @@ function getPartnersDataSync() {
 
 /**
  * 获取飞书文本数据，与本地缓存对比，仅重新解析有变更的记录
- * @returns {{ partners: Array, hasChanges: boolean }}
+ * @returns {{ partners: Array, hasChanges: boolean, changedIds: Set, changedImageIds: Set }}
  */
 async function fetchFeishuPartnersText() {
   try {
-    console.log('获取飞书文本数据...')
+    console.log('[飞书] 开始获取数据...')
     const records = await feishuApi.getAllRecords()
     const mapping = DATA_SOURCE_CONFIG.feishuFieldMapping
     const cache = loadPartnersCache()
@@ -604,7 +629,8 @@ async function fetchFeishuPartnersText() {
     let hasChanges = false
 
     // 获取当前内存中的合伙人（保留已下载的图片路径，避免重复下载）
-    const changedIds = new Set()
+    const changedIds = new Set()  // 文字数据变化的记录（基于 lastModified）
+    const changedImageIds = new Set()  // 图片 URL 变化的记录（基于 imageUrl/qrcodeUrl）
     const currentMap = {}
     getPartnersDataSync().forEach(p => { if (p.employeeId) currentMap[p.employeeId] = p })
 
@@ -613,68 +639,79 @@ async function fetchFeishuPartnersText() {
       // 优先用营销员工号作为缓存 key，退而用 record_id
       const cacheKey = String(fields[mapping.employeeId] || record.record_id || '')
       const lastModified = String(fields[mapping.lastModifiedDate] || '')
+      const imageUrl = fields[mapping.image] ? fields[mapping.image][0]?.url : ''
+      const qrcodeUrl = fields[mapping.qrcode] ? fields[mapping.qrcode][0]?.url : ''
       const fs = wx.getFileSystemManager()
 
-      // 检查缓存是否有效（时间匹配 且 文件路径存在）
-      let isCacheValid = false
-      if (cacheKey && cache[cacheKey] && cache[cacheKey].lastModified === lastModified) {
-        const cachedPath = cache[cacheKey].data.image
-        if (cachedPath) {
-          try {
-            fs.accessSync(cachedPath)
-            isCacheValid = true
-          } catch (e) {
-            console.warn(`[${cacheKey}] 缓存路径失效,准备重新下载:`, cachedPath)
-          }
-        } else {
-          // 没有头像的记录，时间匹配即认为有效
-          isCacheValid = true
-        }
-      }
+      // 检查文字数据是否变化（基于 lastModified）
+      const isTextChanged = !cacheKey || !cache[cacheKey] || cache[cacheKey].lastModified !== lastModified
 
-      if (isCacheValid) {
-        // 未变更：复用缓存数据，优先使用内存中的图片路径，否则尝试从缓存的 imagePath 恢复
-        newCache[cacheKey] = cache[cacheKey]
-        const existing = currentMap[cacheKey]
-        const fs = wx.getFileSystemManager()
+      // 检查图片 URL 是否变化
+      const isImageUrlChanged = !cache[cacheKey] || cache[cacheKey].imageUrl !== imageUrl
+      const isQrcodeUrlChanged = !cache[cacheKey] || cache[cacheKey].qrcodeUrl !== qrcodeUrl
 
-        let imagePath = existing ? existing.image : ''
-        let qrcodePath = existing ? existing.qrcode : ''
-
-        // 如果内存中没有图片路径，尝试从缓存的 imagePath 恢复
-        if (!imagePath && cache[cacheKey].imagePath) {
-          try {
-            fs.accessSync(cache[cacheKey].imagePath)
-            imagePath = cache[cacheKey].imagePath
-          } catch (e) {
-            // 文件不存在，保持为空
+      if (isTextChanged) {
+        // 文字数据有变化：重新 transform
+        hasChanges = true
+        changedIds.add(cacheKey)
+        const transformed = transformFeishuRecord(record)
+        if (cacheKey) {
+          newCache[cacheKey] = {
+            lastModified,
+            imageUrl,
+            qrcodeUrl,
+            data: { ...transformed, image: '', qrcode: '' }
           }
         }
 
-        if (!qrcodePath && cache[cacheKey].qrcodePath) {
-          try {
-            fs.accessSync(cache[cacheKey].qrcodePath)
-            qrcodePath = cache[cacheKey].qrcodePath
-          } catch (e) {
-            // 文件不存在，保持为空
-          }
+        // 如果图片 URL 也变了，加入 changedImageIds
+        if (isImageUrlChanged || isQrcodeUrlChanged) {
+          changedImageIds.add(cacheKey)
         }
 
-        return {
-          ...cache[cacheKey].data,
-          image: imagePath,
-          qrcode: qrcodePath
+        return transformed
+      }
+
+      // 文字数据未变化：复用缓存数据
+      newCache[cacheKey] = {
+        ...cache[cacheKey],
+        imageUrl,  // 更新 imageUrl（可能变化）
+        qrcodeUrl  // 更新 qrcodeUrl（可能变化）
+      }
+
+      const existing = currentMap[cacheKey]
+      let imagePath = existing ? existing.image : ''
+      let qrcodePath = existing ? existing.qrcode : ''
+
+      // 如果内存中没有图片路径，尝试从缓存的 imagePath 恢复
+      if (!imagePath && cache[cacheKey].imagePath) {
+        try {
+          fs.accessSync(cache[cacheKey].imagePath)
+          imagePath = cache[cacheKey].imagePath
+        } catch (e) {
+          // 文件不存在，保持为空
         }
       }
 
-      // 有变更或新记录：重新 transform，加入变更集合
-      hasChanges = true
-      changedIds.add(cacheKey)
-      const transformed = transformFeishuRecord(record)
-      if (cacheKey) {
-        newCache[cacheKey] = { lastModified, data: { ...transformed, image: '', qrcode: '' } }
+      if (!qrcodePath && cache[cacheKey].qrcodePath) {
+        try {
+          fs.accessSync(cache[cacheKey].qrcodePath)
+          qrcodePath = cache[cacheKey].qrcodePath
+        } catch (e) {
+          // 文件不存在，保持为空
+        }
       }
-      return transformed
+
+      // 如果图片 URL 变了，加入 changedImageIds
+      if (isImageUrlChanged || isQrcodeUrlChanged) {
+        changedImageIds.add(cacheKey)
+      }
+
+      return {
+        ...cache[cacheKey].data,
+        image: imagePath,
+        qrcode: qrcodePath
+      }
     })
 
     // 按营销员工号倒序排列（数值比较）
@@ -701,8 +738,8 @@ async function fetchFeishuPartnersText() {
     }
 
     savePartnersCache(newCache)
-    console.log(`飞书数据加载完成，共 ${partners.length} 条，${hasChanges ? `有变更(${changedIds.size}条)` : '无变更'}`)
-    return { partners, hasChanges, changedIds }
+    console.log(`[飞书] 数据加载完成: 共${partners.length}条 | 文字变更${changedIds.size}条 | 图片变更${changedImageIds.size}条`)
+    return { partners, hasChanges, changedIds, changedImageIds }
   } catch (error) {
     console.error('获取飞书文本数据失败:', error)
     throw error
@@ -712,35 +749,37 @@ async function fetchFeishuPartnersText() {
 /**
  * 在后台下载头像和二维码
  * @param {Array} partnersData
- * @param {Function} onAvatarReady (partnerName, localPath) - 有变更的合伙人下载完成后回调
- * @param {Set} changedIds - 有变更（新增或字段变化）的合伙人 employeeId 集合
- *   - 在集合中：下载 + 触发 onAvatarReady（重渲染头像和统计）
+ * @param {Function} onAvatarReady (partnerName, localPath) - 图片 URL 变化的合伙人下载完成后回调
+ * @param {Set} changedImageIds - 图片 URL 变化的合伙人 employeeId 集合
+ *   - 在集合中：imageUrl 变了，下载 + 触发 onAvatarReady（重渲染头像）
  *   - 不在集合且已有图片路径：跳过下载（无需重渲染）
- *   - 不在集合但无图片路径：静默下载，不触发回调
+ *   - 不在集合但无图片路径：静默下载，不触发回调（修复缺失的缓存）
  */
-async function downloadImagesBackground(partnersData, onAvatarReady, changedIds) {
+async function downloadImagesBackground(partnersData, onAvatarReady, changedImageIds) {
   try {
     const token = await feishuApi.getTenantAccessToken()
     const avatarTasks = []  // 头像下载任务
     const qrcodeTasks = []  // 二维码下载任务
     const cache = loadPartnersCache()  // 加载缓存以保存图片路径
 
+    let downloadCount = 0  // 下载计数
+    let notifyCount = 0    // 触发渲染计数
+    let cacheUpdateCount = 0  // 缓存更新计数
+
     for (const partner of partnersData) {
       const p = partner
-      const isChanged = !changedIds || changedIds.has(p.employeeId)
-
-      console.log(`[${p.name}] 检查头像: isChanged=${isChanged}, hasImage=${!!p.image}, imageUrl=${!!p.imageUrl}`)
+      const isImageUrlChanged = changedImageIds && changedImageIds.has(p.employeeId)
 
       if (p.imageUrl) {
-        // 检查缓存中是否有图片路径
+        // 检查缓存中是否有图片路径且文件存在
         const cachedImagePath = cache[p.employeeId]?.imagePath
-        let cacheExists = false
+        let cacheFileExists = false
 
         if (cachedImagePath) {
           try {
             const fs = wx.getFileSystemManager()
             fs.accessSync(cachedImagePath)
-            cacheExists = true
+            cacheFileExists = true
             // 如果缓存存在且内存中没有路径，直接使用缓存
             if (!p.image) {
               p.image = cachedImagePath
@@ -750,17 +789,16 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
           }
         }
 
-        if (!isChanged && cacheExists) {
-          // 数据未变更且缓存文件存在：跳过下载
-          console.log(`[${p.name}] 跳过下载: 数据未变更且缓存文件存在`)
-        } else if (!cacheExists || isChanged) {
-          // 缓存不存在或数据有变更：需要下载
-          const needNotify = isChanged || !p.image
-          console.log(`[${p.name}] 需要下载头像: needNotify=${needNotify}`)
+        // 决定是否需要下载
+        const needDownload = isImageUrlChanged || !cacheFileExists
+        const needNotify = isImageUrlChanged  // 只有 imageUrl 变化时才通知页面
+
+        if (needDownload) {
           avatarTasks.push(() =>
             downloadWithRetry(p.imageUrl, token, p.employeeId, 'avatar')
               .then(path => {
-                console.log(`[${p.name}] 头像下载成功:`, path)
+                downloadCount++
+                cacheUpdateCount++
 
                 // 删除旧文件（如果存在且路径不同）
                 const oldPath = cache[p.employeeId]?.imagePath
@@ -768,9 +806,8 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
                   try {
                     const fs = wx.getFileSystemManager()
                     fs.unlinkSync(oldPath)
-                    console.log(`[${p.name}] 已删除旧头像:`, oldPath)
                   } catch (e) {
-                    console.warn(`[${p.name}] 删除旧头像失败:`, oldPath, e)
+                    // 忽略删除失败
                   }
                 }
 
@@ -780,14 +817,12 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
                   cache[p.employeeId] = { data: p }
                 }
                 cache[p.employeeId].imagePath = path
-                cache[p.employeeId].data = p  // 更新 data 确保最新
-
-                console.log(`[${p.name}] 保存缓存: imagePath=${path}`)
+                cache[p.employeeId].data = p
                 savePartnersCache(cache)
-                console.log(`[${p.name}] 缓存已保存`)
 
+                // 只有 imageUrl 变化时才通知页面（触发重新渲染）
                 if (needNotify && onAvatarReady) {
-                  console.log(`[${p.name}] 触发头像就绪回调`)
+                  notifyCount++
                   onAvatarReady(p.name, path)
                 }
               })
@@ -799,15 +834,15 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
       }
 
       if (p.qrcodeUrl) {
-        // 检查缓存中是否有二维码路径
+        // 检查缓存中是否有二维码路径且文件存在
         const cachedQrcodePath = cache[p.employeeId]?.qrcodePath
-        let cacheExists = false
+        let cacheFileExists = false
 
         if (cachedQrcodePath) {
           try {
             const fs = wx.getFileSystemManager()
             fs.accessSync(cachedQrcodePath)
-            cacheExists = true
+            cacheFileExists = true
             // 如果缓存存在且内存中没有路径，直接使用缓存
             if (!p.qrcode) {
               p.qrcode = cachedQrcodePath
@@ -817,22 +852,24 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
           }
         }
 
-        if (!isChanged && cacheExists) {
-          // 数据未变更且缓存文件存在：跳过下载
-        } else if (!cacheExists || isChanged) {
-          // 缓存不存在或数据有变更：需要下载
+        // 决定是否需要下载（二维码逻辑同头像）
+        const needDownload = isImageUrlChanged || !cacheFileExists
+
+        if (needDownload) {
           qrcodeTasks.push(() =>
             downloadWithRetry(p.qrcodeUrl, token, p.employeeId, 'qrcode')
               .then(path => {
+                downloadCount++
+                cacheUpdateCount++
+
                 // 删除旧文件（如果存在且路径不同）
                 const oldPath = cache[p.employeeId]?.qrcodePath
                 if (oldPath && oldPath !== path) {
                   try {
                     const fs = wx.getFileSystemManager()
                     fs.unlinkSync(oldPath)
-                    console.log(`[${p.name}] 已删除旧二维码:`, oldPath)
                   } catch (e) {
-                    console.warn(`[${p.name}] 删除旧二维码失败:`, oldPath, e)
+                    // 忽略删除失败
                   }
                 }
 
@@ -842,12 +879,12 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
                   cache[p.employeeId] = { data: p }
                 }
                 cache[p.employeeId].qrcodePath = path
-                cache[p.employeeId].data = p  // 更新 data 确保最新
+                cache[p.employeeId].data = p
                 savePartnersCache(cache)
-
-                // 二维码下载完成，不触发回调（team页面不需要二维码通知）
               })
-              .catch(() => { })
+              .catch((err) => {
+                console.error(`[${p.name}] 二维码下载失败:`, err)
+              })
           )
         }
       }
@@ -856,19 +893,19 @@ async function downloadImagesBackground(partnersData, onAvatarReady, changedIds)
     // 优先下载头像，然后下载二维码
     const tasks = [...avatarTasks, ...qrcodeTasks]
 
-    console.log(`准备下载 ${avatarTasks.length} 个头像, ${qrcodeTasks.length} 个二维码`)
-
-    // 同步模式：limit=1，逐张下载渲染；异步模式：使用配置的并发数
-    const concurrency = DATA_SOURCE_CONFIG.imageLoadMode === 'sync' ? 1 : (DATA_SOURCE_CONFIG.imageConcurrency || 2)
-    await downloadWithLimit(tasks, concurrency)
-
     if (tasks.length === 0) {
-      console.log('所有图片已从缓存加载')
+      console.log('[图片] 所有图片已从缓存加载，无需下载')
     } else {
-      console.log(`所有图片下载完成（共${tasks.length}张）`)
+      console.log(`[图片] 开始下载: 头像${avatarTasks.length}张 | 二维码${qrcodeTasks.length}张`)
+
+      // 使用配置的并发数下载图片
+      const concurrency = DATA_SOURCE_CONFIG.imageConcurrency || 5
+      await downloadWithLimit(tasks, concurrency)
+
+      console.log(`[图片] 下载完成: 共${downloadCount}张 | 更新缓存${cacheUpdateCount}条 | 触发渲染${notifyCount}次`)
     }
   } catch (error) {
-    console.error('后台下载图片出错:', error)
+    console.error('[图片] 下载出错:', error)
   }
 }
 

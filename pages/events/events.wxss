@@ -1,20 +1,28 @@
 /* pages/events/events.wxss */
-.events-container {
+.events-page {
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
   background-color: #f5f5f5;
-  min-height: 100vh;
-  padding-bottom: 120rpx;
+}
+
+.events-scroll-container {
+  flex: 1;
+  height: 100%;
+  margin-top: 219rpx;
 }
 
 /* 搜索框 */
-.search-container {
+.search-container-fixed {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 50;
-  padding: 32rpx 32rpx;
+  padding: 32rpx 32rpx 32rpx 32rpx;
   background-color: #ffffff;
-  border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
+  border-bottom: none;
 }
 
 .search-box {
@@ -44,10 +52,10 @@
 
 /* 活动统计 */
 .events-stats-section {
-  margin-top: 176rpx;
+  margin-top: 24rpx;
   margin-left: 32rpx;
   margin-right: 32rpx;
-  margin-bottom: 48rpx;
+  margin-bottom: 24rpx;
   background-color: #ffffff;
   border-radius: 24rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
@@ -145,22 +153,40 @@
   white-space: nowrap;
 }
 
-/* 标签页 */
-.tabs-container {
-  position: sticky;
-  top: 144rpx;
+/* 标签页（固定定位）*/
+.tabs-fixed-wrapper {
+  position: fixed;
+  top: 120rpx;
+  left: 0;
+  right: 0;
   z-index: 40;
   background-color: #ffffff;
-  padding: 24rpx 32rpx;
+}
+
+.tabs-container {
+  padding: 24rpx 32rpx 24rpx 0;
   border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
-  margin-bottom: 16rpx;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.tabs-container::-webkit-scrollbar {
+  display: none;
 }
 
 .tabs {
-  display: flex;
+  display: inline-flex;
   gap: 48rpx;
-  overflow-x: auto;
-  justify-content: center;
+  padding-left: 60rpx;
+  padding-right: 60rpx;
+}
+
+.tab-item:first-child {
+  padding-left: 0;
+}
+
+.tab-item:last-child {
+  padding-right: 0;
 }
 
 .create-btn {
@@ -188,6 +214,7 @@
   padding: 0 0 16rpx;
   border-bottom: 6rpx solid transparent;
   transition: all 0.3s;
+  flex-shrink: 0;
 }
 
 .tab-active {
@@ -205,9 +232,11 @@
   color: #0f172a;
 }
 
-/* 活动列表 */
-.events-list {
-  padding: 16rpx 16rpx 32rpx;
+/* Swiper 容器 - 已移除 */
+
+.events-content-wrapper {
+  width: 100%;
+  padding-bottom: 150rpx;
 }
 
 /* 瀑布流容器 */
@@ -215,6 +244,7 @@
   display: flex;
   gap: 16rpx;
   align-items: flex-start;
+  padding: 16rpx 16rpx 0;
 }
 
 .waterfall-column {
@@ -229,6 +259,7 @@
   display: flex;
   gap: 16rpx;
   align-items: flex-start;
+  padding: 16rpx 16rpx 0;
 }
 
 .skeleton-column {
@@ -299,6 +330,28 @@
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
   margin-bottom: 0;
   transition: transform 0.2s ease;
+}
+
+/* 渐进式渲染时的动画 */
+.event-card.card-animating {
+  opacity: 0;
+  transform: scale(0.8);
+  animation: card-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes card-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .event-card:active {

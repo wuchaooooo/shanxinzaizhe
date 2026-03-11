@@ -123,6 +123,26 @@
   margin-top: 6rpx;
 }
 
+.team-stats-poster-btn-skeleton {
+  margin: 0 auto 32rpx;
+  border-radius: 16rpx;
+  padding: 16rpx 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  width: fit-content;
+  min-width: 240rpx;
+  height: 56rpx;
+  background: linear-gradient(90deg,
+    rgba(194, 0, 0, 0.08) 25%,
+    rgba(194, 0, 0, 0.15) 50%,
+    rgba(194, 0, 0, 0.08) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
 .team-stats-poster-btn {
   margin: 0 auto 32rpx;
   background-color: #c20000;
@@ -159,7 +179,7 @@
   }
 }
 
-.poster-btn-icon {
+.poster-btn-icon-wrapper {
   width: 40rpx;
   height: 40rpx;
   background-color: #ffffff;
@@ -197,22 +217,49 @@
   flex-direction: column;
   align-items: center;
   gap: 16rpx;
+  /* 优化：使用 contain 提升渲染性能 */
+  contain: layout style paint;
+}
+
+/* 只在动画时使用 will-change */
+.partner-item.item-animating {
+  will-change: transform, opacity;
+}
+
+/* 渐进式加载动画 */
+.partner-item.item-animating {
+  opacity: 0;
+  transform: scale(0.8);
+  animation: partner-appear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes partner-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .partner-avatar {
   width: 140rpx;
   height: 140rpx;
-  border-radius: 50%;
-  border: 3rpx solid rgba(194, 0, 0, 0.2);
+  border-radius: 70rpx;
+  background-color: rgba(194, 0, 0, 0.08);
   overflow: hidden;
-  background-color: rgba(194, 0, 0, 0.1);
   position: relative;
   display: block;
   flex-shrink: 0;
-  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
-              border-color 0.8s ease-out,
-              box-shadow 0.8s ease-out,
-              opacity 0.6s ease-out;
+  transition: opacity 0.3s ease-out;
+  clip-path: circle(70rpx at center);
+  box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.8);
 }
 
 .partner-avatar-img-wrapper {
@@ -221,6 +268,7 @@
   height: 175rpx;
   top: 0;
   left: 0;
+  background-color: transparent;
 }
 
 .partner-avatar-img {
@@ -229,27 +277,24 @@
   display: block;
   opacity: 0;
   transition: opacity 0.5s ease-in-out;
+  background-color: transparent;
 }
 
 .partner-avatar-img-show {
   opacity: 1;
 }
 
-/* 图片加载中的呼吸动画 */
+/* 图片加载中的呼吸动画 - 已禁用以避免闪烁 */
 .partner-avatar-loading {
-  animation: breathing-pulse 2s ease-in-out infinite;
+  /* animation: breathing-pulse 2s ease-in-out infinite; */
 }
 
 @keyframes breathing-pulse {
   0%, 100% {
-    transform: scale(0.98);
-    border-color: rgba(194, 0, 0, 0.25);
-    box-shadow: 0 0 0 0 rgba(194, 0, 0, 0.3);
+    opacity: 0.6;
   }
   50% {
-    transform: scale(1.02);
-    border-color: rgba(194, 0, 0, 0.6);
-    box-shadow: 0 0 0 8rpx rgba(194, 0, 0, 0);
+    opacity: 1;
   }
 }
 
@@ -259,35 +304,29 @@
   opacity: 1;
 }
 
-/* 图片加载完成的水波纹动画 */
+/* 图片加载完成的水波纹动画 - 已禁用以避免闪烁 */
 .partner-avatar-loaded {
-  animation: splash-ripple 0.6s ease-out;
+  /* animation: splash-ripple 0.6s ease-out forwards; */
 }
 
 @keyframes splash-ripple {
   0% {
-    box-shadow: 0 0 0 0 rgba(194, 0, 0, 0.4),
-                0 0 0 0 rgba(194, 0, 0, 0.3),
-                0 0 0 0 rgba(194, 0, 0, 0.15);
-    transform: scale(0.97);
+    box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.8),
+                0 0 0 4rpx rgba(194, 0, 0, 0.4),
+                0 0 0 4rpx rgba(194, 0, 0, 0.3);
   }
   30% {
-    box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.3),
-                0 0 0 8rpx rgba(194, 0, 0, 0.15),
-                0 0 0 12rpx rgba(194, 0, 0, 0.08);
-    transform: scale(1.03);
+    box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.8),
+                0 0 0 8rpx rgba(194, 0, 0, 0.3),
+                0 0 0 12rpx rgba(194, 0, 0, 0.15);
   }
   60% {
-    box-shadow: 0 0 0 8rpx rgba(194, 0, 0, 0.15),
-                0 0 0 16rpx rgba(194, 0, 0, 0.08),
-                0 0 0 24rpx rgba(194, 0, 0, 0);
-    transform: scale(1);
+    box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.8),
+                0 0 0 12rpx rgba(194, 0, 0, 0.15),
+                0 0 0 20rpx rgba(194, 0, 0, 0.08);
   }
   100% {
-    box-shadow: 0 0 0 12rpx rgba(194, 0, 0, 0),
-                0 0 0 24rpx rgba(194, 0, 0, 0),
-                0 0 0 30rpx rgba(194, 0, 0, 0);
-    transform: scale(1);
+    box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.8);
   }
 }
 
@@ -427,57 +466,6 @@
   font-size: 28rpx;
   color: #64748b;
   padding: 0 48rpx;
-}
-
-/* 加入团队按钮 */
-.join-btn-section {
-  padding: 0 32rpx 64rpx;
-  display: flex;
-  justify-content: center;
-}
-
-.join-btn {
-  width: 70%;
-  margin: 0 auto;
-  height: 112rpx;
-  background-color: #c20000;
-  color: #ffffff;
-  font-size: 32rpx;
-  font-weight: bold;
-  border-radius: 24rpx;
-  box-shadow: 0 16rpx 32rpx rgba(194, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16rpx;
-  transition: all 0.3s ease;
-}
-
-.join-btn-disabled {
-  background-color: #ccc;
-  box-shadow: none;
-  opacity: 0.8;
-}
-
-.btn-icon-wrapper {
-  width: 48rpx;
-  height: 48rpx;
-  background-color: #ffffff;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8rpx;
-}
-
-.btn-icon-img {
-  width: 100%;
-  height: 100%;
-}
-
-.btn-text {
-  font-size: 32rpx;
-  font-weight: bold;
 }
 
 /* 团队海报弹窗 */
