@@ -225,6 +225,19 @@
   flex-shrink: 0;
 }
 
+/* 活动签到 */
+.checkin-section {
+  padding: 0 32rpx 32rpx;
+}
+
+.checkin-qrcode-full {
+  width: 100%;
+  height: 600rpx;
+  border-radius: 24rpx;
+  background-color: #f8fafc;
+  display: block;
+}
+
 /* 地图 */
 .map-section {
   padding: 0 32rpx 32rpx;
@@ -475,7 +488,7 @@
 
 .poster-content {
   width: 100%;
-  max-height: 90vh;
+  max-height: 88vh;
   background-color: #ffffff;
   border-radius: 32rpx 32rpx 0 0;
   overflow: hidden;
@@ -519,11 +532,12 @@
 .poster-image-wrapper {
   position: relative;
   padding: 40rpx;
+  min-height: 1280rpx;  /* 骨架图高度 1200rpx + padding 80rpx，防止图片加载后高度跳动 */
 }
 
 .poster-skeleton {
   width: 100%;
-  height: 800rpx;
+  height: 1200rpx;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
@@ -542,6 +556,29 @@
   }
   100% {
     background-position: -200% 0;
+  }
+}
+
+.poster-skeleton-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 100%
+  );
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
   }
 }
 

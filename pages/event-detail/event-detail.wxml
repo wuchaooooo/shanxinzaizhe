@@ -124,6 +124,14 @@
     </view>
   </view>
 
+  <!-- 活动签到（仅进行中的活动且有签到码时显示） -->
+  <view wx:if="{{event.status === '进行中' && event.checkinQrcode}}" class="checkin-section">
+    <view class="section-title">
+      <text class="title-text">活动签到</text>
+    </view>
+    <image class="checkin-qrcode-full" src="{{event.checkinQrcode}}" mode="aspectFit" bindtap="onPreviewCheckinQrcode"></image>
+  </view>
+
   <!-- 地图 -->
   <view wx:if="{{event.latitude && event.longitude}}" class="map-section">
     <view class="section-title">
@@ -144,11 +152,11 @@
 </view>
 
 <!-- 操作菜单弹窗 -->
-<view class="action-sheet-mask {{showActionSheet ? 'action-sheet-mask-show' : ''}}" bindtap="onHideActionSheet"></view>
-<view class="action-sheet {{showActionSheet ? 'action-sheet-show' : ''}}">
+<view class="action-sheet-mask {{showActionSheet ? 'action-sheet-mask-show' : ''}}" catchtap="onHideActionSheet"></view>
+<view class="action-sheet {{showActionSheet ? 'action-sheet-show' : ''}}" catchtap="">
   <view class="action-sheet-header">
     <text class="action-sheet-title">更多操作</text>
-    <text class="action-sheet-close" bindtap="onHideActionSheet">✕</text>
+    <text class="action-sheet-close" catchtap="onHideActionSheet">✕</text>
   </view>
   <view class="action-sheet-body">
     <view class="action-icons-row">

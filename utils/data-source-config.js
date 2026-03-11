@@ -46,6 +46,7 @@ const DATA_SOURCE_CONFIG = {
     address: '活动地址',
     latitude: '地址纬度',
     longitude: '地址经度',
+    checkinQrcodeKey: '活动签到码链接_飞书_image_key',  // 活动签到码
     lastModifiedDate: 'Last Modified Date'
   }
 }

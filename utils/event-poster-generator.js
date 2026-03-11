@@ -48,14 +48,13 @@ async function generateEventPoster(page, canvasId, event) {
     // Canvas 尺寸
     const canvasWidth = 750
     let imageHeight = 1000 // 默认活动图片高度
-    const infoHeight = 350 // 信息区域高度（增加以容纳两个二维码）
+    const infoHeight = 400 // 信息区域：名称 + 分割线 + 时间地点&二维码行
 
     // 如果有图片，根据图片实际比例计算高度
     let actualImageHeight = imageHeight
     if (event.image) {
       try {
         const imgInfo = await wx.getImageInfo({ src: event.image })
-        // 按宽度适配，计算实际高度
         actualImageHeight = Math.floor(canvasWidth * imgInfo.height / imgInfo.width)
         imageHeight = actualImageHeight
       } catch (e) {
@@ -70,114 +69,100 @@ async function generateEventPoster(page, canvasId, event) {
 
     const ctx = wx.createCanvasContext(canvasId, page)
 
-    // 1. 绘制活动图片（完整显示，不裁剪）
+    // 1. 绘制活动图片
     if (event.image) {
       try {
-        // 按宽度适配，完整显示图片
         ctx.drawImage(event.image, 0, 0, canvasWidth, imageHeight)
       } catch (e) {
         console.error('绘制活动图片失败:', e)
-        // 绘制占位背景
         ctx.setFillStyle('#f5f5f5')
         ctx.fillRect(0, 0, canvasWidth, imageHeight)
       }
     } else {
-      // 无图片时绘制占位背景
       ctx.setFillStyle('#f5f5f5')
       ctx.fillRect(0, 0, canvasWidth, imageHeight)
     }
 
-    // 2. 绘制底部信息区域（渐变背景）
-    const gradient = ctx.createLinearGradient(0, imageHeight, 0, canvasHeight)
-    gradient.addColorStop(0, '#ffffff')
-    gradient.addColorStop(1, '#f8f9fa')
-    ctx.setFillStyle(gradient)
+    // 2. 绘制底部信息区域（白色背景）
+    ctx.setFillStyle('#ffffff')
     ctx.fillRect(0, imageHeight, canvasWidth, infoHeight)
 
-    // 3. 绘制活动信息（左侧）和二维码（右侧）
-    const padding = 40
-    const qrSize = 140 // 二维码尺寸
-    const qrGap = 20 // 两个二维码之间的间距
-    const qrAreaWidth = qrSize * 2 + qrGap + padding // 右侧二维码区域宽度
-    const textAreaWidth = canvasWidth - qrAreaWidth - padding // 左侧文字区域宽度
+    const padding = 48
+    const qrSize = 130 // 二维码尺寸（缩小）
+    const qrGap = 24   // 两个二维码之间的间距
 
-    let currentY = imageHeight + 50
-
-    // 活动名称（加粗、大字号、深色）
+    // 3. 活动名称（全宽，单独一行）
+    let currentY = imageHeight + 40
     if (event.name) {
       ctx.setFillStyle('#1e293b')
-      ctx.font = 'bold 38px sans-serif'
+      ctx.font = 'bold 40px sans-serif'
       ctx.setTextAlign('left')
       ctx.setTextBaseline('top')
-      ctx.fillText(event.name, padding, currentY)
-      currentY += 65
+      drawWrappedText(ctx, event.name, padding, currentY, canvasWidth - padding * 2, 52)
+      currentY += 72
     }
 
-    // 活动时间（中等字号、醒目颜色）
-    if (event.time) {
-      ctx.setFillStyle('#475569')
-      ctx.font = '28px sans-serif'
-      const timeStr = formatTime(event.time)
-      ctx.fillText(`📅 ${timeStr}`, padding, currentY)
-      currentY += 55
-    }
+    // 分割线
+    ctx.setStrokeStyle('#e2e8f0')
+    ctx.setLineWidth(2)
+    ctx.beginPath()
+    ctx.moveTo(padding, currentY)
+    ctx.lineTo(canvasWidth - padding, currentY)
+    ctx.stroke()
+    currentY += 24
 
-    // 活动地点（星享会固定地点）
-    const location = event.type === '星享会'
-      ? '杭州市英蓝中心B座'
-      : (event.address || '待定')
+    // 4. 第二行：左侧时间&地点，右侧二维码（垂直居中对齐）
+    const qrStartX = canvasWidth - qrSize * 2 - qrGap - padding
+    const qrStartY = currentY
+    const textAreaWidth = qrStartX - padding - 40 // 增加右侧间距，避免被二维码遮盖
 
+    // 计算左侧文字区域的总高度，用于垂直居中
+    const textLineHeight = 52 // 增加行间距
+    const textTotalHeight = event.time ? textLineHeight * 2 : textLineHeight
+    const textStartY = qrStartY + (qrSize - textTotalHeight) / 2
+
+    // 左侧：时间 & 地点（垂直居中）
     ctx.setFillStyle('#475569')
     ctx.font = '28px sans-serif'
+    ctx.setTextAlign('left')
+    ctx.setTextBaseline('top')
 
-    // 计算地址文字的最大宽度（左侧文字区域宽度 - 图标宽度）
-    const maxTextWidth = textAreaWidth - 60 // 减去图标和间距
-    const locationText = `📍 ${location}`
+    let textY = textStartY
+    if (event.time) {
+      const timeStr = formatTime(event.time)
+      ctx.fillText(`📅  ${timeStr}`, padding, textY)
+      textY += textLineHeight
+    }
 
-    // 绘制地址（支持换行）
-    drawWrappedText(ctx, locationText, padding, currentY, maxTextWidth, 45)
+    const location = event.address || '待定'
+    drawWrappedText(ctx, `📍  ${location}`, padding, textY, textAreaWidth, 40)
 
-    // 4. 绘制二维码区域（右侧，与文字信息同一水平线）
-    const qrStartY = imageHeight + 50
-    const qrStartX = canvasWidth - qrSize * 2 - qrGap - padding
-
-    // 绘制组织者二维码（左边）
+    // 右侧：组织者二维码（左）
     if (organizerQRCode) {
       try {
-        // 白色背景
-        ctx.setFillStyle('#ffffff')
+        ctx.setFillStyle('#f8fafc')
         ctx.fillRect(qrStartX - 10, qrStartY - 10, qrSize + 20, qrSize + 20)
-
-        // 绘制组织者二维码
         ctx.drawImage(organizerQRCode, qrStartX, qrStartY, qrSize, qrSize)
-
-        // 提示文字（更清晰的字体）
         ctx.setFillStyle('#64748b')
         ctx.font = 'bold 22px sans-serif'
         ctx.setTextAlign('center')
-        ctx.fillText('联系组织者', qrStartX + qrSize / 2, qrStartY + qrSize + 25)
+        ctx.fillText('联系组织者', qrStartX + qrSize / 2, qrStartY + qrSize + 18)
       } catch (e) {
         console.error('绘制组织者二维码失败:', e)
       }
     }
 
-    // 绘制小程序码（右边）
+    // 右侧：小程序码（右）
     if (qrcodeImageUrl) {
       try {
         const miniQrX = qrStartX + qrSize + qrGap
-
-        // 白色背景
-        ctx.setFillStyle('#ffffff')
+        ctx.setFillStyle('#f8fafc')
         ctx.fillRect(miniQrX - 10, qrStartY - 10, qrSize + 20, qrSize + 20)
-
-        // 绘制小程序码
         ctx.drawImage(qrcodeImageUrl, miniQrX, qrStartY, qrSize, qrSize)
-
-        // 提示文字（更清晰的字体）
         ctx.setFillStyle('#64748b')
         ctx.font = 'bold 22px sans-serif'
         ctx.setTextAlign('center')
-        ctx.fillText('查看更多', miniQrX + qrSize / 2, qrStartY + qrSize + 25)
+        ctx.fillText('查看更多', miniQrX + qrSize / 2, qrStartY + qrSize + 18)
       } catch (e) {
         console.error('绘制小程序码失败:', e)
       }

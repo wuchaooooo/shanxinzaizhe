@@ -17,7 +17,8 @@ Page({
     showImagePreview: false,
     previewCurrentIndex: 0,
     isDeleting: false,
-    isGeneratingPoster: false
+    isGeneratingPoster: false,
+    mapClickDisabled: false  // 临时禁用地图点击，防止点击穿透
   },
 
   onLoad(options) {
@@ -100,26 +101,16 @@ Page({
   },
 
   // 页面显示时重新加载数据
-  async onShow() {
+  onShow() {
     // 首次显示时不刷新（onLoad 已经加载过了）
     if (this.isFirstShow) {
       this.isFirstShow = false
       return
     }
 
-    console.log('Event Detail 页面显示，重新加载数据')
+    // 直接从 globalData 重新加载，不调用 preloadFeishuEvents
+    // 避免提前更新缓存导致返回活动列表时检测不到变更
     if (this.eventId) {
-      // 刷新活动数据
-      const app = getApp()
-      if (app.preloadFeishuEvents) {
-        try {
-          await app.preloadFeishuEvents()
-          console.log('活动数据刷新完成')
-        } catch (error) {
-          console.error('刷新活动数据失败:', error)
-        }
-      }
-      // 重新加载当前活动数据
       this.loadEventData(this.eventId)
     }
   },
@@ -339,11 +330,19 @@ Page({
       })
     }
 
-    // 如果活动有图片，但还没下载完成，下载剩余的图片
+    // 如果活动有图片，但还没下载完成，或者有签到码未下载，则触发下载
     if (event.imageKeys && event.imageKeys.length > 0) {
       const downloadedCount = event.images ? event.images.length : 0
-      if (downloadedCount < event.imageKeys.length) {
-        console.log(`详情页：需要下载剩余图片，已有 ${downloadedCount} 张，共 ${event.imageKeys.length} 张`)
+      const needsImages = downloadedCount < event.imageKeys.length
+      const needsCheckinQrcode = event.checkinQrcodeKey && !event.checkinQrcode
+
+      if (needsImages || needsCheckinQrcode) {
+        if (needsImages) {
+          console.log(`详情页：需要下载剩余图片，已有 ${downloadedCount} 张，共 ${event.imageKeys.length} 张`)
+        }
+        if (needsCheckinQrcode) {
+          console.log(`详情页：需要下载签到码`)
+        }
 
         // 检查是否已经在下载中（防止重复下载）
         if (!this.isDownloadingImages) {
@@ -379,10 +378,18 @@ Page({
         console.log(`[${name}] 从缓存读取完整图片数组，共 ${cachedEvent.images.length} 张`)
 
         // 一次性更新页面显示
-        this.setData({
+        const updateData = {
           'event.images': cachedEvent.images,
           'event.image': cachedEvent.images[0]
-        })
+        }
+
+        // 如果有签到码，也更新签到码
+        if (cachedEvent.checkinQrcode) {
+          updateData['event.checkinQrcode'] = cachedEvent.checkinQrcode
+          console.log(`[${name}] 更新签到码: ${cachedEvent.checkinQrcode}`)
+        }
+
+        this.setData(updateData)
 
         // 同步更新 globalData
         const app = getApp()
@@ -392,6 +399,9 @@ Page({
           globalEvents[globalIdx].images = cachedEvent.images
           globalEvents[globalIdx].imagePaths = cachedEvent.images
           globalEvents[globalIdx].image = cachedEvent.images[0]
+          if (cachedEvent.checkinQrcode) {
+            globalEvents[globalIdx].checkinQrcode = cachedEvent.checkinQrcode
+          }
         }
       }
 
@@ -470,6 +480,12 @@ Page({
 
   // 打开导航
   onNavigate() {
+    // 防止点击穿透：如果地图点击被临时禁用，则忽略
+    if (this.data.mapClickDisabled) {
+      console.log('地图点击被临时禁用，忽略导航请求')
+      return
+    }
+
     const { event } = this.data
     if (!event.latitude || !event.longitude) {
       wx.showToast({
@@ -490,12 +506,20 @@ Page({
 
   // 显示操作菜单
   onShowActionSheet() {
-    this.setData({ showActionSheet: true })
+    this.setData({
+      showActionSheet: true,
+      mapClickDisabled: true  // 显示菜单时禁用地图点击
+    })
   },
 
   // 隐藏操作菜单
   onHideActionSheet() {
     this.setData({ showActionSheet: false })
+
+    // 延迟500ms后重新启用地图点击，防止点击穿透
+    setTimeout(() => {
+      this.setData({ mapClickDisabled: false })
+    }, 500)
   },
 
   // 编辑活动
@@ -593,10 +617,22 @@ Page({
     const { isGeneratingPoster } = this.data
     if (isGeneratingPoster) return // 防止重复点击
 
-    this.setData({ showActionSheet: false, isGeneratingPoster: true })
+    // 先关闭操作菜单并禁用地图点击
+    this.setData({
+      showActionSheet: false,
+      mapClickDisabled: true
+    })
+
+    // 延迟执行后续逻辑，防止点击穿透到地图
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    this.setData({ isGeneratingPoster: true })
     const { event, organizerData } = this.data
     if (!event) {
-      this.setData({ isGeneratingPoster: false })
+      this.setData({
+        isGeneratingPoster: false,
+        mapClickDisabled: false  // 重新启用地图点击
+      })
       wx.showToast({
         title: '活动数据加载中',
         icon: 'none'
@@ -608,7 +644,7 @@ Page({
     const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
 
     if (organizerData && organizerData.employeeId) {
-      wx.showLoading({ title: '准备中...', mask: true })
+      // 移除 wx.showLoading，使用弹窗中的骨架图代替
 
       try {
         const qrcodePath = await ensureQrcodeDownloaded(organizerData.employeeId)
@@ -619,10 +655,10 @@ Page({
           console.warn('组织者二维码下载失败，将使用默认二维码')
         }
 
-        wx.hideLoading()
+        // 移除 wx.hideLoading
       } catch (error) {
         console.error('下载组织者二维码失败:', error)
-        wx.hideLoading()
+        // 移除 wx.hideLoading
         // 继续生成海报，即使二维码下载失败
       }
     }
@@ -631,11 +667,17 @@ Page({
       generateEventPoster(this, 'posterCanvas', event)
       // 海报生成成功后会自动设置 showPoster，在那时重置 loading
       setTimeout(() => {
-        this.setData({ isGeneratingPoster: false })
+        this.setData({
+          isGeneratingPoster: false,
+          mapClickDisabled: false  // 重新启用地图点击
+        })
       }, 1000)
     } catch (error) {
       console.error('生成海报失败:', error)
-      this.setData({ isGeneratingPoster: false })
+      this.setData({
+        isGeneratingPoster: false,
+        mapClickDisabled: false  // 重新启用地图点击
+      })
       wx.showToast({
         title: '生成失败',
         icon: 'none'
@@ -719,9 +761,20 @@ Page({
 
     const { event } = this.data
     return {
-      title: `${event.type} - ${event.name || '精彩活动'}`,
+      title: event.name || '精彩活动',
       path: `/pages/event-detail/event-detail?eventId=${event.id}&type=${event.type}&shareFrom=${shareFrom}`,
       imageUrl: event.image || ''
+    }
+  },
+
+  // 预览签到码
+  onPreviewCheckinQrcode() {
+    const { event } = this.data
+    if (event.checkinQrcode) {
+      wx.previewImage({
+        urls: [event.checkinQrcode],
+        current: event.checkinQrcode
+      })
     }
   }
 })

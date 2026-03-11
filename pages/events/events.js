@@ -289,39 +289,24 @@ Page({
           this.updateTabStatistics()
         })
       } else {
-        // 不需要重建列表：只更新有变化的文字数据
+        // 不需要重建列表：更新文字数据，保留图片和 loaded 状态
+        // 监听器只在 lastModified 变化时才被调用，无需再做字段级比对
         const updates = {}
-        let hasChanges = false
-
         eventsData.forEach((event, i) => {
           const curr = currentEvents[i]
           if (!curr) return
-
-          // 检查文字数据是否有变化
-          if (curr.name !== event.name ||
-              curr.organizer !== event.organizer ||
-              curr.time !== event.time ||
-              curr.type !== event.type) {
-            hasChanges = true
-            // 更新文字数据，保留图片和 loaded 状态
-            updates[`events[${i}]`] = {
-              ...event,
-              image: curr.image,
-              loaded: curr.loaded,
-              organizerData: this.findOrganizerData(event.organizer)
-            }
+          updates[`events[${i}]`] = {
+            ...event,
+            image: curr.image,
+            loaded: curr.loaded,
+            organizerData: this.findOrganizerData(event.organizer)
           }
         })
-
-        if (hasChanges) {
-          console.log('[Events] 更新文字数据')
-          this.setData(updates, () => {
-            this.filterEvents()
-            this.updateTabStatistics()
-          })
-        } else {
-          console.log('[Events] 数据无变化')
-        }
+        console.log('[Events] 更新文字数据')
+        this.setData(updates, () => {
+          this.filterEvents()
+          this.updateTabStatistics()
+        })
       }
     }
     if (!app.globalData.eventsDataListeners) {

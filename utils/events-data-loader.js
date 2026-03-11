@@ -81,6 +81,9 @@ function transformFeishuEventRecord(record, eventType) {
   const imageKeyStr = fields[mapping.imageKey] || ''
   const imageKeys = imageKeyStr ? imageKeyStr.split(',').map(k => k.trim()).filter(k => k) : []
 
+  // 处理签到码 imageKey
+  const checkinQrcodeKey = fields[mapping.checkinQrcodeKey] || ''
+
   const transformed = {
     id: record.record_id, // 使用 record_id 作为唯一标识
     name: fields[mapping.name] || '', // 活动名称
@@ -94,6 +97,8 @@ function transformFeishuEventRecord(record, eventType) {
     imageKey: imageKeys[0] || '', // 第一张图片的 key（兼容旧逻辑）
     images: [], // 稍后填充本地路径数组
     image: '', // 第一张图片的本地路径（兼容旧逻辑）
+    checkinQrcodeKey: checkinQrcodeKey, // 签到码 image key
+    checkinQrcode: '', // 签到码本地路径（稍后填充）
     address: fields[mapping.address] || '', // 活动地址
     latitude: fields[mapping.latitude] ? parseFloat(fields[mapping.latitude]) : null, // 地址纬度
     longitude: fields[mapping.longitude] ? parseFloat(fields[mapping.longitude]) : null, // 地址经度
@@ -131,6 +136,13 @@ function getEventsFromCache() {
     if (event.image && event.image.includes('tmp')) {
       event.image = ''
       event.images = []
+    }
+
+    // 恢复签到码路径
+    if (entry.checkinQrcodePath && validateFilePath(entry.checkinQrcodePath)) {
+      event.checkinQrcode = entry.checkinQrcodePath
+    } else {
+      event.checkinQrcode = ''
     }
 
     return event
@@ -505,6 +517,50 @@ async function downloadEventImages(event, onImageReady, downloadAll = false, sta
       event.loaded = finalImagePaths.length >= imageKeys.length
     }
   }
+
+  // 处理签到码图片（仅在 downloadAll 为 true 时下载，即详情页）
+  if (downloadAll && event.checkinQrcodeKey) {
+    const cachedCheckinQrcodePath = cache[id]?.checkinQrcodePath
+    const cachedCheckinQrcodeKey = cache[id]?.checkinQrcodeKey
+    let checkinQrcodePath = null
+
+    // 检查缓存是否有效
+    let useCache = false
+    if (cachedCheckinQrcodePath && cachedCheckinQrcodeKey === event.checkinQrcodeKey) {
+      try {
+        const fs = wx.getFileSystemManager()
+        fs.accessSync(cachedCheckinQrcodePath)
+        useCache = true
+        checkinQrcodePath = cachedCheckinQrcodePath
+        console.log(`[${name}] 签到码使用缓存: ${cachedCheckinQrcodePath}`)
+      } catch (e) {
+        console.log(`[${name}] 签到码缓存文件不存在，需要重新下载`)
+      }
+    }
+
+    // 如果缓存无效，重新下载
+    if (!useCache) {
+      try {
+        checkinQrcodePath = await downloadImageByKey(event.checkinQrcodeKey, 'event', `${id}_checkin`)
+        console.log(`[${name}] 签到码下载完成: ${checkinQrcodePath}`)
+
+        // 更新缓存
+        if (!cache[id]) {
+          cache[id] = { data: event }
+        }
+        cache[id].checkinQrcodePath = checkinQrcodePath
+        cache[id].checkinQrcodeKey = event.checkinQrcodeKey
+        saveEventsCache(cache)
+      } catch (error) {
+        console.error(`[${name}] 签到码下载失败:`, error)
+      }
+    }
+
+    // 更新 event 对象
+    if (checkinQrcodePath) {
+      event.checkinQrcode = checkinQrcodePath
+    }
+  }
 }
 
 /**
@@ -552,5 +608,6 @@ module.exports = {
   fetchFeishuEventsText,
   downloadEventImagesBackground,
   downloadEventImages,  // 导出供详情页使用
-  downloadImageByKey    // 导出供详情页下载剩余图片使用
+  downloadImageByKey,   // 导出供详情页下载剩余图片使用
+  calculateEventStatus  // 导出供编辑页保存后本地更新状态使用
 }

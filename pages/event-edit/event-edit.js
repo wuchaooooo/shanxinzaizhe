@@ -1,5 +1,5 @@
 // pages/event-edit/event-edit.js
-const { getEventsDataSync } = require('../../utils/events-data-loader.js')
+const { getEventsDataSync, getEventsFromCache } = require('../../utils/events-data-loader.js')
 const feishuApi = require('../../utils/feishu-api.js')
 
 Page({
@@ -7,14 +7,19 @@ Page({
     isEdit: false,
     eventId: '',
     originalImageKeys: [], // 保存原始的 imageKeys 数组
+    originalCheckinQrcodeKey: '', // 保存原始的签到码 key
     formData: {
       name: '',
       type: '星享会',
       organizer: '',
       time: '',
+      endTime: '', // 结束时间
       images: [], // 改为数组
+      checkinQrcode: '', // 签到码图片
       displayDate: '',
       displayTime: '',
+      displayEndDate: '', // 结束日期
+      displayEndTime: '', // 结束时间
       address: '',
       latitude: null,
       longitude: null
@@ -97,6 +102,7 @@ Page({
     }
 
     const startTime = formatTimeForPicker(event.time)
+    const endTime = formatTimeForPicker(event.endTime)
 
     console.log('编辑页加载完成，最终表单数据:', this.data.formData)
 
@@ -104,16 +110,31 @@ Page({
     const images = event.images || (event.image ? [event.image] : [])
     const imageKeys = event.imageKeys || (event.imageKey ? [event.imageKey] : [])
 
+    // 如果签到码路径为空但有 key，尝试从缓存补充
+    let checkinQrcode = event.checkinQrcode || ''
+    if (!checkinQrcode && event.checkinQrcodeKey) {
+      const cachedEvents = getEventsFromCache()
+      const cachedEvent = cachedEvents.find(e => e.id === eventId)
+      if (cachedEvent && cachedEvent.checkinQrcode) {
+        checkinQrcode = cachedEvent.checkinQrcode
+      }
+    }
+
     this.setData({
       originalImageKeys: imageKeys, // 保存原始的 imageKeys 数组
+      originalCheckinQrcodeKey: event.checkinQrcodeKey || '', // 保存原始签到码 key
       formData: {
         name: event.name || '',
         type: event.type,
         organizer: event.organizer,
         time: startTime.datetime,
+        endTime: endTime.datetime,
         displayDate: startTime.date,
         displayTime: startTime.time,
+        displayEndDate: endTime.date,
+        displayEndTime: endTime.time,
         images: images,
+        checkinQrcode: checkinQrcode, // 签到码图片（优先用缓存路径）
         address: event.address || '',
         latitude: event.latitude || null,
         longitude: event.longitude || null
@@ -154,6 +175,11 @@ Page({
       'formData.time': datetime
     })
     console.log('合并后的开始时间:', datetime)
+
+    // 自动设置结束时间为开始时间+2小时（仅在新建模式且结束时间未设置时）
+    if (!this.data.isEdit && !this.data.formData.endTime) {
+      this.setDefaultEndTime(datetime)
+    }
   },
 
   // 时间选择
@@ -176,6 +202,70 @@ Page({
       'formData.time': datetime
     })
     console.log('合并后的开始时间:', datetime)
+
+    // 自动设置结束时间为开始时间+2小时（仅在新建模式且结束时间未设置时）
+    if (!this.data.isEdit && !this.data.formData.endTime) {
+      this.setDefaultEndTime(datetime)
+    }
+  },
+
+  // 设置默认结束时间（开始时间+2小时）
+  setDefaultEndTime(startDatetime) {
+    const startTime = new Date(startDatetime)
+    const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000) // +2小时
+
+    const year = endTime.getFullYear()
+    const month = String(endTime.getMonth() + 1).padStart(2, '0')
+    const day = String(endTime.getDate()).padStart(2, '0')
+    const hour = String(endTime.getHours()).padStart(2, '0')
+    const minute = String(endTime.getMinutes()).padStart(2, '0')
+
+    const endDate = `${year}-${month}-${day}`
+    const endTimeStr = `${hour}:${minute}`
+    const endDatetime = `${endDate} ${endTimeStr}`
+
+    this.setData({
+      'formData.displayEndDate': endDate,
+      'formData.displayEndTime': endTimeStr,
+      'formData.endTime': endDatetime
+    })
+    console.log('自动设置结束时间:', endDatetime)
+  },
+
+  // 结束日期选择
+  onEndDateChange(e) {
+    console.log('结束日期选择:', e.detail.value)
+    const date = e.detail.value
+    const time = this.data.formData.displayEndTime || '18:00'
+    const datetime = `${date} ${time}`
+
+    this.setData({
+      'formData.displayEndDate': date,
+      'formData.endTime': datetime
+    })
+    console.log('合并后的结束时间:', datetime)
+  },
+
+  // 结束时间选择
+  onEndTimeChange(e) {
+    console.log('结束时间选择:', e.detail.value)
+    const time = e.detail.value
+    const date = this.data.formData.displayEndDate
+
+    if (!date) {
+      wx.showToast({
+        title: '请先选择结束日期',
+        icon: 'none'
+      })
+      return
+    }
+
+    const datetime = `${date} ${time}`
+    this.setData({
+      'formData.displayEndTime': time,
+      'formData.endTime': datetime
+    })
+    console.log('合并后的结束时间:', datetime)
   },
 
   // 选择地址
@@ -184,7 +274,7 @@ Page({
       success: (res) => {
         console.log('选择地址成功:', res)
         this.setData({
-          'formData.address': res.address + res.name,
+          'formData.address': res.name,  // 只保存位置名称（简称）
           'formData.latitude': res.latitude,
           'formData.longitude': res.longitude
         })
@@ -252,6 +342,28 @@ Page({
     })
   },
 
+  // 选择签到码
+  onChooseCheckinQrcode() {
+    wx.chooseImage({
+      count: 1,
+      sizeType: ['compressed'],
+      sourceType: ['album', 'camera'],
+      success: (res) => {
+        this.setData({
+          'formData.checkinQrcode': res.tempFilePaths[0]
+        })
+      }
+    })
+  },
+
+  // 删除签到码
+  onDeleteCheckinQrcode() {
+    this.setData({
+      'formData.checkinQrcode': '',
+      originalCheckinQrcodeKey: '' // 清空原始 key
+    })
+  },
+
   // 表单验证
   validateForm() {
     const { formData } = this.data
@@ -267,7 +379,20 @@ Page({
     }
 
     if (!formData.time) {
-      wx.showToast({ title: '请选择活动时间', icon: 'none' })
+      wx.showToast({ title: '请选择开始时间', icon: 'none' })
+      return false
+    }
+
+    if (!formData.endTime) {
+      wx.showToast({ title: '请选择结束时间', icon: 'none' })
+      return false
+    }
+
+    // 验证结束时间必须晚于开始时间
+    const startTime = new Date(formData.time).getTime()
+    const endTime = new Date(formData.endTime).getTime()
+    if (endTime <= startTime) {
+      wx.showToast({ title: '结束时间必须晚于开始时间', icon: 'none' })
       return false
     }
 
@@ -303,7 +428,7 @@ Page({
 
       // 构建飞书字段（只包含实际存在的字段）
       const startTime = new Date(formData.time).getTime()
-      const endTime = startTime + (2 * 60 * 60 * 1000) // 开始时间 + 2小时
+      const endTime = new Date(formData.endTime).getTime()
 
       const fields = {
         '活动主题': formData.name || '',
@@ -400,6 +525,47 @@ Page({
         console.log('清空 imageKeys')
       }
 
+      // 处理签到码上传（仅星享会、午餐会、客户活动）
+      console.log('开始处理签到码，活动类型:', formData.type)
+      console.log('签到码数据:', formData.checkinQrcode)
+
+      if (formData.type === '星享会' || formData.type === '午餐会' || formData.type === '客户活动') {
+        console.log('活动类型匹配，可以上传签到码')
+        if (formData.checkinQrcode) {
+          console.log('有签到码需要处理')
+          // 如果是新上传的签到码（临时路径）
+          if (formData.checkinQrcode.includes('tmp')) {
+            console.log('检测到新上传的签到码，开始上传到飞书')
+            try {
+              wx.showLoading({ title: '上传签到码中...' })
+              const checkinQrcodeKey = await feishuApi.uploadImage(formData.checkinQrcode)
+              fields['活动签到码链接_飞书_image_key'] = checkinQrcodeKey
+              console.log('签到码上传成功，image_key:', checkinQrcodeKey)
+              wx.hideLoading()
+            } catch (uploadError) {
+              console.error('签到码上传失败:', uploadError)
+              wx.hideLoading()
+              wx.showToast({
+                title: '签到码上传失败',
+                icon: 'none'
+              })
+              this.setData({ saving: false })
+              return
+            }
+          } else {
+            console.log('使用原有的签到码 key:', this.data.originalCheckinQrcodeKey)
+            // 使用原有的签到码 key
+            fields['活动签到码链接_飞书_image_key'] = this.data.originalCheckinQrcodeKey
+          }
+        } else {
+          console.log('没有签到码，设置为空字符串')
+          // 清空签到码
+          fields['活动签到码链接_飞书_image_key'] = ''
+        }
+      } else {
+        console.log('活动类型不匹配，不处理签到码')
+      }
+
       console.log('飞书字段:', fields)
       console.log('飞书字段详情:', JSON.stringify(fields, null, 2))
 
@@ -416,6 +582,24 @@ Page({
         console.log('更新记录:', eventId)
         const result = await feishuApi.updateRecord(eventId, fields, { appToken, tableId })
         console.log('更新结果:', result)
+
+        // 直接更新 globalData，让详情页 onShow 能读到新数据
+        const { calculateEventStatus } = require('../../utils/events-data-loader.js')
+        const newStartTime = new Date(formData.time).toISOString()
+        const newEndTime = new Date(formData.endTime).toISOString()
+        const newStatus = calculateEventStatus(newStartTime, newEndTime)
+        const globalEvents = app.globalData.eventsData || []
+        const globalIdx = globalEvents.findIndex(e => e.id === eventId)
+        if (globalIdx !== -1) {
+          globalEvents[globalIdx].name = formData.name
+          globalEvents[globalIdx].organizer = formData.organizer
+          globalEvents[globalIdx].time = newStartTime
+          globalEvents[globalIdx].endTime = newEndTime
+          globalEvents[globalIdx].status = newStatus
+          globalEvents[globalIdx].address = formData.address || globalEvents[globalIdx].address
+          globalEvents[globalIdx].latitude = formData.latitude
+          globalEvents[globalIdx].longitude = formData.longitude
+        }
       } else {
         // 创建记录
         console.log('创建记录')
@@ -423,11 +607,7 @@ Page({
         console.log('创建结果:', result)
       }
 
-      // 刷新数据
-      if (app.preloadFeishuEvents) {
-        console.log('刷新活动数据')
-        await app.preloadFeishuEvents()
-      }
+      wx.hideLoading()
 
       // 显示成功提示并立即返回
       wx.showToast({

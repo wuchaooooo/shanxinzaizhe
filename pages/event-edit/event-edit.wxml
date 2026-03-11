@@ -49,7 +49,7 @@
       />
     </view>
 
-    <!-- 活动时间 -->
+    <!-- 开始时间 -->
     <view class="form-item">
       <view class="form-label">
         <text class="label-text">开始时间</text>
@@ -79,6 +79,36 @@
       </view>
     </view>
 
+    <!-- 结束时间 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">结束时间</text>
+        <text class="required">*</text>
+      </view>
+      <view class="time-picker-row">
+        <picker
+          class="time-picker-half"
+          mode="date"
+          value="{{formData.displayEndDate}}"
+          bindchange="onEndDateChange"
+        >
+          <view class="form-picker">
+            <text class="{{formData.displayEndDate ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayEndDate || '请选择日期'}}</text>
+          </view>
+        </picker>
+        <picker
+          class="time-picker-half"
+          mode="time"
+          value="{{formData.displayEndTime}}"
+          bindchange="onEndTimeChange"
+        >
+          <view class="form-picker">
+            <text class="{{formData.displayEndTime ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayEndTime || '请选择时间'}}</text>
+          </view>
+        </picker>
+      </view>
+    </view>
+
     <!-- 活动地址（销售门诊和销售建设不显示） -->
     <view class="form-item" wx:if="{{formData.type !== '销售门诊' && formData.type !== '销售建设'}}">
       <view class="form-label">
@@ -87,6 +117,36 @@
       <view class="location-picker" bindtap="onChooseLocation">
         <text class="location-text">{{formData.address || '点击选择地址'}}</text>
         <text class="location-icon">📍</text>
+      </view>
+    </view>
+
+    <!-- 活动签到码（仅星享会、午餐会、客户活动显示） -->
+    <view class="form-item" wx:if="{{formData.type === '星享会' || formData.type === '午餐会' || formData.type === '客户活动'}}">
+      <view class="form-label">
+        <text class="label-text">活动签到码</text>
+        <text class="label-hint">（可选）</text>
+      </view>
+      <view class="checkin-qrcode-upload">
+        <!-- 已上传的签到码 -->
+        <view class="checkin-qrcode-item" wx:if="{{formData.checkinQrcode}}">
+          <image
+            class="checkin-qrcode-image"
+            src="{{formData.checkinQrcode}}"
+            mode="aspectFit"
+          ></image>
+          <view class="checkin-qrcode-delete" bindtap="onDeleteCheckinQrcode">
+            <text class="delete-icon">✕</text>
+          </view>
+        </view>
+        <!-- 上传按钮 -->
+        <view
+          wx:if="{{!formData.checkinQrcode}}"
+          class="checkin-qrcode-upload-btn"
+          bindtap="onChooseCheckinQrcode"
+        >
+          <text class="upload-icon">📷</text>
+          <text class="upload-text">上传签到码</text>
+        </view>
       </view>
     </view>
 
