@@ -566,9 +566,17 @@ Page({
       if (formData.avatarImage && formData.avatarImage.isNew) {
         wx.showLoading({ title: '上传头像中...' })
         try {
+          // 如果有旧的 cloudFileID，先删除旧图片
+          if (formData.avatarImage.oldCloudFileID) {
+            const { deleteFromCloudStorage } = require('../../utils/cloud-storage-uploader.js')
+            await deleteFromCloudStorage(formData.avatarImage.oldCloudFileID)
+            console.log('[云存储] 已删除旧头像')
+          }
+
           const cloudResult = await uploadToCloudStorage(
             formData.avatarImage.path,
-            `images/avatar/${Date.now()}_avatar.png`
+            `images/avatar/${Date.now()}_avatar.png`,
+            { employeeId: finalEmployeeId }
           )
           if (cloudResult.success) {
             // 保存为 JSON 数组格式（单张图片也用数组）
@@ -595,9 +603,17 @@ Page({
       if (formData.qrcodeImage && formData.qrcodeImage.isNew) {
         wx.showLoading({ title: '上传二维码中...' })
         try {
+          // 如果有旧的 cloudFileID，先删除旧图片
+          if (formData.qrcodeImage.oldCloudFileID) {
+            const { deleteFromCloudStorage } = require('../../utils/cloud-storage-uploader.js')
+            await deleteFromCloudStorage(formData.qrcodeImage.oldCloudFileID)
+            console.log('[云存储] 已删除旧二维码')
+          }
+
           const cloudResult = await uploadToCloudStorage(
             formData.qrcodeImage.path,
-            `images/avatar/${Date.now()}_qrcode.png`
+            `images/qrcode/${Date.now()}_qrcode.png`,
+            { employeeId: finalEmployeeId }
           )
           if (cloudResult.success) {
             // 保存为 JSON 数组格式（单张图片也用数组）

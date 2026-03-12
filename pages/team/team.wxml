@@ -67,7 +67,7 @@
     <view class="partner-item {{enableItemAnimation ? 'item-animating' : ''}}" style="{{enableItemAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}" wx:for="{{filteredPartners}}" wx:key="employeeId" wx:for-index="index" bindtap="{{item.loaded ? 'onPartnerTap' : ''}}" data-name="{{item.name}}">
       <view class="partner-avatar {{!item.loaded ? 'partner-avatar-loading' : 'partner-avatar-loaded'}}">
         <view class="partner-avatar-img-wrapper">
-          <image class="partner-avatar-img {{item.loaded ? 'partner-avatar-img-show' : ''}}" src="{{item.image}}" mode="aspectFill" bindload="onImageLoad" binderror="onImageError" data-name="{{item.name}}"></image>
+          <image class="partner-avatar-img {{item.loaded ? 'partner-avatar-img-show' : ''}}" src="{{item.image}}" mode="aspectFill" binderror="onImageError" data-name="{{item.name}}"></image>
         </view>
       </view>
       <view class="partner-info">
