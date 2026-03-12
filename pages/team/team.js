@@ -302,8 +302,10 @@ Page({
       const idx = partners.findIndex(p => p.employeeId === employeeId)
       if (idx === -1) return
 
-      // 检查是否已经是这个路径（避免重复更新）
-      if (partners[idx].image === path) return
+      // 防御性检查：如果已经是这个路径且已标记为 loaded，跳过
+      if (partners[idx].image === path && partners[idx].loaded) {
+        return
+      }
 
       // 同时更新 globalData，确保其他页面能获取到最新数据
       const globalPartners = app.globalData.partnersData || []
@@ -324,7 +326,7 @@ Page({
         this._pendingUpdates[`filteredPartners[${fidx}].loaded`] = true
       }
 
-      // 防抖：100ms 内的更新合并为一次 setData
+      // 防抖：50ms 内的更新合并为一次 setData
       this._scheduleUpdate()
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
@@ -567,69 +569,12 @@ Page({
     const app = getApp()
 
     // 只在首次显示时同步一次，避免多次调用导致闪烁
-    // 如果是从其他页面返回，不需要重复同步（imageReadyListeners 已经在实时更新）
     if (!this._hasShownOnce) {
       this._syncDownloadedImages()
       this._hasShownOnce = true
     }
 
-    // 检查监听器是否已注册，如果没有则重新注册
-    if (!this._partnersDataCb) {
-      console.log('[Team] onShow: 监听器未注册，重新注册')
-      // 重新注册 partnersDataListeners
-      this._partnersDataCb = () => {
-        console.log('[Team] 收到团队数据刷新通知')
-        this.loadFeishuData()
-      }
-      app.globalData.partnersDataListeners.push(this._partnersDataCb)
-    }
-
-    if (!this._imageReadyCb) {
-      console.log('[Team] onShow: 图片监听器未注册，重新注册')
-      // 重新注册 imageReadyListeners
-      this._imageReadyCb = (type, employeeId, path) => {
-        const partners = this.data.partners
-        const idx = partners.findIndex(p => p.employeeId === employeeId)
-        if (idx === -1) return
-
-        const globalPartners = app.globalData.partnersData || []
-        const globalIdx = globalPartners.findIndex(p => p.employeeId === employeeId)
-        if (globalIdx !== -1) {
-          if (type === 'avatar') {
-            globalPartners[globalIdx].image = path
-          } else if (type === 'qrcode') {
-            globalPartners[globalIdx].qrcode = path
-          }
-          app.globalData.partnersData = globalPartners
-        }
-
-        const updates = {}
-        if (type === 'avatar') {
-          if (partners[idx].image === path) return
-          updates[`partners[${idx}].image`] = path
-          updates[`partners[${idx}].loaded`] = true
-          const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
-          if (fidx !== -1) {
-            updates[`filteredPartners[${fidx}].image`] = path
-            updates[`filteredPartners[${fidx}].loaded`] = true
-          }
-          const updatedPartners = [...partners]
-          updatedPartners[idx] = { ...updatedPartners[idx], image: path, loaded: true }
-          updates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
-        } else if (type === 'qrcode') {
-          if (partners[idx].qrcode === path) return
-          updates[`partners[${idx}].qrcode`] = path
-          const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
-          if (fidx !== -1) {
-            updates[`filteredPartners[${fidx}].qrcode`] = path
-          }
-        }
-
-        this.setData(updates)
-      }
-      app.globalData.imageReadyListeners.push(this._imageReadyCb)
-    }
-
+    // 预加载数据（不重新注册监听器）
     app.preloadFeishuData()
   },
 
@@ -818,12 +763,11 @@ Page({
     const currentUser = app.globalData.currentUser
     if (!currentUser) return
 
-    // 确保二维码已下载（使用统一接口）
-    const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
-
+    // 确保二维码已下载（使用统一的 getImage 接口）
     if (currentUser.cloudQrcodeFileID) {
       try {
-        const qrcodePath = await ensureQrcodeDownloaded(currentUser.employeeId)
+        const { getImage } = require('../../utils/image-cache.js')
+        const qrcodePath = await getImage(currentUser.cloudQrcodeFileID)
 
         if (qrcodePath) {
           currentUser.qrcode = qrcodePath
