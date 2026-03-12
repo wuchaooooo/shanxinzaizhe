@@ -360,7 +360,7 @@ Page({
     // 设置下载标志，防止并发下载
     this.isDownloadingImages = true
 
-    const { downloadEventImages, getEventsFromCache } = require('../../utils/events-data-loader.js')
+    const { downloadEventImages } = require('../../utils/events-data-loader.js')
     const { id, name } = event
 
     console.log(`[${name}] 开始下载所有图片（利用缓存避免重复下载）`)
@@ -370,23 +370,21 @@ Page({
       // startIndex = 0 确保检查所有图片，包括第一张
       await downloadEventImages(event, null, true, 0)
 
-      // 下载完成后，从缓存中读取完整的图片数组
-      const cachedEvents = getEventsFromCache()
-      const cachedEvent = cachedEvents.find(e => e.id === id)
-
-      if (cachedEvent && cachedEvent.images && cachedEvent.images.length > 0) {
-        console.log(`[${name}] 从缓存读取完整图片数组，共 ${cachedEvent.images.length} 张`)
+      // downloadEventImages 已经直接更新了 event.images
+      // 直接使用 event 对象的数据更新页面
+      if (event.images && event.images.length > 0) {
+        console.log(`[${name}] 更新页面显示，共 ${event.images.length} 张图片`)
 
         // 一次性更新页面显示
         const updateData = {
-          'event.images': cachedEvent.images,
-          'event.image': cachedEvent.images[0]
+          'event.images': event.images,
+          'event.image': event.images[0]
         }
 
         // 如果有签到码，也更新签到码
-        if (cachedEvent.checkinQrcode) {
-          updateData['event.checkinQrcode'] = cachedEvent.checkinQrcode
-          console.log(`[${name}] 更新签到码: ${cachedEvent.checkinQrcode}`)
+        if (event.checkinQrcode) {
+          updateData['event.checkinQrcode'] = event.checkinQrcode
+          console.log(`[${name}] 更新签到码: ${event.checkinQrcode}`)
         }
 
         this.setData(updateData)
@@ -396,11 +394,11 @@ Page({
         const globalEvents = app.globalData.eventsData || []
         const globalIdx = globalEvents.findIndex(e => e.id === id)
         if (globalIdx !== -1) {
-          globalEvents[globalIdx].images = cachedEvent.images
-          globalEvents[globalIdx].imagePaths = cachedEvent.images
-          globalEvents[globalIdx].image = cachedEvent.images[0]
-          if (cachedEvent.checkinQrcode) {
-            globalEvents[globalIdx].checkinQrcode = cachedEvent.checkinQrcode
+          globalEvents[globalIdx].images = event.images
+          globalEvents[globalIdx].imagePaths = event.images
+          globalEvents[globalIdx].image = event.images[0]
+          if (event.checkinQrcode) {
+            globalEvents[globalIdx].checkinQrcode = event.checkinQrcode
           }
         }
       }
