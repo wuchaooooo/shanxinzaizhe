@@ -69,16 +69,10 @@ function getInitialPartners() {
     // 过滤掉未完善的资料，只显示有 employeeId 的
     const completeProfiles = filterCompleteProfiles(cached)
     const partners = completeProfiles.map(partner => {
-      // 改进逻辑：
-      // 1. 如果有有效的 image 路径（非空字符串），标记为 loaded
-      // 2. 如果没有 cloudImageFileID，说明没有图片要下载，也标记为 loaded
-      // 3. 其他情况（有 cloudImageFileID 但 image 为空），标记为未加载
-      const hasValidImage = partner.image && partner.image.length > 0
-      const hasNoCloudFileID = !partner.cloudImageFileID
-
+      // 修改：初始都设为 false，等待图片下载或确认没有图片
       return processPartnerData({
         ...partner,
-        loaded: hasValidImage || hasNoCloudFileID
+        loaded: false
       })
     })
 
@@ -166,6 +160,18 @@ Page({
       // 使用 employeeId 匹配（更可靠）
       const globalPartner = globalPartners.find(p => p.employeeId === partner.employeeId)
       if (!globalPartner) return
+
+      // 新增：如果没有 cloudImageFileID，说明没有图片要下载，立即标记为 loaded
+      if (!globalPartner.cloudImageFileID && !partner.loaded) {
+        updates[`partners[${idx}].loaded`] = true
+        hasUpdates = true
+
+        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
+        if (fidx !== -1) {
+          updates[`filteredPartners[${fidx}].loaded`] = true
+        }
+        return  // 跳过后续的图片同步逻辑
+      }
 
       // 同步头像 - 改进逻辑
       // 1. 如果 globalPartner.image 存在且不同，直接同步
@@ -268,16 +274,10 @@ Page({
       const completeProfiles = filterCompleteProfiles(partnersData)
       const sortedData = sortByJoinDate([...completeProfiles])
       const partners = sortedData.map(partner => {
-        // 改进逻辑：
-        // 1. 如果有有效的 image 路径（非空字符串），标记为 loaded
-        // 2. 如果没有 cloudImageFileID，说明没有图片要下载，也标记为 loaded
-        // 3. 其他情况（有 cloudImageFileID 但 image 为空），标记为未加载
-        const hasValidImage = partner.image && partner.image.length > 0
-        const hasNoCloudFileID = !partner.cloudImageFileID
-
+        // 修改：初始都设为 false，等待图片下载或确认没有图片
         return processPartnerData({
           ...partner,
-          loaded: hasValidImage || hasNoCloudFileID
+          loaded: false
         })
       })
       this.setData({
@@ -383,10 +383,14 @@ Page({
           const existingImage = imageMap[partner.employeeId]
           const finalImage = existingImage || partner.image
           const wasLoaded = loadedMap[partner.employeeId]
+
+          // 修改：只有当有图片或没有 cloudImageFileID 时才标记为 loaded
+          const shouldBeLoaded = wasLoaded || finalImage || !partner.cloudImageFileID
+
           return processPartnerData({
             ...partner,
             image: finalImage,
-            loaded: !!(wasLoaded || finalImage || !partner.cloudImageFileID)
+            loaded: !!shouldBeLoaded
           })
         })
 
