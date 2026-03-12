@@ -1,6 +1,6 @@
 {
   "libVersion": "3.14.2",
-  "projectname": "aiazj_shanxinzheli",
+  "projectname": "shanxinzheli",
   "setting": {
     "urlCheck": true,
     "coverView": true,
@@ -9,47 +9,14 @@
     "preloadBackgroundData": false,
     "autoAudits": false,
     "showShadowRootInWxmlPanel": true,
-    "compileHotReLoad": true
+    "compileHotReLoad": true,
+    "useApiHook": true,
+    "useStaticServer": false,
+    "useLanDebug": false,
+    "showES6CompileOption": false,
+    "checkInvalidKey": true,
+    "ignoreDevUnusedFiles": true,
+    "bigPackageSizeSupport": false
   },
-  "condition": {
-    "miniprogram": {
-      "list": [
-        {
-          "name": "admin-migrate",
-          "pathName": "pages/admin-migrate/admin-migrate",
-          "query": "",
-          "scene": null,
-          "launchMode": "default"
-        },
-        {
-          "name": "events",
-          "pathName": "pages/events/events",
-          "query": "",
-          "launchMode": "default",
-          "scene": null
-        },
-        {
-          "name": "pages/profile/profile",
-          "pathName": "pages/profile/profile",
-          "query": "employeeId=190005889",
-          "launchMode": "default",
-          "scene": null
-        },
-        {
-          "name": "team",
-          "pathName": "pages/team/team",
-          "query": "shareFrom=190005889",
-          "launchMode": "default",
-          "scene": null
-        },
-        {
-          "name": "home",
-          "pathName": "pages/home/home",
-          "query": "",
-          "launchMode": "default",
-          "scene": null
-        }
-      ]
-    }
-  }
+  "condition": {}
 }
