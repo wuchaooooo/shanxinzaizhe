@@ -127,6 +127,7 @@ Page({
     saving: false,
     employeeId: '',
     existingRecordId: null,
+    dataLoaded: false,  // 新增：标记数据是否已加载完成
     newSkill: '',   // 专业领域新增输入框的临时值
     newSchool: '',  // 毕业院校新增输入框的临时值
     newTitle: '',   // 前职工作新增输入框的临时值
@@ -174,6 +175,8 @@ Page({
       } else {
         await this._loadFormData(employeeId)
       }
+      // 标记数据加载完成
+      this.setData({ dataLoaded: true })
     } finally {
       wx.hideLoading()
     }

@@ -159,7 +159,7 @@ Page({
         this.setData(this._pendingUpdates)
         this._pendingUpdates = {}
       }
-    }, 50)  // 从 100ms 减少到 50ms，减少分批显示
+    }, 100)  // 增加到100ms，进一步减少setData频率
   },
 
   // 同步已下载的图片路径（从 globalData 到页面数据）

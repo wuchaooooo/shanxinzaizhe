@@ -78,8 +78,15 @@
     <!-- 活动标题 -->
     <view class="title-section">
       <text class="event-title">{{event.name || '活动详情'}}</text>
-      <view wx:if="{{event.status}}" class="status-badge status-{{utils.getStatusClass(event.status)}}">
-        <text class="status-text">{{event.status}}</text>
+      <view class="status-row">
+        <view wx:if="{{event.status}}" class="status-badge status-{{utils.getStatusClass(event.status)}}">
+          <text class="status-text">{{event.status}}</text>
+        </view>
+        <!-- 签到码按钮（仅非进行中且有签到码时显示） -->
+        <view wx:if="{{event.status !== '进行中' && event.cloudCheckinQrcodeFileID}}" class="checkin-btn" bindtap="onShowCheckinQrcode">
+          <text class="checkin-btn-text">签到码</text>
+          <text class="checkin-btn-arrow">›</text>
+        </view>
       </view>
     </view>
 
@@ -204,6 +211,20 @@
 
 <!-- Canvas 用于生成海报 -->
 <canvas canvas-id="posterCanvas" class="poster-canvas" style="width: 750px; height: {{canvasHeight}}px;"></canvas>
+
+<!-- 签到码弹窗（非进行中的活动） -->
+<view class="checkin-modal {{showCheckinQrcodeModal ? 'checkin-modal-show' : ''}}" bindtap="onHideCheckinQrcode">
+  <view class="checkin-modal-content {{showCheckinQrcodeModal ? 'checkin-modal-content-show' : ''}}" catchtap="">
+    <view class="checkin-modal-header">
+      <text class="checkin-modal-title">活动签到码</text>
+      <text class="checkin-modal-close" bindtap="onHideCheckinQrcode">✕</text>
+    </view>
+    <view class="checkin-modal-body">
+      <image wx:if="{{event.checkinQrcode}}" class="checkin-modal-qrcode" src="{{event.checkinQrcode}}" mode="aspectFit" show-menu-by-longpress="{{true}}"></image>
+      <text class="checkin-modal-tip">长按图片保存或识别</text>
+    </view>
+  </view>
+</view>
 
 <!-- 加载状态 -->
 <view wx:if="{{!event}}" class="loading-state">

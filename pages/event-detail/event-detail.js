@@ -18,7 +18,8 @@ Page({
     previewCurrentIndex: 0,
     isDeleting: false,
     isGeneratingPoster: false,
-    mapClickDisabled: false  // 临时禁用地图点击，防止点击穿透
+    mapClickDisabled: false,  // 临时禁用地图点击，防止点击穿透
+    showCheckinQrcodeModal: false  // 签到码弹窗显示状态
   },
 
   onLoad(options) {
@@ -821,7 +822,59 @@ Page({
     }
   },
 
-  // 预览签到码
+  // 预览签到码（弹窗方式）
+  async onShowCheckinQrcode() {
+    const { event } = this.data
+
+    // 如果签到码还没下载，先下载
+    if (event.cloudCheckinQrcodeFileID && !event.checkinQrcode) {
+      console.log('签到码未下载，开始下载...')
+      wx.showLoading({ title: '加载中...', mask: true })
+
+      try {
+        const { getImage } = require('../../utils/image-cache.js')
+        const checkinQrcode = await getImage(event.cloudCheckinQrcodeFileID)
+
+        // 更新页面数据
+        this.setData({
+          'event.checkinQrcode': checkinQrcode
+        })
+
+        // 同步更新 globalData
+        const app = getApp()
+        const globalEvents = app.globalData.eventsData || []
+        const globalIdx = globalEvents.findIndex(e => e.id === event.id)
+        if (globalIdx !== -1) {
+          globalEvents[globalIdx].checkinQrcode = checkinQrcode
+        }
+
+        console.log('签到码下载完成:', checkinQrcode)
+      } catch (error) {
+        console.error('下载签到码失败:', error)
+        wx.showToast({
+          title: '加载失败',
+          icon: 'none'
+        })
+        return
+      } finally {
+        wx.hideLoading()
+      }
+    }
+
+    // 显示弹窗
+    this.setData({
+      showCheckinQrcodeModal: true
+    })
+  },
+
+  // 关闭签到码弹窗
+  onHideCheckinQrcode() {
+    this.setData({
+      showCheckinQrcodeModal: false
+    })
+  },
+
+  // 预览签到码（图片预览方式，保留用于进行中的活动）
   onPreviewCheckinQrcode() {
     const { event } = this.data
     if (event.checkinQrcode) {

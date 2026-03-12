@@ -7,6 +7,7 @@ Page({
     isEdit: false,
     eventId: '',
     originalCloudFileIDs: [], // 保存原始的云存储 fileID 数组
+    imagePathToCloudFileID: {}, // 图片路径到 cloudFileID 的映射
     originalCheckinQrcodeCloudFileID: '', // 保存原始的签到码云存储 fileID
     checkinQrcodeIsNew: false, // 用户是否主动选了新签到码
     formData: {
@@ -110,6 +111,15 @@ Page({
     // 处理图片数组
     const images = event.images || (event.image ? [event.image] : [])
 
+    // 建立图片路径到 cloudFileID 的映射（用于删除时准确找到对应的 cloudFileID）
+    const imagePathToCloudFileID = {}
+    const cloudFileIDs = event.cloudImageFileIDs || []
+    images.forEach((imagePath, index) => {
+      if (cloudFileIDs[index]) {
+        imagePathToCloudFileID[imagePath] = cloudFileIDs[index]
+      }
+    })
+
     // 如果签到码路径为空但有 cloudFileID，尝试从缓存补充
     let checkinQrcode = event.checkinQrcode || ''
     if (!checkinQrcode && event.cloudCheckinQrcodeFileID) {
@@ -122,6 +132,7 @@ Page({
 
     this.setData({
       originalCloudFileIDs: event.cloudImageFileIDs || [], // 保存原始的云存储 fileID 数组
+      imagePathToCloudFileID: imagePathToCloudFileID, // 图片路径到 cloudFileID 的映射
       originalCheckinQrcodeCloudFileID: event.cloudCheckinQrcodeFileID || '', // 保存原始签到码云存储 fileID
       checkinQrcodeIsNew: false, // 加载时重置，非用户主动选图
       formData: {
@@ -328,18 +339,19 @@ Page({
   onDeleteImage(e) {
     const index = e.currentTarget.dataset.index
     const images = [...this.data.formData.images]
-    const originalCloudFileIDs = [...this.data.originalCloudFileIDs]
+    const deletedImagePath = images[index]
 
-    // 如果删除的是原有图片（非临时路径），也要从 originalCloudFileIDs 中移除
-    if (!images[index].includes('tmp') && originalCloudFileIDs.length > index) {
-      originalCloudFileIDs.splice(index, 1)
+    // 如果删除的是原有图片，从映射中找到对应的 cloudFileID 并删除
+    const imagePathToCloudFileID = { ...this.data.imagePathToCloudFileID }
+    if (imagePathToCloudFileID[deletedImagePath]) {
+      delete imagePathToCloudFileID[deletedImagePath]
     }
 
     images.splice(index, 1)
 
     this.setData({
       'formData.images': images,
-      originalCloudFileIDs: originalCloudFileIDs
+      imagePathToCloudFileID: imagePathToCloudFileID
     })
   },
 
@@ -537,9 +549,14 @@ Page({
         wx.hideLoading()
       }
 
-      // 合并原有的 cloudFileIDs 和新上传的 cloudFileIDs
-      const originalCloudFileIDs = this.data.originalCloudFileIDs || []
-      const finalCloudFileIDs = [...originalCloudFileIDs, ...cloudFileIDs]
+      // 获取保留的原有图片的 cloudFileIDs（通过映射）
+      const imagePathToCloudFileID = this.data.imagePathToCloudFileID || {}
+      const retainedCloudFileIDs = oldImages
+        .map(imagePath => imagePathToCloudFileID[imagePath])
+        .filter(fileID => fileID) // 过滤掉 undefined
+
+      // 合并保留的原有 cloudFileIDs 和新上传的 cloudFileIDs
+      const finalCloudFileIDs = [...retainedCloudFileIDs, ...cloudFileIDs]
 
       // 保存 cloudFileIDs 数组（用逗号分隔的字符串）
       if (finalCloudFileIDs.length > 0) {
@@ -553,6 +570,8 @@ Page({
       // 处理签到码上传（仅星享会、午餐会、客户活动）
       console.log('开始处理签到码，活动类型:', formData.type)
       console.log('签到码数据:', formData.checkinQrcode)
+
+      let checkinQrcodeCloudFileID = '' // 用于存储签到码的 cloudFileID
 
       if (formData.type === '星享会' || formData.type === '午餐会' || formData.type === '客户活动') {
         console.log('活动类型匹配，可以上传签到码')
@@ -573,6 +592,7 @@ Page({
               )
               if (cloudResult.success) {
                 // 保存为 JSON 数组格式（单张图片也用数组）
+                checkinQrcodeCloudFileID = cloudResult.fileID
                 fields['活动签到码链接_腾讯云_file_id'] = JSON.stringify([cloudResult.fileID])
                 console.log('[云存储] 签到码上传成功:', cloudResult.fileID)
               } else {
@@ -595,6 +615,7 @@ Page({
             // 使用原有的云存储 fileID（转换为 JSON 数组格式）
             if (this.data.originalCheckinQrcodeCloudFileID) {
               const fileID = this.data.originalCheckinQrcodeCloudFileID
+              checkinQrcodeCloudFileID = Array.isArray(fileID) ? fileID[0] : fileID
               fields['活动签到码链接_腾讯云_file_id'] = Array.isArray(fileID) ? JSON.stringify(fileID) : JSON.stringify([fileID])
             }
           }
@@ -643,15 +664,25 @@ Page({
           globalEvents[globalIdx].latitude = formData.latitude
           globalEvents[globalIdx].longitude = formData.longitude
 
-          // 保留图片字段，防止编辑后图片丢失
-          if (existingEvent.image) {
-            globalEvents[globalIdx].image = existingEvent.image
-          }
-          if (existingEvent.images && existingEvent.images.length > 0) {
-            globalEvents[globalIdx].images = existingEvent.images
-          }
-          if (existingEvent.imagePaths && existingEvent.imagePaths.length > 0) {
-            globalEvents[globalIdx].imagePaths = existingEvent.imagePaths
+          // 更新 cloudFileIDs，触发图片重新下载（包括删除所有图片的情况）
+          globalEvents[globalIdx].cloudImageFileIDs = finalCloudFileIDs
+          // 清空图片路径，让详情页重新下载
+          globalEvents[globalIdx].image = ''
+          globalEvents[globalIdx].images = []
+          globalEvents[globalIdx].imagePaths = []
+          console.log('已更新 cloudImageFileIDs 并清空图片路径，将触发重新下载', finalCloudFileIDs)
+
+          // 更新签到码 cloudFileID
+          if (checkinQrcodeCloudFileID) {
+            globalEvents[globalIdx].cloudCheckinQrcodeFileID = checkinQrcodeCloudFileID
+            // 清空签到码路径，让详情页重新下载
+            globalEvents[globalIdx].checkinQrcode = ''
+            console.log('已更新签到码 cloudFileID 并清空路径，将触发重新下载')
+          } else if (formData.checkinQrcode === '') {
+            // 如果签到码被删除，也要清空
+            globalEvents[globalIdx].cloudCheckinQrcodeFileID = ''
+            globalEvents[globalIdx].checkinQrcode = ''
+            console.log('已清空签到码')
           }
         }
       } else {
