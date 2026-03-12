@@ -158,13 +158,13 @@ App({
       }
 
       // 检查哪些记录需要下载图片：
-      // 1. imageKey 变化的记录（changedImageIds）
-      // 2. 有 imageKey 但没有图片路径的记录（首次加载或缓存丢失）
+      // 1. cloudFileID 变化的记录（changedImageIds）
+      // 2. 有 cloudFileID 但没有图片路径的记录（首次加载或缓存丢失）
       // 注意：二维码按需下载，不在启动时下载
       const needDownload = profiles.filter(p => {
         if (changedImageIds.has(p.employeeId)) return true
-        // 有 imageKey 但没有图片路径，需要下载
-        if (p.imageKey && !p.image) return true
+        // 有 cloudImageFileID 但没有图片路径，需要下载
+        if (p.cloudImageFileID && !p.image) return true
         return false
       }).sort((a, b) => {
         // 工号越大（越新入职）排越前，优先下载
@@ -307,18 +307,18 @@ App({
       }
 
       // 检查哪些活动需要下载图片：
-      // 1. imageKeys 变化的活动（changedImageIds）
-      // 2. 有 imageKeys 但没有图片路径的活动（首次加载或缓存丢失）
+      // 1. cloudImageFileIDs 变化的活动（changedImageIds）
+      // 2. 有 cloudImageFileIDs 但没有图片路径的活动（首次加载或缓存丢失）
       const needDownload = events.filter(e => {
         if (changedImageIds.has(e.id)) return true
-        // 有 imageKeys 但没有图片路径，需要下载
-        if (e.imageKeys && e.imageKeys.length > 0 && (!e.imagePaths || e.imagePaths.length === 0)) return true
+        // 有 cloudImageFileIDs 但没有图片路径，需要下载
+        if (e.cloudImageFileIDs && e.cloudImageFileIDs.length > 0 && (!e.images || e.images.length === 0)) return true
         return false
       })
 
       if (needDownload.length > 0) {
         // 计算总共需要下载的图片数量
-        const totalImages = needDownload.reduce((sum, e) => sum + (e.imageKeys?.length || 0), 0)
+        const totalImages = needDownload.reduce((sum, e) => sum + (e.cloudImageFileIDs?.length || 0), 0)
         console.log(`[飞书] 活动需要下载 ${totalImages} 张图片（图片变更${changedImageIds.size}条活动 + 缺失图片${needDownload.length - changedImageIds.size}条活动）`)
 
         // 等待活动图片下载完成

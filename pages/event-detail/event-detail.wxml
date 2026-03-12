@@ -96,7 +96,7 @@
         </view>
         <view class="organizer-info">
           <text class="info-value">{{event.organizer || '待定'}}</text>
-          <image wx:if="{{organizerData}}" class="organizer-avatar" src="{{organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+          <image wx:if="{{organizerData && organizerData.avatar}}" class="organizer-avatar" src="{{organizerData.avatar}}" mode="aspectFill"></image>
         </view>
       </view>
 

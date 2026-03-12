@@ -8,10 +8,11 @@
 //   evict(fileID)                                  → void  删除本地文件（图片更新时调用）
 
 function _localPath(fileID) {
-  // 清理 fileID：移除 cloud:// 前缀，替换特殊字符
-  const cleanID = fileID
-    .replace(/^cloud:\/\//, '')  // 移除 cloud:// 前缀
-    .replace(/[\/\\:]/g, '_')     // 替换路径分隔符和冒号
+  // 清理 fileID：移除空格换行符、cloud:// 前缀，替换特殊字符
+  const cleanID = String(fileID || '')
+    .trim()                           // 移除首尾空格和换行符
+    .replace(/^cloud:\/\//, '')       // 移除 cloud:// 前缀
+    .replace(/[\/\\:]/g, '_')         // 替换路径分隔符和冒号
 
   return `${wx.env.USER_DATA_PATH}/img_${cleanID}`
 }
@@ -29,15 +30,7 @@ function getCached(fileID) {
   if (!fileID) return null
 
   const path = _localPath(fileID)
-  for (let i = 0; i < 3; i++) {
-    if (_fileExists(path)) return path
-    if (i < 2) {
-      const start = Date.now()
-      while (Date.now() - start < 10) {}
-    }
-  }
-
-  return null
+  return _fileExists(path) ? path : null
 }
 
 /**
@@ -111,24 +104,42 @@ async function _downloadWithLimit(tasks, limit) {
  * @returns {Promise<string>}
  */
 async function downloadFromCloudStorage(fileID, cacheIdentifier) {
+  // 清理 fileID 的空格、换行符、以及可能的 JSON 数组标记
+  let cleanFileID = String(fileID || '').trim()
+
+  // 移除可能的 JSON 数组标记（如果 fileID 被错误地当作数组字符串）
+  cleanFileID = cleanFileID.replace(/^[\["\s]+|[\]"\s]+$/g, '')
+
+  if (!cleanFileID) {
+    throw new Error('fileID is empty')
+  }
+
+  console.log(`[云存储] 开始下载:`, {
+    原始fileID: fileID,
+    清理后: cleanFileID
+  })
+
   const maxRetries = 3
   let lastError = null
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // 使用云存储的 downloadFile 接口直接下载
+      // 方法1：直接使用 wx.cloud.downloadFile
       const downloadRes = await new Promise((resolve, reject) => {
         wx.cloud.downloadFile({
-          fileID: fileID,
+          fileID: cleanFileID,
           success: resolve,
-          fail: reject
+          fail: (err) => {
+            console.error(`[云存储] downloadFile 失败:`, err)
+            reject(err)
+          }
         })
       })
 
       console.log(`[云存储] 下载响应:`, {
         statusCode: downloadRes.statusCode,
         tempFilePath: downloadRes.tempFilePath,
-        fileID: fileID
+        fileID: cleanFileID
       })
 
       if (downloadRes.statusCode !== 200) {
@@ -166,7 +177,80 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
       return localPath
     } catch (err) {
       lastError = err
-      console.warn(`[云存储] 下载失败 (尝试 ${attempt}/${maxRetries}): ${fileID}`, err)
+      console.error(`[云存储] 下载失败 (尝试 ${attempt}/${maxRetries}):`, {
+        errCode: err.errCode,
+        errMsg: err.errMsg,
+        fileID: cleanFileID
+      })
+
+      // 如果是第一次失败，尝试使用备选方案：getTempFileURL + wx.downloadFile
+      if (attempt === 1) {
+        console.log(`[云存储] 尝试备选方案：getTempFileURL + wx.downloadFile`)
+        try {
+          // 获取临时下载链接
+          const tempUrlRes = await new Promise((resolve, reject) => {
+            wx.cloud.getTempFileURL({
+              fileList: [cleanFileID],
+              success: resolve,
+              fail: (err) => {
+                console.error(`[云存储] getTempFileURL 失败:`, err)
+                reject(err)
+              }
+            })
+          })
+
+          console.log(`[云存储] getTempFileURL 响应:`, tempUrlRes)
+
+          if (tempUrlRes.fileList && tempUrlRes.fileList.length > 0) {
+            const fileInfo = tempUrlRes.fileList[0]
+            console.log(`[云存储] 文件信息:`, {
+              fileID: fileInfo.fileID,
+              tempFileURL: fileInfo.tempFileURL,
+              status: fileInfo.status,
+              errMsg: fileInfo.errMsg
+            })
+
+            if (fileInfo.status === 0 && fileInfo.tempFileURL) {
+              const tempFileURL = fileInfo.tempFileURL
+              console.log(`[云存储] 获取临时链接成功，开始下载: ${tempFileURL}`)
+
+              // 使用 wx.downloadFile 下载
+              const downloadRes = await new Promise((resolve, reject) => {
+                wx.downloadFile({
+                  url: tempFileURL,
+                  success: resolve,
+                  fail: (err) => {
+                    console.error(`[云存储] wx.downloadFile 失败:`, err)
+                    reject(err)
+                  }
+                })
+              })
+
+              if (downloadRes.statusCode === 200 && downloadRes.tempFilePath) {
+                // 持久化保存
+                const localPath = _localPath(cacheIdentifier)
+                try {
+                  await new Promise((resolve, reject) => {
+                    wx.getFileSystemManager().saveFile({
+                      tempFilePath: downloadRes.tempFilePath,
+                      filePath: localPath,
+                      success: resolve,
+                      fail: reject
+                    })
+                  })
+                  console.log(`[云存储] 备选方案下载成功`)
+                  return localPath
+                } catch (saveErr) {
+                  console.warn(`[云存储] 持久化失败，使用临时路径`, saveErr)
+                  return downloadRes.tempFilePath
+                }
+              }
+            }
+          }
+        } catch (backupErr) {
+          console.error(`[云存储] 备选方案也失败:`, backupErr)
+        }
+      }
 
       if (attempt < maxRetries) {
         // 等待后重试（指数退避：1s, 2s, 4s）
@@ -177,7 +261,7 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
   }
 
   // 所有重试都失败
-  throw new Error(`云存储下载失败，已重试 ${maxRetries} 次: ${lastError.message}`)
+  throw new Error(`云存储下载失败，已重试 ${maxRetries} 次: ${lastError.message || lastError.errMsg || JSON.stringify(lastError)}`)
 }
 
 module.exports = { getCached, getImage, prefetchImages, evict }

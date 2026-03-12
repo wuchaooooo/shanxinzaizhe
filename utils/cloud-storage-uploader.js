@@ -14,16 +14,19 @@ async function uploadToCloudStorage(tempFilePath, cloudPath) {
     return { success: false, reason: 'Cloud storage disabled' }
   }
 
+  // 清理 cloudPath 中的空格和特殊字符，避免下载时出错
+  const cleanCloudPath = cloudPath.replace(/\s+/g, '_')
+
   try {
     const result = await wx.cloud.uploadFile({
-      cloudPath,
+      cloudPath: cleanCloudPath,
       filePath: tempFilePath
     })
 
-    console.log(`[云存储] 上传成功: ${cloudPath} -> ${result.fileID}`)
+    console.log(`[云存储] 上传成功: ${cleanCloudPath} -> ${result.fileID}`)
     return { success: true, fileID: result.fileID }
   } catch (err) {
-    console.error(`[云存储] 上传失败: ${cloudPath}`, err)
+    console.error(`[云存储] 上传失败: ${cleanCloudPath}`, err)
     return { success: false, error: err }
   }
 }

@@ -155,7 +155,7 @@
               </view>
               <view class="event-info">
                 <view class="info-item organizer-item">
-                  <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+                  <image wx:if="{{item.organizerData && item.organizerData.avatar}}" class="organizer-avatar-small" src="{{item.organizerData.avatar}}" mode="aspectFill"></image>
                   <text class="info-text">{{item.organizer || '待定'}}</text>
                 </view>
                 <view class="event-status-badge {{utils.getStatusClass(item.status)}}">
@@ -191,7 +191,7 @@
               </view>
               <view class="event-info">
                 <view class="info-item organizer-item">
-                  <image wx:if="{{item.organizerData}}" class="organizer-avatar-small" src="{{item.organizerData.avatar || '/images/default-avatar.png'}}" mode="aspectFill"></image>
+                  <image wx:if="{{item.organizerData && item.organizerData.avatar}}" class="organizer-avatar-small" src="{{item.organizerData.avatar}}" mode="aspectFill"></image>
                   <text class="info-text">{{item.organizer || '待定'}}</text>
                 </view>
                 <view class="event-status-badge {{utils.getStatusClass(item.status)}}">

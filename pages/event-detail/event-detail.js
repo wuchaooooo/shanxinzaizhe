@@ -205,7 +205,7 @@ Page({
     }
 
     // 如果图片路径为空，尝试从缓存加载
-    if ((!event.image || !event.images || event.images.length === 0) && event.imageKeys && event.imageKeys.length > 0) {
+    if ((!event.image || !event.images || event.images.length === 0) && event.cloudImageFileIDs && event.cloudImageFileIDs.length > 0) {
       const { getEventsFromCache } = require('../../utils/events-data-loader.js')
       const cachedEvents = getEventsFromCache()
       const cachedEvent = cachedEvents.find(e => e.id === eventId)
@@ -244,8 +244,8 @@ Page({
       event.image = validImages[0] || ''
     }
 
-    // 如果有图片失效且有 imageKeys，触发重新下载
-    if (needRedownload && event.imageKeys && event.imageKeys.length > 0) {
+    // 如果有图片失效且有 cloudImageFileIDs，触发重新下载
+    if (needRedownload && event.cloudImageFileIDs && event.cloudImageFileIDs.length > 0) {
       console.log(`[${event.name}] 检测到图片文件失效，将触发重新下载`)
       // 清空失效的图片路径，让后续逻辑触发下载
       if (event.images.length === 0) {
@@ -286,11 +286,11 @@ Page({
       event.images = []
     }
 
-    // 如果 images 数组为空但有 imageKeys，说明图片还未下载
+    // 如果 images 数组为空但有 cloudImageFileIDs，说明图片还未下载
     // 保持 images 为空数组，让下载逻辑正确判断
     console.log('详情页图片状态:', {
       imagesLength: event.images.length,
-      imageKeysLength: event.imageKeys?.length || 0,
+      cloudImageFileIDsLength: event.cloudImageFileIDs?.length || 0,
       hasImage: !!event.image
     })
 
@@ -318,8 +318,8 @@ Page({
       images: event.images,
       imagesLength: event.images?.length,
       image: event.image,
-      imageKeys: event.imageKeys,
-      imageKeysLength: event.imageKeys?.length
+      cloudImageFileIDs: event.cloudImageFileIDs,
+      cloudImageFileIDsLength: event.cloudImageFileIDs?.length
     })
 
     // 额外日志：检查 images 数组的每个元素
@@ -331,14 +331,14 @@ Page({
     }
 
     // 如果活动有图片，但还没下载完成，或者有签到码未下载，则触发下载
-    if (event.imageKeys && event.imageKeys.length > 0) {
+    if (event.cloudImageFileIDs && event.cloudImageFileIDs.length > 0) {
       const downloadedCount = event.images ? event.images.length : 0
-      const needsImages = downloadedCount < event.imageKeys.length
-      const needsCheckinQrcode = event.checkinQrcodeKey && !event.checkinQrcode
+      const needsImages = downloadedCount < event.cloudImageFileIDs.length
+      const needsCheckinQrcode = event.cloudCheckinQrcodeFileID && !event.checkinQrcode
 
       if (needsImages || needsCheckinQrcode) {
         if (needsImages) {
-          console.log(`详情页：需要下载剩余图片，已有 ${downloadedCount} 张，共 ${event.imageKeys.length} 张`)
+          console.log(`详情页：需要下载剩余图片，已有 ${downloadedCount} 张，共 ${event.cloudImageFileIDs.length} 张`)
         }
         if (needsCheckinQrcode) {
           console.log(`详情页：需要下载签到码`)

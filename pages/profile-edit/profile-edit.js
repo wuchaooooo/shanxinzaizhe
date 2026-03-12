@@ -220,14 +220,14 @@ Page({
           name: partner.name,
           hasImage: !!partner.image,
           hasQrcode: !!partner.qrcode,
-          imageKey: partner.imageKey,
-          qrcodeKey: partner.qrcodeKey
+          cloudImageFileID: partner.cloudImageFileID,
+          cloudQrcodeFileID: partner.cloudQrcodeFileID
         })
         if (partner.image) {
-          this.setData({ 'formData.avatarImage': { path: partner.image, imageKey: partner.imageKey, isNew: false } })
+          this.setData({ 'formData.avatarImage': { path: partner.image, cloudFileID: partner.cloudImageFileID, isNew: false } })
         }
         if (partner.qrcode) {
-          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, qrcodeKey: partner.qrcodeKey, isNew: false } })
+          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, cloudFileID: partner.cloudQrcodeFileID, isNew: false } })
         }
       } else {
         console.log('[ProfileEdit] 未找到合伙人数据，employeeId:', employeeId)
@@ -286,14 +286,14 @@ Page({
           name: partner.name,
           hasImage: !!partner.image,
           hasQrcode: !!partner.qrcode,
-          imageKey: partner.imageKey,
-          qrcodeKey: partner.qrcodeKey
+          cloudImageFileID: partner.cloudImageFileID,
+          cloudQrcodeFileID: partner.cloudQrcodeFileID
         })
         if (partner.image) {
-          this.setData({ 'formData.avatarImage': { path: partner.image, imageKey: partner.imageKey, isNew: false } })
+          this.setData({ 'formData.avatarImage': { path: partner.image, cloudFileID: partner.cloudImageFileID, isNew: false } })
         }
         if (partner.qrcode) {
-          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, qrcodeKey: partner.qrcodeKey, isNew: false } })
+          this.setData({ 'formData.qrcodeImage': { path: partner.qrcode, cloudFileID: partner.cloudQrcodeFileID, isNew: false } })
         }
       } else {
         console.log('[ProfileEdit] 未找到合伙人数据 (by openid):', openid, employeeId)
@@ -561,28 +561,21 @@ Page({
       // 处理图片上传
       const feishuApi = require('../../utils/feishu-api.js')
       const { uploadToCloudStorage } = require('../../utils/cloud-storage-uploader.js')
-      const { DATA_SOURCE_CONFIG } = require('../../utils/data-source-config.js')
 
       // 上传头像
       if (formData.avatarImage && formData.avatarImage.isNew) {
         wx.showLoading({ title: '上传头像中...' })
         try {
-          // 1. 上传到飞书（保持现有逻辑）
-          const imageKey = await feishuApi.uploadImage(formData.avatarImage.path)
-          fields[mapping.imageKey] = imageKey
-
-          // 2. 如果开关开启，同时上传到云存储
-          if (DATA_SOURCE_CONFIG.useCloudStorage) {
-            const cloudResult = await uploadToCloudStorage(
-              formData.avatarImage.path,
-              `images/avatar/${Date.now()}_${imageKey}.png`
-            )
-            if (cloudResult.success) {
-              fields[mapping.cloudImageFileID] = cloudResult.fileID
-              console.log('[云存储] 头像上传成功:', cloudResult.fileID)
-            } else {
-              console.warn('[云存储] 头像上传失败，仅保存飞书 imageKey')
-            }
+          const cloudResult = await uploadToCloudStorage(
+            formData.avatarImage.path,
+            `images/avatar/${Date.now()}_avatar.png`
+          )
+          if (cloudResult.success) {
+            // 保存为 JSON 数组格式（单张图片也用数组）
+            fields[mapping.cloudImageFileID] = JSON.stringify([cloudResult.fileID])
+            console.log('[云存储] 头像上传成功:', cloudResult.fileID)
+          } else {
+            throw new Error('云存储上传失败')
           }
         } catch (err) {
           console.error('头像上传失败:', err)
@@ -592,31 +585,26 @@ Page({
           return
         }
         wx.hideLoading()
-      } else if (formData.avatarImage && formData.avatarImage.imageKey) {
-        // 保留原有的 imageKey
-        fields[mapping.imageKey] = formData.avatarImage.imageKey
+      } else if (formData.avatarImage && formData.avatarImage.cloudFileID) {
+        // 保留原有的 cloudFileID（转换为 JSON 数组格式）
+        const fileID = formData.avatarImage.cloudFileID
+        fields[mapping.cloudImageFileID] = Array.isArray(fileID) ? JSON.stringify(fileID) : JSON.stringify([fileID])
       }
 
       // 上传二维码
       if (formData.qrcodeImage && formData.qrcodeImage.isNew) {
         wx.showLoading({ title: '上传二维码中...' })
         try {
-          // 1. 上传到飞书（保持现有逻辑）
-          const qrcodeKey = await feishuApi.uploadImage(formData.qrcodeImage.path)
-          fields[mapping.qrcodeKey] = qrcodeKey
-
-          // 2. 如果开关开启，同时上传到云存储
-          if (DATA_SOURCE_CONFIG.useCloudStorage) {
-            const cloudResult = await uploadToCloudStorage(
-              formData.qrcodeImage.path,
-              `images/avatar/${Date.now()}_qrcode_${qrcodeKey}.png`
-            )
-            if (cloudResult.success) {
-              fields[mapping.cloudQrcodeFileID] = cloudResult.fileID
-              console.log('[云存储] 二维码上传成功:', cloudResult.fileID)
-            } else {
-              console.warn('[云存储] 二维码上传失败，仅保存飞书 qrcodeKey')
-            }
+          const cloudResult = await uploadToCloudStorage(
+            formData.qrcodeImage.path,
+            `images/avatar/${Date.now()}_qrcode.png`
+          )
+          if (cloudResult.success) {
+            // 保存为 JSON 数组格式（单张图片也用数组）
+            fields[mapping.cloudQrcodeFileID] = JSON.stringify([cloudResult.fileID])
+            console.log('[云存储] 二维码上传成功:', cloudResult.fileID)
+          } else {
+            throw new Error('云存储上传失败')
           }
         } catch (err) {
           console.error('二维码上传失败:', err)
@@ -626,9 +614,10 @@ Page({
           return
         }
         wx.hideLoading()
-      } else if (formData.qrcodeImage && formData.qrcodeImage.qrcodeKey) {
-        // 保留原有的 qrcodeKey
-        fields[mapping.qrcodeKey] = formData.qrcodeImage.qrcodeKey
+      } else if (formData.qrcodeImage && formData.qrcodeImage.cloudFileID) {
+        // 保留原有的 cloudFileID（转换为 JSON 数组格式）
+        const fileID = formData.qrcodeImage.cloudFileID
+        fields[mapping.cloudQrcodeFileID] = Array.isArray(fileID) ? JSON.stringify(fileID) : JSON.stringify([fileID])
       }
 
       wx.showLoading({ title: '保存中...' })
@@ -651,8 +640,17 @@ Page({
       }, 1500)
     } catch (err) {
       console.error('保存失败:', err)
+      console.error('错误详情:', {
+        message: err.message,
+        stack: err.stack,
+        formData: this.data.formData
+      })
       wx.hideLoading()
-      wx.showToast({ title: '保存失败', icon: 'none' })
+      wx.showToast({
+        title: `保存失败: ${err.message || '未知错误'}`,
+        icon: 'none',
+        duration: 3000
+      })
     } finally {
       this.setData({ saving: false })
     }

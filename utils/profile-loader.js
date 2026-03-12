@@ -84,7 +84,7 @@ function getProfilesDataSync() {
 
 /**
  * 从飞书加载所有合伙人数据（仅文字，不下载图片）。
- * 图片路径通过 image-cache.js 的 getCached(imageKey) 同步获取。
+ * 图片路径通过 image-cache.js 的 getCached(cloudFileID) 同步获取。
  * @returns {Promise<{profiles: Array, changedIds: Set, changedImageIds: Set}>}
  */
 async function loadAllProfilesText() {
@@ -101,26 +101,47 @@ async function loadAllProfilesText() {
     const name = extractFieldText(f[mapping.name])
     const imageKey = extractFieldText(f[mapping.imageKey])
     const qrcodeKey = extractFieldText(f[mapping.qrcodeKey])
-    const cloudImageFileID = extractFieldText(f[mapping.cloudImageFileID])
-    const cloudQrcodeFileID = extractFieldText(f[mapping.cloudQrcodeFileID])
+
+    // 解析 cloudFileID（支持 JSON 数组格式和字符串格式）
+    const parseCloudFileID = (fieldValue) => {
+      const str = (extractFieldText(fieldValue) || '').trim()
+      if (!str) return ''
+
+      // 尝试解析 JSON 数组
+      try {
+        const parsed = JSON.parse(str)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // 取第一个元素并清理
+          return String(parsed[0]).trim().replace(/^[\["\s]+|[\]"\s]+$/g, '')
+        }
+      } catch (e) {
+        // 不是 JSON，直接使用字符串
+      }
+
+      // 兼容旧格式：直接使用字符串
+      return str.replace(/^[\["\s]+|[\]"\s]+$/g, '')
+    }
+
+    const cloudImageFileID = parseCloudFileID(f[mapping.cloudImageFileID])
+    const cloudQrcodeFileID = parseCloudFileID(f[mapping.cloudQrcodeFileID])
     const lastModified = String(f[mapping.lastModifiedDate] || '')
     const cacheKey = employeeId || record.record_id || ''
 
     const isTextChanged = isRecordChanged(cache, cacheKey, lastModified)
-    const oldImageKey = cache[cacheKey]?.imageKey || ''
-    const oldQrcodeKey = cache[cacheKey]?.qrcodeKey || ''
-    const hasImageKeyChanged = (imageKey && imageKey !== oldImageKey) || (qrcodeKey && qrcodeKey !== oldQrcodeKey)
+    const oldCloudImageFileID = cache[cacheKey]?.cloudImageFileID || ''
+    const oldCloudQrcodeFileID = cache[cacheKey]?.cloudQrcodeFileID || ''
+    const hasImageChanged = (cloudImageFileID && cloudImageFileID !== oldCloudImageFileID) || (cloudQrcodeFileID && cloudQrcodeFileID !== oldCloudQrcodeFileID)
 
     if (isTextChanged && cacheKey) changedTextIds.add(cacheKey)
-    if (hasImageKeyChanged && cacheKey) {
+    if (hasImageChanged && cacheKey) {
       changedImageIds.add(cacheKey)
-      // imageKey 变了，清除旧缓存（让 image-cache 重新下载）
-      if (oldImageKey && oldImageKey !== imageKey) evict(oldImageKey)
-      if (oldQrcodeKey && oldQrcodeKey !== qrcodeKey) evict(oldQrcodeKey)
+      // fileID 变了，清除旧缓存（让 image-cache 重新下载）
+      if (oldCloudImageFileID && oldCloudImageFileID !== cloudImageFileID) evict(oldCloudImageFileID)
+      if (oldCloudQrcodeFileID && oldCloudQrcodeFileID !== cloudQrcodeFileID) evict(oldCloudQrcodeFileID)
     }
 
-    // 更新文字缓存（只存文字元数据 + imageKey，不存路径）
-    newCache[cacheKey] = { lastModified, imageKey, qrcodeKey }
+    // 更新文字缓存（只存文字元数据 + cloudFileID，不存路径）
+    newCache[cacheKey] = { lastModified, cloudImageFileID, cloudQrcodeFileID }
 
     return {
       employeeId,
@@ -138,11 +159,11 @@ async function loadAllProfilesText() {
       wxOpenid: extractFieldText(f[mapping.wxOpenid]),
       imageKey,
       qrcodeKey,
-      cloudImageFileID,  // 新增：云存储 fileID
-      cloudQrcodeFileID,  // 新增：云存储 fileID
-      // 图片路径：从统一缓存同步获取，未缓存则为空（等待 prefetch 后更新）
+      cloudImageFileID,
+      cloudQrcodeFileID,
+      // 图片路径：头像从缓存同步获取，二维码延迟到详情页再加载
       image: getCached(cloudImageFileID) || '',
-      qrcode: getCached(cloudQrcodeFileID) || '',
+      qrcode: '',  // 二维码不在启动时检查缓存，按需加载
       loaded: false
     }
   })
@@ -172,39 +193,28 @@ async function loadAllProfilesText() {
 async function downloadAllProfileImages(profiles, onImageReady, concurrency = 10) {
   if (!profiles || profiles.length === 0) return
 
-  // 收集所有需要下载的 imageKey，建立 key → profile 的映射
-  const keyToProfile = {}
+  // 只收集头像，二维码按需下载（详情页或海报生成时）
+  const fileIDToProfile = {}
   const avatarItems = []
-  const qrcodeItems = []
 
   profiles.forEach(p => {
-    if (p.imageKey) {
-      keyToProfile[p.imageKey] = p
+    if (p.cloudImageFileID) {
+      fileIDToProfile[p.cloudImageFileID] = { profile: p, type: 'avatar' }
       avatarItems.push({
-        imageKey: p.imageKey,
-        cloudFileID: p.cloudImageFileID || null
-      })
-    }
-    if (p.qrcodeKey) {
-      keyToProfile[p.qrcodeKey] = p
-      qrcodeItems.push({
-        imageKey: p.qrcodeKey,
-        cloudFileID: p.cloudQrcodeFileID || null
+        imageKey: p.cloudImageFileID,  // prefetchImages 需要这个字段名
+        cloudFileID: p.cloudImageFileID
       })
     }
   })
 
-  // 头像优先，二维码在后
-  const allItems = [...avatarItems, ...qrcodeItems]
-  if (allItems.length === 0) return
+  if (avatarItems.length === 0) return
 
-  console.log(`[飞书] 开始下载: 头像${avatarItems.length}张 | 二维码${qrcodeItems.length}张`)
+  console.log(`[飞书] 开始下载: 头像${avatarItems.length}张`)
 
-  await prefetchImages(allItems, (imageKey, localPath) => {
-    const profile = keyToProfile[imageKey]
-    if (!profile || !onImageReady) return
-    const isAvatar = imageKey === profile.imageKey
-    const type = isAvatar ? 'avatar' : 'qrcode'
+  await prefetchImages(avatarItems, (fileID, localPath) => {
+    const item = fileIDToProfile[fileID]
+    if (!item || !onImageReady) return
+    const { profile, type } = item
     onImageReady(type, localPath, profile.employeeId, profile.name)
   }, concurrency)
 

@@ -71,14 +71,14 @@ function getInitialPartners() {
     const partners = completeProfiles.map(partner => {
       // 改进逻辑：
       // 1. 如果有有效的 image 路径（非空字符串），标记为 loaded
-      // 2. 如果没有 imageKey，说明没有图片要下载，也标记为 loaded
-      // 3. 其他情况（有 imageKey 但 image 为空），标记为未加载
+      // 2. 如果没有 cloudImageFileID，说明没有图片要下载，也标记为 loaded
+      // 3. 其他情况（有 cloudImageFileID 但 image 为空），标记为未加载
       const hasValidImage = partner.image && partner.image.length > 0
-      const hasNoImageKey = !partner.imageKey
+      const hasNoCloudFileID = !partner.cloudImageFileID
 
       return processPartnerData({
         ...partner,
-        loaded: hasValidImage || hasNoImageKey
+        loaded: hasValidImage || hasNoCloudFileID
       })
     })
 
@@ -136,14 +136,14 @@ Page({
 
       // 同步头像 - 改进逻辑
       // 1. 如果 globalPartner.image 存在且不同，直接同步
-      // 2. 如果 globalPartner.image 为空但有 imageKey，尝试从缓存读取
+      // 2. 如果 globalPartner.image 为空但有 cloudImageFileID，尝试从缓存读取
       let imageToSync = null
       if (globalPartner.image && globalPartner.image !== partner.image) {
         imageToSync = globalPartner.image
-      } else if (!globalPartner.image && globalPartner.imageKey) {
+      } else if (!globalPartner.image && globalPartner.cloudImageFileID) {
         // 尝试从缓存读取
         const { getCached } = require('../../utils/image-cache.js')
-        const cachedPath = getCached(globalPartner.imageKey)
+        const cachedPath = getCached(globalPartner.cloudImageFileID)
         if (cachedPath && cachedPath !== partner.image) {
           imageToSync = cachedPath
           // 同时更新 globalData
@@ -236,14 +236,14 @@ Page({
       const partners = sortedData.map(partner => {
         // 改进逻辑：
         // 1. 如果有有效的 image 路径（非空字符串），标记为 loaded
-        // 2. 如果没有 imageKey，说明没有图片要下载，也标记为 loaded
-        // 3. 其他情况（有 imageKey 但 image 为空），标记为未加载
+        // 2. 如果没有 cloudImageFileID，说明没有图片要下载，也标记为 loaded
+        // 3. 其他情况（有 cloudImageFileID 但 image 为空），标记为未加载
         const hasValidImage = partner.image && partner.image.length > 0
-        const hasNoImageKey = !partner.imageKey
+        const hasNoCloudFileID = !partner.cloudImageFileID
 
         return processPartnerData({
           ...partner,
-          loaded: hasValidImage || hasNoImageKey
+          loaded: hasValidImage || hasNoCloudFileID
         })
       })
       this.setData({
@@ -313,10 +313,7 @@ Page({
         }
       }
 
-      this.setData(updates, () => {
-        // 图片下载完成后，立即同步所有图片（解决竞态条件）
-        this._syncDownloadedImages()
-      })
+      this.setData(updates)
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
 
@@ -362,8 +359,8 @@ Page({
         // 最后用 getCached 兜底：直接读文件系统，不依赖内存状态
         const { getCached } = require('../../utils/image-cache.js')
         sortedData.forEach(p => {
-          if (p.employeeId && !imageMap[p.employeeId] && p.imageKey) {
-            const cached = getCached(p.imageKey)
+          if (p.employeeId && !imageMap[p.employeeId] && p.cloudImageFileID) {
+            const cached = getCached(p.cloudImageFileID)
             if (cached) imageMap[p.employeeId] = cached
           }
         })
@@ -375,7 +372,7 @@ Page({
           return processPartnerData({
             ...partner,
             image: finalImage,
-            loaded: !!(wasLoaded || finalImage || !partner.imageKey)
+            loaded: !!(wasLoaded || finalImage || !partner.cloudImageFileID)
           })
         })
 
@@ -557,18 +554,12 @@ Page({
   onShow() {
     const app = getApp()
 
-    // 立即同步一次已下载的图片（解决竞态条件）
-    this._syncDownloadedImages()
-
-    // 延迟 500ms 再同步一次，确保文件系统操作完成
-    setTimeout(() => {
+    // 只在首次显示时同步一次，避免多次调用导致闪烁
+    // 如果是从其他页面返回，不需要重复同步（imageReadyListeners 已经在实时更新）
+    if (!this._hasShownOnce) {
       this._syncDownloadedImages()
-    }, 500)
-
-    // 延迟 1500ms 再同步一次，应对隔较长时间后数据刷新的情况
-    setTimeout(() => {
-      this._syncDownloadedImages()
-    }, 1500)
+      this._hasShownOnce = true
+    }
 
     // 检查监听器是否已注册，如果没有则重新注册
     if (!this._partnersDataCb) {
@@ -818,7 +809,7 @@ Page({
     // 确保二维码已下载（使用统一接口）
     const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
 
-    if (currentUser.qrcodeKey) {
+    if (currentUser.cloudQrcodeFileID) {
       try {
         const qrcodePath = await ensureQrcodeDownloaded(currentUser.employeeId)
 
@@ -839,7 +830,7 @@ Page({
     console.log(`  - 姓名: ${currentUser.name}`)
     console.log(`  - employeeId: ${currentUser.employeeId}`)
     console.log(`  - qrcode: ${currentUser.qrcode || '(空)'}`)
-    console.log(`  - qrcodeKey: ${currentUser.qrcodeKey || '(空)'}`)
+    console.log(`  - cloudQrcodeFileID: ${currentUser.cloudQrcodeFileID || '(空)'}`)
     console.log(`  - image: ${currentUser.image || '(空)'}`)
 
     const generatePoster = () => {

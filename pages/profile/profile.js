@@ -275,11 +275,11 @@ Page({
 
       // 打印二维码状态日志
       console.log(`[${partner.name}] 二维码状态检查:`, {
-        hasQrcodeKey: !!partner.qrcodeKey,
-        qrcodeKey: partner.qrcodeKey || '无',
+        hasCloudQrcodeFileID: !!partner.cloudQrcodeFileID,
+        cloudQrcodeFileID: partner.cloudQrcodeFileID || '无',
         hasQrcodePath: !!partner.qrcode,
         qrcodePath: partner.qrcode || '无',
-        needDownload: !!(partner.qrcodeKey && !partner.qrcode)
+        needDownload: !!(partner.cloudQrcodeFileID && !partner.qrcode)
       })
 
       // 立即展示文本数据（图片有则展示，无则空白等待）
@@ -306,8 +306,8 @@ Page({
         bio: partner.bio || ''
       })
 
-      // 按需下载二维码：如果有 qrcodeKey 但没有 qrcode 路径，立即下载
-      if (partner.qrcodeKey && !partner.qrcode) {
+      // 按需下载二维码：如果有 cloudQrcodeFileID 但没有 qrcode 路径，立即下载
+      if (partner.cloudQrcodeFileID && !partner.qrcode) {
         console.log(`[${partner.name}] 二维码未下载，开始按需下载...`)
         this.downloadQrcode(partner)
       }
@@ -486,7 +486,7 @@ Page({
     }
 
     console.log(`[${partner.name}] 点击显示二维码，当前状态:`, {
-      hasQrcodeKey: !!partner.qrcodeKey,
+      hasCloudQrcodeFileID: !!partner.cloudQrcodeFileID,
       hasQrcodePath: !!partner.qrcode,
       qrcodePath: partner.qrcode || '无',
       pageQrcodeImage: this.data.qrcodeImage || '无'
@@ -514,7 +514,7 @@ Page({
     })
 
     // 如果二维码未下载或文件已失效，显示加载提示并下载
-    if (partner.qrcodeKey && (!partner.qrcode || !qrcodeFileExists)) {
+    if (partner.cloudQrcodeFileID && (!partner.qrcode || !qrcodeFileExists)) {
       console.log(`[${partner.name}] 二维码需要下载，弹窗中开始下载...`)
 
       // 显示加载中的二维码占位
@@ -535,7 +535,7 @@ Page({
       // 确保页面数据是最新的
       this.setData({ qrcodeImage: partner.qrcode })
     } else {
-      console.log(`[${partner.name}] 无 qrcodeKey，无法下载二维码`)
+      console.log(`[${partner.name}] 无 cloudQrcodeFileID，无法下载二维码`)
     }
   },
 
@@ -581,7 +581,7 @@ Page({
     // 确保二维码已下载（使用统一接口）
     const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
 
-    if (currentPartner.qrcodeKey) {
+    if (currentPartner.cloudQrcodeFileID) {
       wx.showLoading({ title: '准备中...', mask: true })
 
       try {
@@ -607,7 +607,7 @@ Page({
     console.log(`  - 姓名: ${currentPartner.name}`)
     console.log(`  - employeeId: ${currentPartner.employeeId}`)
     console.log(`  - qrcode: ${currentPartner.qrcode || '(空)'}`)
-    console.log(`  - qrcodeKey: ${currentPartner.qrcodeKey || '(空)'}`)
+    console.log(`  - cloudQrcodeFileID: ${currentPartner.cloudQrcodeFileID || '(空)'}`)
     console.log(`  - image: ${currentPartner.image || '(空)'}`)
 
     // 先卸载scroll-view，强制重置滚动位置

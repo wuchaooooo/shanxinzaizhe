@@ -8,7 +8,7 @@ const { createCacheManager, isRecordChanged } = require('./text-cache.js')
 const { getCached, getImage, prefetchImages, evict } = require('./image-cache.js')
 
 // ─── 本地缓存：基于 record_id + Last Modified Date 增量更新 ─────────────────
-const CACHE_KEY = 'events_cache_v1'
+const CACHE_KEY = 'events_cache_v2'  // 升级到 v2：使用 cloudFileID 而非 imageKey
 const cacheManager = createCacheManager(CACHE_KEY)
 
 function loadEventsCache() { return cacheManager.get() }
@@ -48,14 +48,49 @@ function transformFeishuEventRecord(record, eventType) {
   const endTime = parseTime(fields[mapping.endTime])
   const autoStatus = calculateEventStatus(startTime, endTime)
 
-  const imageKeyStr = fields[mapping.imageKey] || ''
-  const imageKeys = imageKeyStr ? imageKeyStr.split(',').map(k => k.trim()).filter(k => k) : []
-  const checkinQrcodeKey = fields[mapping.checkinQrcodeKey] || ''
-
-  // 解析云存储 fileID（多个用逗号分隔）
+  // 解析云存储 fileID（JSON 数组格式）
   const cloudImageFileIDStr = fields[mapping.cloudImageFileID] || ''
-  const cloudImageFileIDs = cloudImageFileIDStr ? cloudImageFileIDStr.split(',').map(k => k.trim()).filter(k => k) : []
-  const cloudCheckinQrcodeFileID = fields[mapping.cloudCheckinQrcodeFileID] || ''
+  let cloudImageFileIDs = []
+  if (cloudImageFileIDStr) {
+    try {
+      // 尝试解析 JSON 数组
+      const parsed = JSON.parse(cloudImageFileIDStr)
+      // 清理每个 fileID 的空格和换行符，并移除可能的 JSON 数组标记
+      cloudImageFileIDs = Array.isArray(parsed)
+        ? parsed.map(id => {
+            // 清理 fileID：移除可能的引号、方括号等
+            const cleanId = String(id).trim().replace(/^[\["\s]+|[\]"\s]+$/g, '')
+            return cleanId
+          }).filter(id => id)
+        : []
+
+      console.log(`[活动数据] 解析 cloudImageFileIDs:`, {
+        原始: cloudImageFileIDStr,
+        解析后: cloudImageFileIDs
+      })
+    } catch (e) {
+      console.warn(`[活动数据] JSON 解析失败，使用逗号分隔格式:`, cloudImageFileIDStr)
+      // 兼容旧格式：逗号分隔的字符串
+      cloudImageFileIDs = cloudImageFileIDStr.split(',').map(k => k.trim()).filter(k => k)
+    }
+  }
+
+  // 解析签到码 fileID（支持 JSON 数组格式和字符串格式）
+  const cloudCheckinQrcodeFileIDStr = fields[mapping.cloudCheckinQrcodeFileID] || ''
+  let cloudCheckinQrcodeFileID = ''
+  if (cloudCheckinQrcodeFileIDStr) {
+    try {
+      // 尝试解析 JSON 数组
+      const parsed = JSON.parse(cloudCheckinQrcodeFileIDStr)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // 取第一个元素并清理
+        cloudCheckinQrcodeFileID = String(parsed[0]).trim().replace(/^[\["\s]+|[\]"\s]+$/g, '')
+      }
+    } catch (e) {
+      // 不是 JSON，直接使用字符串
+      cloudCheckinQrcodeFileID = cloudCheckinQrcodeFileIDStr.trim().replace(/^[\["\s]+|[\]"\s]+$/g, '')
+    }
+  }
 
   return {
     id: record.record_id,
@@ -66,13 +101,10 @@ function transformFeishuEventRecord(record, eventType) {
     endTime: endTime,
     employeeId: fields[mapping.employeeId] || '',
     status: autoStatus,
-    imageKeys: imageKeys,
-    imageKey: imageKeys[0] || '',
-    cloudImageFileIDs: cloudImageFileIDs,  // 新增：云存储 fileID 数组
-    cloudCheckinQrcodeFileID: cloudCheckinQrcodeFileID,  // 新增：签到码云存储 fileID
+    cloudImageFileIDs: cloudImageFileIDs,
+    cloudCheckinQrcodeFileID: cloudCheckinQrcodeFileID,
     images: [],
     image: '',
-    checkinQrcodeKey: checkinQrcodeKey,
     checkinQrcode: '',
     address: fields[mapping.address] || '',
     latitude: fields[mapping.latitude] ? parseFloat(fields[mapping.latitude]) : null,
@@ -81,11 +113,11 @@ function transformFeishuEventRecord(record, eventType) {
   }
 }
 
-// ─── 辅助：从 imageKeys 构建图片路径（使用统一缓存层）────────────────────────
+// ─── 辅助：从 cloudFileIDs 构建图片路径（使用统一缓存层）────────────────────────
 
-function _buildImages(imageKeys) {
-  if (!imageKeys || imageKeys.length === 0) return { images: [], image: '', loaded: true }
-  const images = imageKeys.map(k => getCached(k) || '').filter(p => p)
+function _buildImages(cloudFileIDs) {
+  if (!cloudFileIDs || cloudFileIDs.length === 0) return { images: [], image: '', loaded: true }
+  const images = cloudFileIDs.map(fileID => getCached(fileID) || '').filter(p => p)
   return { images, image: images[0] || '', loaded: images.length > 0 }
 }
 
@@ -96,11 +128,11 @@ function getEventsFromCache() {
   const cache = loadEventsCache()
   return Object.values(cache).map(entry => {
     const event = { ...entry.data }
-    const { images, image, loaded } = _buildImages(entry.imageKeys)
+    const { images, image, loaded } = _buildImages(entry.cloudImageFileIDs)
     event.images = images
     event.image = image
     event.loaded = loaded
-    event.checkinQrcode = entry.checkinQrcodeKey ? (getCached(entry.checkinQrcodeKey) || '') : ''
+    event.checkinQrcode = entry.cloudCheckinQrcodeFileID ? (getCached(entry.cloudCheckinQrcodeFileID) || '') : ''
     return event
   }).sort((a, b) => {
     if (!a.time || !b.time) return 0
@@ -128,39 +160,39 @@ function processEventRecord(record, eventType, cache, newCache, changedTextIds, 
   const lastModified = transformed.lastModified
 
   const isTextChanged = isRecordChanged(cache, cacheKey, lastModified)
-  const imageKeyChanged = cache[cacheKey] && (
-    JSON.stringify(cache[cacheKey].imageKeys) !== JSON.stringify(transformed.imageKeys)
+  const imageChanged = cache[cacheKey] && (
+    JSON.stringify(cache[cacheKey].cloudImageFileIDs) !== JSON.stringify(transformed.cloudImageFileIDs)
   )
 
   if (isTextChanged && cacheKey) changedTextIds.add(cacheKey)
-  if (imageKeyChanged && cacheKey) changedImageIds.add(cacheKey)
+  if (imageChanged && cacheKey) changedImageIds.add(cacheKey)
 
-  if (!isTextChanged && !imageKeyChanged && cache[cacheKey]) {
+  if (!isTextChanged && !imageChanged && cache[cacheKey]) {
     // 未变更：复用缓存
     newCache[cacheKey] = cache[cacheKey]
   } else {
-    // 有变更：evict 旧的 imageKey（如果 key 变了）
-    if (imageKeyChanged) {
-      const oldKeys = cache[cacheKey]?.imageKeys || []
-      const newKeys = transformed.imageKeys || []
-      oldKeys.forEach(k => { if (!newKeys.includes(k)) evict(k) })
-      const oldCheckin = cache[cacheKey]?.checkinQrcodeKey
-      if (oldCheckin && oldCheckin !== transformed.checkinQrcodeKey) evict(oldCheckin)
+    // 有变更：evict 旧的 fileID（如果 fileID 变了）
+    if (imageChanged) {
+      const oldFileIDs = cache[cacheKey]?.cloudImageFileIDs || []
+      const newFileIDs = transformed.cloudImageFileIDs || []
+      oldFileIDs.forEach(fileID => { if (!newFileIDs.includes(fileID)) evict(fileID) })
+      const oldCheckinFileID = cache[cacheKey]?.cloudCheckinQrcodeFileID
+      if (oldCheckinFileID && oldCheckinFileID !== transformed.cloudCheckinQrcodeFileID) evict(oldCheckinFileID)
     }
     newCache[cacheKey] = {
       lastModified,
       data: { ...transformed },
-      imageKeys: transformed.imageKeys,
-      checkinQrcodeKey: transformed.checkinQrcodeKey
+      cloudImageFileIDs: transformed.cloudImageFileIDs,
+      cloudCheckinQrcodeFileID: transformed.cloudCheckinQrcodeFileID
     }
   }
 
-  const { images, image, loaded } = _buildImages(transformed.imageKeys)
+  const { images, image, loaded } = _buildImages(transformed.cloudImageFileIDs)
   return {
     ...transformed,
     images,
     image,
-    checkinQrcode: transformed.checkinQrcodeKey ? (getCached(transformed.checkinQrcodeKey) || '') : '',
+    checkinQrcode: transformed.cloudCheckinQrcodeFileID ? (getCached(transformed.cloudCheckinQrcodeFileID) || '') : '',
     loaded
   }
 }
@@ -228,27 +260,34 @@ async function fetchFeishuEventsText() {
  * @param {number} startIndex
  */
 async function downloadEventImages(event, onImageReady, downloadAll = false, startIndex = 0) {
-  const { id, name, imageKeys, cloudImageFileIDs } = event
+  const { id, name, cloudImageFileIDs } = event
 
-  if (imageKeys && imageKeys.length > 0) {
-    const endIndex = downloadAll ? imageKeys.length : 1
+  if (cloudImageFileIDs && cloudImageFileIDs.length > 0) {
+    const endIndex = downloadAll ? cloudImageFileIDs.length : 1
+    const downloadedPaths = []
+
     for (let i = Math.max(0, startIndex); i < endIndex; i++) {
       try {
-        const cloudFileID = cloudImageFileIDs && cloudImageFileIDs[i]
+        const cloudFileID = cloudImageFileIDs[i]
         if (!cloudFileID) {
           console.warn(`[${name}] 图片 ${i + 1} 没有 cloudFileID，跳过`)
           continue
         }
         const path = await getImage(cloudFileID)
+        downloadedPaths.push(path)
+        console.log(`[${name}] 图片 ${i + 1}/${endIndex} 下载成功: ${path}`)
         if (onImageReady) onImageReady(id, path)
       } catch (error) {
         console.error(`[${name}] 图片 ${i + 1} 下载失败:`, error)
       }
     }
-    const { images, image, loaded } = _buildImages(imageKeys)
-    event.images = images
-    event.image = image
-    event.loaded = loaded
+
+    // 直接使用下载的路径，而不是从缓存重建
+    event.images = downloadedPaths
+    event.image = downloadedPaths[0] || ''
+    event.loaded = downloadedPaths.length > 0
+
+    console.log(`[${name}] 下载完成，共 ${downloadedPaths.length} 张图片`)
   }
 
   if (downloadAll && event.cloudCheckinQrcodeFileID) {
@@ -267,22 +306,21 @@ async function downloadEventImagesBackground(eventsData, onImageReady) {
   if (eventsData.length === 0) return
 
   const imageItems = []
-  const keyToEventId = new Map()
+  const fileIDToEventId = new Map()
 
   eventsData.forEach(event => {
-    const firstKey = event.imageKeys && event.imageKeys[0]
     const firstCloudFileID = event.cloudImageFileIDs && event.cloudImageFileIDs[0]
-    if (firstKey) {
+    if (firstCloudFileID) {
       imageItems.push({
-        imageKey: firstKey,
-        cloudFileID: firstCloudFileID || null
+        imageKey: firstCloudFileID,  // prefetchImages 需要这个字段名
+        cloudFileID: firstCloudFileID
       })
-      keyToEventId.set(firstKey, event.id)
+      fileIDToEventId.set(firstCloudFileID, event.id)
     }
   })
 
-  await prefetchImages(imageItems, (imageKey, localPath) => {
-    const eventId = keyToEventId.get(imageKey)
+  await prefetchImages(imageItems, (fileID, localPath) => {
+    const eventId = fileIDToEventId.get(fileID)
     if (eventId && onImageReady) onImageReady(eventId, localPath)
   }, DATA_SOURCE_CONFIG.imageConcurrency || 10)
 }
