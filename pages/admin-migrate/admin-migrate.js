@@ -73,13 +73,33 @@ Page({
     }
   },
 
-  // 加载个人资料
+  // 加载个人资料（包括新表和联合创始人信息表）
   async loadProfiles() {
-    const records = await getAllRecords(
-      DATA_SOURCE_CONFIG.profileEditAppToken,
-      DATA_SOURCE_CONFIG.profileEditTableId
-    )
-    return records
+    // 1. 加载新表（个人资料编辑表）
+    const newTableRecords = await getAllRecords({
+      appToken: DATA_SOURCE_CONFIG.profileEditAppToken,
+      tableId: DATA_SOURCE_CONFIG.profileEditTableId
+    })
+    newTableRecords.forEach(record => {
+      record.sourceTable = 'profile_edit'
+      record.appToken = DATA_SOURCE_CONFIG.profileEditAppToken
+      record.tableId = DATA_SOURCE_CONFIG.profileEditTableId
+    })
+    this.addLog(`✓ 加载个人资料编辑表: ${newTableRecords.length} 条`)
+
+    // 2. 加载联合创始人信息表
+    const partnersRecords = await getAllRecords({
+      appToken: FEISHU_CONFIG.partnersAppToken,
+      tableId: FEISHU_CONFIG.partnersTableId
+    })
+    partnersRecords.forEach(record => {
+      record.sourceTable = 'partners'
+      record.appToken = FEISHU_CONFIG.partnersAppToken
+      record.tableId = FEISHU_CONFIG.partnersTableId
+    })
+    this.addLog(`✓ 加载联合创始人信息表: ${partnersRecords.length} 条`)
+
+    return [...newTableRecords, ...partnersRecords]
   },
 
   // 加载活动数据
