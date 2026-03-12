@@ -225,10 +225,13 @@ async function ensureQrcodeDownloaded(employeeId) {
     console.error(`[ensureQrcodeDownloaded] 未找到 employeeId=${employeeId}`)
     return null
   }
-  if (!profile.qrcodeKey) return null
+  if (!profile.cloudQrcodeFileID) {
+    console.warn(`[ensureQrcodeDownloaded] ${profile.name} 没有 cloudQrcodeFileID`)
+    return null
+  }
 
   try {
-    const path = await getImage(profile.qrcodeKey)
+    const path = await getImage(profile.cloudQrcodeFileID)
     profile.qrcode = path
     return path
   } catch (err) {

@@ -1,17 +1,14 @@
 // utils/image-cache.js
-// 统一图片缓存层：以 imageKey 为唯一 ID 管理所有飞书图片的本地缓存
+// 统一图片缓存层：使用 fileID 作为缓存标识
 //
 // 接口：
-//   getCached(imageKey)                           → string|null  同步，文件存在返回路径，否则 null
-//   getImage(imageKey, cloudFileID)               → Promise<string>  命中直接返回，未命中下载后返回
-//   prefetchImages(imageKeys, onEach, concurrency) → Promise<void>  批量预下载，每张完成后回调
-//   evict(imageKey)                               → void  删除本地文件（图片更新时调用）
+//   getCached(fileID)                              → string|null  同步，文件存在返回路径，否则 null
+//   getImage(cloudFileID)                          → Promise<string>  命中直接返回，未命中下载后返回
+//   prefetchImages(items, onEach, concurrency)     → Promise<void>  批量预下载，每张完成后回调
+//   evict(fileID)                                  → void  删除本地文件（图片更新时调用）
 
-const { downloadImageByKey } = require('./image-downloader.js')
-const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
-
-function _localPath(imageKey) {
-  return `${wx.env.USER_DATA_PATH}/img_${imageKey}.png`
+function _localPath(fileID) {
+  return `${wx.env.USER_DATA_PATH}/img_${fileID}.png`
 }
 
 function _fileExists(path) {
@@ -19,20 +16,17 @@ function _fileExists(path) {
 }
 
 /**
- * 同步检查 imageKey 对应的文件是否存在。
- * 添加重试机制以应对文件系统延迟。
- * @param {string} imageKey
+ * 同步检查缓存文件是否存在
+ * @param {string} fileID - 云存储 fileID
  * @returns {string|null}
  */
-function getCached(imageKey) {
-  if (!imageKey) return null
-  const path = _localPath(imageKey)
+function getCached(fileID) {
+  if (!fileID) return null
 
-  // 尝试 3 次，每次间隔 10ms
+  const path = _localPath(fileID)
   for (let i = 0; i < 3; i++) {
     if (_fileExists(path)) return path
     if (i < 2) {
-      // 简单的同步延迟（应对文件系统延迟）
       const start = Date.now()
       while (Date.now() - start < 10) {}
     }
@@ -42,70 +36,48 @@ function getCached(imageKey) {
 }
 
 /**
- * 获取图片本地路径（优先本地缓存，然后根据是否有 cloudFileID 选择下载源）
- * @param {string} imageKey - 飞书 image_key（用于缓存文件名）
- * @param {string} cloudFileID - 云存储 fileID（可选）
+ * 获取图片本地路径（优先本地缓存，未命中从云存储下载）
+ * @param {string} cloudFileID - 云存储 fileID（必需）
  * @returns {Promise<string>}
  */
-async function getImage(imageKey, cloudFileID = null) {
-  if (!imageKey) throw new Error('imageKey 不能为空')
-
-  // 1. 检查本地缓存
-  const cached = getCached(imageKey)
-  if (cached) return cached
-
-  // 2. 如果开关开启且有 cloudFileID，从云存储下载（带重试）
-  if (DATA_SOURCE_CONFIG.useCloudStorage && cloudFileID) {
-    const path = await downloadFromCloudStorage(cloudFileID, imageKey)
-    console.log(`[图片缓存] 云存储下载成功: ${imageKey}`)
-    return path
+async function getImage(cloudFileID) {
+  if (!cloudFileID) {
+    throw new Error('cloudFileID 不能为空，所有图片必须先迁移到云存储')
   }
 
-  // 3. 没有 cloudFileID，从飞书下载（旧数据）
-  await downloadImageByKey(imageKey, 'img', imageKey)
-  const saved = getCached(imageKey)
-  if (!saved) throw new Error(`图片持久化失败: ${imageKey}`)
-  return saved
+  // 1. 检查本地缓存
+  const cached = getCached(cloudFileID)
+  if (cached) return cached
+
+  // 2. 从云存储下载（使用 fileID 作为缓存文件名）
+  const path = await downloadFromCloudStorage(cloudFileID, cloudFileID)
+  console.log(`[图片缓存] 云存储下载成功: ${cloudFileID}`)
+  return path
 }
 
 /**
  * 批量预下载图片（并发控制）。已缓存的跳过，未缓存的下载。
- * @param {Array<string|{imageKey: string, cloudFileID: string}>} imageKeys - imageKey 数组或包含 cloudFileID 的对象数组
+ * @param {Array<{imageKey: string, cloudFileID: string}>} items - 包含 cloudFileID 的对象数组
  * @param {Function} [onEach] (imageKey, localPath) => void
  * @param {number} [concurrency]
  */
-async function prefetchImages(imageKeys, onEach, concurrency = 10) {
-  if (!imageKeys || imageKeys.length === 0) return
+async function prefetchImages(items, onEach, concurrency = 10) {
+  if (!items || items.length === 0) return
 
-  const tasks = imageKeys.filter(k => k).map(item => async () => {
-    // 兼容旧格式（纯字符串）和新格式（对象）
-    const imageKey = typeof item === 'string' ? item : item.imageKey
-    const cloudFileID = typeof item === 'object' ? item.cloudFileID : null
+  const tasks = items.filter(item => item && item.cloudFileID).map(item => async () => {
+    const { imageKey, cloudFileID } = item
 
-    const cached = getCached(imageKey)
+    const cached = getCached(cloudFileID)
     if (cached) {
       if (onEach) onEach(imageKey, cached)
       return
     }
-    try {
-      // 如果开关开启且有 cloudFileID，从云存储下载（带重试）
-      if (DATA_SOURCE_CONFIG.useCloudStorage && cloudFileID) {
-        const path = await downloadFromCloudStorage(cloudFileID, imageKey)
-        if (onEach) onEach(imageKey, path)
-        return
-      }
 
-      // 没有 cloudFileID，从飞书下载（旧数据）
-      await downloadImageByKey(imageKey, 'img', imageKey)
-      // 验证文件确实保存到了预期路径（saveFile 失败时会 fallback 返回 tempFilePath）
-      const saved = getCached(imageKey)
-      if (saved) {
-        if (onEach) onEach(imageKey, saved)
-      } else {
-        console.error(`[ImageCache] 文件未持久化，跳过 ${imageKey}`)
-      }
+    try {
+      const path = await downloadFromCloudStorage(cloudFileID, cloudFileID)
+      if (onEach) onEach(imageKey, path)
     } catch (err) {
-      console.error(`[ImageCache] 下载失败 ${imageKey}:`, err)
+      console.error(`[ImageCache] 下载失败 ${cloudFileID}:`, err)
     }
   })
 
@@ -113,12 +85,12 @@ async function prefetchImages(imageKeys, onEach, concurrency = 10) {
 }
 
 /**
- * 删除 imageKey 对应的本地文件（图片更新时调用）。
- * @param {string} imageKey
+ * 删除 fileID 对应的本地文件（图片更新时调用）
+ * @param {string} fileID - 云存储 fileID
  */
-function evict(imageKey) {
-  if (!imageKey) return
-  try { wx.getFileSystemManager().unlinkSync(_localPath(imageKey)) } catch (e) { /* 忽略 */ }
+function evict(fileID) {
+  if (!fileID) return
+  try { wx.getFileSystemManager().unlinkSync(_localPath(fileID)) } catch (e) { /* 忽略 */ }
 }
 
 async function _downloadWithLimit(tasks, limit) {
@@ -130,10 +102,10 @@ async function _downloadWithLimit(tasks, limit) {
 /**
  * 从云存储下载图片（带重试机制）
  * @param {string} fileID - 云存储 fileID
- * @param {string} imageKey - 飞书 image_key（用于缓存文件名）
+ * @param {string} cacheIdentifier - 缓存文件名标识（使用 fileID）
  * @returns {Promise<string>}
  */
-async function downloadFromCloudStorage(fileID, imageKey) {
+async function downloadFromCloudStorage(fileID, cacheIdentifier) {
   const maxRetries = 3
   let lastError = null
 
@@ -152,8 +124,8 @@ async function downloadFromCloudStorage(fileID, imageKey) {
         throw new Error(`Download failed with status ${downloadRes.statusCode}`)
       }
 
-      // 持久化保存（使用 imageKey 作为文件名，保持一致性）
-      const localPath = _localPath(imageKey)
+      // 持久化保存（使用 fileID 作为文件名）
+      const localPath = _localPath(cacheIdentifier)
 
       try {
         await new Promise((resolve, reject) => {
@@ -172,7 +144,7 @@ async function downloadFromCloudStorage(fileID, imageKey) {
       return localPath
     } catch (err) {
       lastError = err
-      console.warn(`[云存储] 下载失败 (尝试 ${attempt}/${maxRetries}): ${imageKey}`, err)
+      console.warn(`[云存储] 下载失败 (尝试 ${attempt}/${maxRetries}): ${fileID}`, err)
 
       if (attempt < maxRetries) {
         // 等待后重试（指数退避：1s, 2s, 4s）

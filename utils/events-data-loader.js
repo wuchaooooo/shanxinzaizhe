@@ -235,7 +235,11 @@ async function downloadEventImages(event, onImageReady, downloadAll = false, sta
     for (let i = Math.max(0, startIndex); i < endIndex; i++) {
       try {
         const cloudFileID = cloudImageFileIDs && cloudImageFileIDs[i]
-        const path = await getImage(imageKeys[i], cloudFileID)
+        if (!cloudFileID) {
+          console.warn(`[${name}] 图片 ${i + 1} 没有 cloudFileID，跳过`)
+          continue
+        }
+        const path = await getImage(cloudFileID)
         if (onImageReady) onImageReady(id, path)
       } catch (error) {
         console.error(`[${name}] 图片 ${i + 1} 下载失败:`, error)
@@ -247,9 +251,9 @@ async function downloadEventImages(event, onImageReady, downloadAll = false, sta
     event.loaded = loaded
   }
 
-  if (downloadAll && event.checkinQrcodeKey) {
+  if (downloadAll && event.cloudCheckinQrcodeFileID) {
     try {
-      event.checkinQrcode = await getImage(event.checkinQrcodeKey, event.cloudCheckinQrcodeFileID)
+      event.checkinQrcode = await getImage(event.cloudCheckinQrcodeFileID)
     } catch (error) {
       console.error(`[${name}] 签到码下载失败:`, error)
     }
