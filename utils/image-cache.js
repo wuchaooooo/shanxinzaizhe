@@ -8,7 +8,12 @@
 //   evict(fileID)                                  → void  删除本地文件（图片更新时调用）
 
 function _localPath(fileID) {
-  return `${wx.env.USER_DATA_PATH}/img_${fileID}.png`
+  // 清理 fileID：移除 cloud:// 前缀，替换特殊字符
+  const cleanID = fileID
+    .replace(/^cloud:\/\//, '')  // 移除 cloud:// 前缀
+    .replace(/[\/\\:]/g, '_')     // 替换路径分隔符和冒号
+
+  return `${wx.env.USER_DATA_PATH}/img_${cleanID}`
 }
 
 function _fileExists(path) {
@@ -118,6 +123,12 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
           success: resolve,
           fail: reject
         })
+      })
+
+      console.log(`[云存储] 下载响应:`, {
+        statusCode: downloadRes.statusCode,
+        tempFilePath: downloadRes.tempFilePath,
+        fileID: fileID
       })
 
       if (downloadRes.statusCode !== 200) {
