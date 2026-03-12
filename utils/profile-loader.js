@@ -141,8 +141,8 @@ async function loadAllProfilesText() {
       cloudImageFileID,  // 新增：云存储 fileID
       cloudQrcodeFileID,  // 新增：云存储 fileID
       // 图片路径：从统一缓存同步获取，未缓存则为空（等待 prefetch 后更新）
-      image: getCached(imageKey) || '',
-      qrcode: getCached(qrcodeKey) || '',
+      image: getCached(cloudImageFileID) || '',
+      qrcode: getCached(cloudQrcodeFileID) || '',
       loaded: false
     }
   })

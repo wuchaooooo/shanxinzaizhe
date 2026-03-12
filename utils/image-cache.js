@@ -135,6 +135,17 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
         throw new Error(`Download failed with status ${downloadRes.statusCode}`)
       }
 
+      // 检查 tempFilePath 是否有效
+      if (!downloadRes.tempFilePath) {
+        throw new Error('tempFilePath is empty')
+      }
+
+      // 如果 tempFilePath 是 http:// 开头，说明是开发者工具的模拟路径，直接返回
+      if (downloadRes.tempFilePath.startsWith('http://')) {
+        console.warn(`[云存储] 开发者工具模拟路径，直接返回: ${downloadRes.tempFilePath}`)
+        return downloadRes.tempFilePath
+      }
+
       // 持久化保存（使用 fileID 作为文件名）
       const localPath = _localPath(cacheIdentifier)
 
