@@ -7,7 +7,10 @@ Page({
     isEdit: false,
     eventId: '',
     originalImageKeys: [], // 保存原始的 imageKeys 数组
+    originalCloudFileIDs: [], // 保存原始的云存储 fileID 数组
     originalCheckinQrcodeKey: '', // 保存原始的签到码 key
+    originalCheckinQrcodeCloudFileID: '', // 保存原始的签到码云存储 fileID
+    checkinQrcodeIsNew: false, // 用户是否主动选了新签到码
     formData: {
       name: '',
       type: '星享会',
@@ -122,7 +125,10 @@ Page({
 
     this.setData({
       originalImageKeys: imageKeys, // 保存原始的 imageKeys 数组
+      originalCloudFileIDs: event.cloudImageFileIDs || [], // 保存原始的云存储 fileID 数组
       originalCheckinQrcodeKey: event.checkinQrcodeKey || '', // 保存原始签到码 key
+      originalCheckinQrcodeCloudFileID: event.cloudCheckinQrcodeFileID || '', // 保存原始签到码云存储 fileID
+      checkinQrcodeIsNew: false, // 加载时重置，非用户主动选图
       formData: {
         name: event.name || '',
         type: event.type,
@@ -176,8 +182,8 @@ Page({
     })
     console.log('合并后的开始时间:', datetime)
 
-    // 自动设置结束时间为开始时间+2小时（仅在新建模式且结束时间未设置时）
-    if (!this.data.isEdit && !this.data.formData.endTime) {
+    // 如果已经选择了时间，则自动设置结束时间
+    if (!this.data.isEdit && !this.data.formData.endTime && this.data.formData.displayTime) {
       this.setDefaultEndTime(datetime)
     }
   },
@@ -328,17 +334,22 @@ Page({
     const index = e.currentTarget.dataset.index
     const images = [...this.data.formData.images]
     const originalImageKeys = [...this.data.originalImageKeys]
+    const originalCloudFileIDs = [...this.data.originalCloudFileIDs]
 
-    // 如果删除的是原有图片（非临时路径），也要从 originalImageKeys 中移除
+    // 如果删除的是原有图片（非临时路径），也要从 originalImageKeys 和 originalCloudFileIDs 中移除
     if (!images[index].includes('tmp') && originalImageKeys.length > index) {
       originalImageKeys.splice(index, 1)
+      if (originalCloudFileIDs.length > index) {
+        originalCloudFileIDs.splice(index, 1)
+      }
     }
 
     images.splice(index, 1)
 
     this.setData({
       'formData.images': images,
-      originalImageKeys: originalImageKeys
+      originalImageKeys: originalImageKeys,
+      originalCloudFileIDs: originalCloudFileIDs
     })
   },
 
@@ -350,7 +361,8 @@ Page({
       sourceType: ['album', 'camera'],
       success: (res) => {
         this.setData({
-          'formData.checkinQrcode': res.tempFilePaths[0]
+          'formData.checkinQrcode': res.tempFilePaths[0],
+          checkinQrcodeIsNew: true // 用户主动选了新图
         })
       }
     })
@@ -360,7 +372,9 @@ Page({
   onDeleteCheckinQrcode() {
     this.setData({
       'formData.checkinQrcode': '',
-      originalCheckinQrcodeKey: '' // 清空原始 key
+      originalCheckinQrcodeKey: '', // 清空原始 key
+      originalCheckinQrcodeCloudFileID: '', // 清空原始云存储 fileID
+      checkinQrcodeIsNew: false
     })
   },
 
@@ -490,15 +504,36 @@ Page({
       const newImages = formData.images.filter(img => img.includes('tmp')) // 新上传的图片
       const oldImages = formData.images.filter(img => !img.includes('tmp')) // 原有的图片
 
+      // 引入云存储上传工具
+      const { uploadToCloudStorage } = require('../../utils/cloud-storage-uploader.js')
+      const { DATA_SOURCE_CONFIG } = require('../../utils/data-source-config.js')
+      const cloudFileIDs = []
+
       // 上传新图片
       if (newImages.length > 0) {
         wx.showLoading({ title: `上传图片中 0/${newImages.length}` })
         try {
           for (let i = 0; i < newImages.length; i++) {
             wx.showLoading({ title: `上传图片中 ${i + 1}/${newImages.length}` })
+
+            // 1. 上传到飞书（保持现有逻辑）
             const imageKey = await feishuApi.uploadImage(newImages[i])
             imageKeys.push(imageKey)
             console.log(`图片 ${i + 1} 上传成功，image_key:`, imageKey)
+
+            // 2. 如果开关开启，同时上传到云存储
+            if (DATA_SOURCE_CONFIG.useCloudStorage) {
+              const cloudResult = await uploadToCloudStorage(
+                newImages[i],
+                `events/${Date.now()}_${i}_${imageKey}.png`
+              )
+              if (cloudResult.success) {
+                cloudFileIDs.push(cloudResult.fileID)
+                console.log(`[云存储] 图片 ${i + 1} 上传成功:`, cloudResult.fileID)
+              } else {
+                console.warn(`[云存储] 图片 ${i + 1} 上传失败，仅保存飞书 imageKey`)
+              }
+            }
           }
         } catch (uploadError) {
           console.error('图片上传失败:', uploadError)
@@ -516,6 +551,10 @@ Page({
       // 合并原有的 imageKeys 和新上传的 imageKeys
       const finalImageKeys = [...this.data.originalImageKeys, ...imageKeys]
 
+      // 合并原有的 cloudFileIDs 和新上传的 cloudFileIDs
+      const originalCloudFileIDs = this.data.originalCloudFileIDs || []
+      const finalCloudFileIDs = [...originalCloudFileIDs, ...cloudFileIDs]
+
       // 保存 imageKeys 数组（用逗号分隔的字符串）
       if (finalImageKeys.length > 0) {
         fields['活动海报链接_飞书_image_key'] = finalImageKeys.join(',')
@@ -523,6 +562,12 @@ Page({
       } else {
         fields['活动海报链接_飞书_image_key'] = ''
         console.log('清空 imageKeys')
+      }
+
+      // 保存 cloudFileIDs 数组（用逗号分隔的字符串）
+      if (DATA_SOURCE_CONFIG.useCloudStorage && finalCloudFileIDs.length > 0) {
+        fields['活动海报链接_腾讯云_file_id'] = finalCloudFileIDs.join(',')
+        console.log('最终 cloudFileIDs:', fields['活动海报链接_腾讯云_file_id'])
       }
 
       // 处理签到码上传（仅星享会、午餐会、客户活动）
@@ -533,14 +578,31 @@ Page({
         console.log('活动类型匹配，可以上传签到码')
         if (formData.checkinQrcode) {
           console.log('有签到码需要处理')
-          // 如果是新上传的签到码（临时路径）
-          if (formData.checkinQrcode.includes('tmp')) {
+          // 只有用户主动选了新图才上传
+          if (this.data.checkinQrcodeIsNew) {
             console.log('检测到新上传的签到码，开始上传到飞书')
             try {
               wx.showLoading({ title: '上传签到码中...' })
+
+              // 1. 上传到飞书（保持现有逻辑）
               const checkinQrcodeKey = await feishuApi.uploadImage(formData.checkinQrcode)
               fields['活动签到码链接_飞书_image_key'] = checkinQrcodeKey
               console.log('签到码上传成功，image_key:', checkinQrcodeKey)
+
+              // 2. 如果开关开启，同时上传到云存储
+              if (DATA_SOURCE_CONFIG.useCloudStorage) {
+                const cloudResult = await uploadToCloudStorage(
+                  formData.checkinQrcode,
+                  `checkin-qrcodes/${Date.now()}_${checkinQrcodeKey}.png`
+                )
+                if (cloudResult.success) {
+                  fields['活动签到码链接_腾讯云_file_id'] = cloudResult.fileID
+                  console.log('[云存储] 签到码上传成功:', cloudResult.fileID)
+                } else {
+                  console.warn('[云存储] 签到码上传失败，仅保存飞书 qrcodeKey')
+                }
+              }
+
               wx.hideLoading()
             } catch (uploadError) {
               console.error('签到码上传失败:', uploadError)
@@ -556,6 +618,10 @@ Page({
             console.log('使用原有的签到码 key:', this.data.originalCheckinQrcodeKey)
             // 使用原有的签到码 key
             fields['活动签到码链接_飞书_image_key'] = this.data.originalCheckinQrcodeKey
+            // 如果有原有的云存储 fileID，也保留
+            if (this.data.originalCheckinQrcodeCloudFileID) {
+              fields['活动签到码链接_腾讯云_file_id'] = this.data.originalCheckinQrcodeCloudFileID
+            }
           }
         } else {
           console.log('没有签到码，设置为空字符串')
@@ -591,14 +657,27 @@ Page({
         const globalEvents = app.globalData.eventsData || []
         const globalIdx = globalEvents.findIndex(e => e.id === eventId)
         if (globalIdx !== -1) {
+          const existingEvent = globalEvents[globalIdx]
+
           globalEvents[globalIdx].name = formData.name
           globalEvents[globalIdx].organizer = formData.organizer
           globalEvents[globalIdx].time = newStartTime
           globalEvents[globalIdx].endTime = newEndTime
           globalEvents[globalIdx].status = newStatus
-          globalEvents[globalIdx].address = formData.address || globalEvents[globalIdx].address
+          globalEvents[globalIdx].address = formData.address || existingEvent.address
           globalEvents[globalIdx].latitude = formData.latitude
           globalEvents[globalIdx].longitude = formData.longitude
+
+          // 保留图片字段，防止编辑后图片丢失
+          if (existingEvent.image) {
+            globalEvents[globalIdx].image = existingEvent.image
+          }
+          if (existingEvent.images && existingEvent.images.length > 0) {
+            globalEvents[globalIdx].images = existingEvent.images
+          }
+          if (existingEvent.imagePaths && existingEvent.imagePaths.length > 0) {
+            globalEvents[globalIdx].imagePaths = existingEvent.imagePaths
+          }
         }
       } else {
         // 创建记录

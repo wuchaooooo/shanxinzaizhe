@@ -560,13 +560,30 @@ Page({
 
       // 处理图片上传
       const feishuApi = require('../../utils/feishu-api.js')
+      const { uploadToCloudStorage } = require('../../utils/cloud-storage-uploader.js')
+      const { DATA_SOURCE_CONFIG } = require('../../utils/data-source-config.js')
 
       // 上传头像
       if (formData.avatarImage && formData.avatarImage.isNew) {
         wx.showLoading({ title: '上传头像中...' })
         try {
+          // 1. 上传到飞书（保持现有逻辑）
           const imageKey = await feishuApi.uploadImage(formData.avatarImage.path)
           fields[mapping.imageKey] = imageKey
+
+          // 2. 如果开关开启，同时上传到云存储
+          if (DATA_SOURCE_CONFIG.useCloudStorage) {
+            const cloudResult = await uploadToCloudStorage(
+              formData.avatarImage.path,
+              `avatars/${Date.now()}_${imageKey}.png`
+            )
+            if (cloudResult.success) {
+              fields[mapping.cloudImageFileID] = cloudResult.fileID
+              console.log('[云存储] 头像上传成功:', cloudResult.fileID)
+            } else {
+              console.warn('[云存储] 头像上传失败，仅保存飞书 imageKey')
+            }
+          }
         } catch (err) {
           console.error('头像上传失败:', err)
           wx.hideLoading()
@@ -584,8 +601,23 @@ Page({
       if (formData.qrcodeImage && formData.qrcodeImage.isNew) {
         wx.showLoading({ title: '上传二维码中...' })
         try {
+          // 1. 上传到飞书（保持现有逻辑）
           const qrcodeKey = await feishuApi.uploadImage(formData.qrcodeImage.path)
           fields[mapping.qrcodeKey] = qrcodeKey
+
+          // 2. 如果开关开启，同时上传到云存储
+          if (DATA_SOURCE_CONFIG.useCloudStorage) {
+            const cloudResult = await uploadToCloudStorage(
+              formData.qrcodeImage.path,
+              `qrcodes/${Date.now()}_${qrcodeKey}.png`
+            )
+            if (cloudResult.success) {
+              fields[mapping.cloudQrcodeFileID] = cloudResult.fileID
+              console.log('[云存储] 二维码上传成功:', cloudResult.fileID)
+            } else {
+              console.warn('[云存储] 二维码上传失败，仅保存飞书 qrcodeKey')
+            }
+          }
         } catch (err) {
           console.error('二维码上传失败:', err)
           wx.hideLoading()

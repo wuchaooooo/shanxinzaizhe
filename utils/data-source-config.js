@@ -5,8 +5,30 @@ const DATA_SOURCE_CONFIG = {
   // 数据源类型: 'local' 或 'feishu'
   source: 'feishu',
 
-  // 图片下载并发数
-  imageConcurrency: 30,
+  // 图片下载并发数（微信小程序 wx.downloadFile 最大并发 10）
+  imageConcurrency: 10,
+
+  // 云存储功能开关（默认关闭，测试通过后再开启）
+  useCloudStorage: false,
+
+  // 静态资源源类型: 'feishu' 或 'cloud'
+  assetsSource: 'cloud',
+
+  // 腾讯云静态资源路径配置
+  cloudAssets: {
+    // 首页核心价值的3张图
+    mission_banner: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/banner/使命.png',
+    vision_banner: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/banner/愿景.png',
+    value_banner: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/banner/价值观.png',
+    // 首页了解友邦保险的logo
+    aia: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/logo/aia.png',
+    // 首页左上角的logo，以及其他用到这个logo的地方
+    shanxinzheli: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/logo/shanxin.PNG',
+    // 三个页面头部块的右下角的图片
+    aia_footer: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/logo/mountains.png',
+    // 团队海报生成时，头部图片
+    team_poster_header: 'cloud://shanxinzaizhe-1g0sxfo695003783.7368-shanxinzaizhe-1g0sxfo695003783-1405846505/images/banner/team_poster_header.jpg'
+  },
 
   // 自助编辑功能开关（false = 原有逻辑完全不变，true = 详情页从新表读取数据并显示编辑按钮）
   useNewProfileTable: true,
@@ -25,6 +47,8 @@ const DATA_SOURCE_CONFIG = {
     bio: '个人介绍',     // 飞书用的是"个人介绍"而不是"个人简介"
     imageKey: '头像链接_飞书_image_key',   // 新表图片字段
     qrcodeKey: '个人微信二维码链接_飞书_image_key',  // 新表二维码字段
+    cloudImageFileID: '头像链接_腾讯云_image_file_id',  // 云存储头像 fileID
+    cloudQrcodeFileID: '个人微信二维码链接_腾讯云_image_file_id',  // 云存储二维码 fileID
     employeeId: '营销员工号',  // 唯一标识
     badges: '荣誉勋章',  // 飞书用的是"荣誉勋章"
     timeline: '在友邦浙江的成长足迹',  // 成长足迹
@@ -42,11 +66,13 @@ const DATA_SOURCE_CONFIG = {
     time: '开始时间',
     endTime: '结束时间',
     imageKey: '活动海报链接_飞书_image_key',
+    cloudImageFileID: '活动海报链接_腾讯云_file_id',  // 云存储活动海报 fileID（多个用逗号分隔）
     employeeId: '营销员工号',
     address: '活动地址',
     latitude: '地址纬度',
     longitude: '地址经度',
     checkinQrcodeKey: '活动签到码链接_飞书_image_key',  // 活动签到码
+    cloudCheckinQrcodeFileID: '活动签到码链接_腾讯云_file_id',  // 云存储签到码 fileID
     lastModifiedDate: 'Last Modified Date'
   }
 }
