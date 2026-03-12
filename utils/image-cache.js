@@ -139,21 +139,10 @@ async function downloadFromCloudStorage(fileID, imageKey) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // 1. 获取临时下载链接（7天有效）
-      const res = await wx.cloud.getTempFileURL({
-        fileList: [fileID]
-      })
-
-      if (!res.fileList || res.fileList.length === 0) {
-        throw new Error('Failed to get temp file URL')
-      }
-
-      const tempFileURL = res.fileList[0].tempFileURL
-
-      // 2. 下载到本地
+      // 使用云存储的 downloadFile 接口直接下载
       const downloadRes = await new Promise((resolve, reject) => {
-        wx.downloadFile({
-          url: tempFileURL,
+        wx.cloud.downloadFile({
+          fileID: fileID,
           success: resolve,
           fail: reject
         })
@@ -163,7 +152,7 @@ async function downloadFromCloudStorage(fileID, imageKey) {
         throw new Error(`Download failed with status ${downloadRes.statusCode}`)
       }
 
-      // 3. 持久化保存（使用 imageKey 作为文件名，保持一致性）
+      // 持久化保存（使用 imageKey 作为文件名，保持一致性）
       const localPath = _localPath(imageKey)
 
       try {
