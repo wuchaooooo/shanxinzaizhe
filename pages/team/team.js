@@ -127,16 +127,29 @@ Page({
 
     this._updateTimer = setTimeout(() => {
       if (Object.keys(this._pendingUpdates).length > 0) {
-        // 一次性更新所有待更新的数据
-        this.setData(this._pendingUpdates, () => {
-          // 在回调中更新 allImagesLoaded（只触发一次）
-          this.setData({
-            allImagesLoaded: this.checkAllImagesLoaded(this.data.partners)
-          })
+        // 计算 allImagesLoaded 并合并到同一次 setData
+        const updatedPartners = [...this.data.partners]
+
+        // 应用待更新的数据到临时数组
+        Object.keys(this._pendingUpdates).forEach(key => {
+          const match = key.match(/partners\[(\d+)\]\.(\w+)/)
+          if (match) {
+            const idx = parseInt(match[1])
+            const field = match[2]
+            if (updatedPartners[idx]) {
+              updatedPartners[idx] = { ...updatedPartners[idx], [field]: this._pendingUpdates[key] }
+            }
+          }
         })
+
+        // 合并 allImagesLoaded 到同一次 setData
+        this._pendingUpdates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
+
+        // 一次性更新所有数据
+        this.setData(this._pendingUpdates)
         this._pendingUpdates = {}
       }
-    }, 100)
+    }, 50)  // 从 100ms 减少到 50ms，减少分批显示
   },
 
   // 同步已下载的图片路径（从 globalData 到页面数据）
