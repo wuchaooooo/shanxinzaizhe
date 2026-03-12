@@ -119,6 +119,26 @@ Page({
     return partners.every(p => p.loaded)
   },
 
+  // 防抖更新：合并多个 setData 调用
+  _scheduleUpdate() {
+    if (this._updateTimer) {
+      clearTimeout(this._updateTimer)
+    }
+
+    this._updateTimer = setTimeout(() => {
+      if (Object.keys(this._pendingUpdates).length > 0) {
+        // 一次性更新所有待更新的数据
+        this.setData(this._pendingUpdates, () => {
+          // 在回调中更新 allImagesLoaded（只触发一次）
+          this.setData({
+            allImagesLoaded: this.checkAllImagesLoaded(this.data.partners)
+          })
+        })
+        this._pendingUpdates = {}
+      }
+    }, 100)
+  },
+
   // 同步已下载的图片路径（从 globalData 到页面数据）
   _syncDownloadedImages() {
     const app = getApp()
@@ -186,16 +206,17 @@ Page({
 
     if (hasUpdates) {
       console.log('[Team] 同步已下载的图片')
-      this.setData(updates, () => {
-        // 重新计算 allImagesLoaded 状态
-        this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
-      })
+      this.setData(updates)
     }
   },
 
   onLoad() {
     // 首次加载时不启用动画，让骨架屏一开始就全部显示
     // （动画会导致骨架屏一个一个出现）
+
+    // 初始化批量更新队列
+    this._pendingUpdates = {}  // 待更新的数据
+    this._updateTimer = null   // 防抖定时器
 
     // 加载善心 logo（代码：shanxinzheli）
     const shanxinLogoPath = getAssetPath('shanxinzheli')
@@ -262,58 +283,36 @@ Page({
 
     // 注册图片下载完成回调，处理头像和二维码
     this._imageReadyCb = (type, employeeId, path) => {
+      if (type !== 'avatar') return  // 只处理头像，二维码不在列表页显示
+
       const partners = this.data.partners
       const idx = partners.findIndex(p => p.employeeId === employeeId)
       if (idx === -1) return
+
+      // 检查是否已经是这个路径（避免重复更新）
+      if (partners[idx].image === path) return
 
       // 同时更新 globalData，确保其他页面能获取到最新数据
       const globalPartners = app.globalData.partnersData || []
       const globalIdx = globalPartners.findIndex(p => p.employeeId === employeeId)
       if (globalIdx !== -1) {
-        if (type === 'avatar') {
-          globalPartners[globalIdx].image = path
-        } else if (type === 'qrcode') {
-          globalPartners[globalIdx].qrcode = path
-        }
+        globalPartners[globalIdx].image = path
         app.globalData.partnersData = globalPartners
       }
 
-      // 更新图片路径
-      const updates = {}
-      if (type === 'avatar') {
-        // 如果头像路径已经相同，不需要更新（避免闪烁）
-        if (partners[idx].image === path) return
+      // 加入待更新队列（不立即 setData）
+      this._pendingUpdates[`partners[${idx}].image`] = path
+      this._pendingUpdates[`partners[${idx}].loaded`] = true
 
-        // 更新 partners 数组
-        updates[`partners[${idx}].image`] = path
-        updates[`partners[${idx}].loaded`] = true
-
-        // 同时更新 filteredPartners（WXML 渲染使用）
-        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
-        if (fidx !== -1) {
-          updates[`filteredPartners[${fidx}].image`] = path
-          updates[`filteredPartners[${fidx}].loaded`] = true
-        }
-
-        // 同时计算并更新 allImagesLoaded 状态，避免二次 setData
-        const updatedPartners = [...partners]
-        updatedPartners[idx] = { ...updatedPartners[idx], image: path, loaded: true }
-        updates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
-      } else if (type === 'qrcode') {
-        // 如果二维码路径已经相同，不需要更新
-        if (partners[idx].qrcode === path) return
-
-        // 更新 partners 数组
-        updates[`partners[${idx}].qrcode`] = path
-
-        // 同时更新 filteredPartners
-        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
-        if (fidx !== -1) {
-          updates[`filteredPartners[${fidx}].qrcode`] = path
-        }
+      // 同时更新 filteredPartners（WXML 渲染使用）
+      const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
+      if (fidx !== -1) {
+        this._pendingUpdates[`filteredPartners[${fidx}].image`] = path
+        this._pendingUpdates[`filteredPartners[${fidx}].loaded`] = true
       }
 
-      this.setData(updates)
+      // 防抖：100ms 内的更新合并为一次 setData
+      this._scheduleUpdate()
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
 
@@ -868,27 +867,6 @@ Page({
   onPosterBtnLogoLoad() {
     this.setData({
       posterBtnLogoLoaded: true
-    })
-  },
-
-  // 图片加载成功
-  onImageLoad(e) {
-    const name = e.currentTarget.dataset.name
-    const partners = this.data.partners
-    const idx = partners.findIndex(p => p.name === name)
-    if (idx === -1) return
-
-    // 头像加载成功，设置 loaded: true
-    const updates = {
-      [`partners[${idx}].loaded`]: true
-    }
-    const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
-    if (fidx !== -1) {
-      updates[`filteredPartners[${fidx}].loaded`] = true
-    }
-
-    this.setData(updates, () => {
-      this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
     })
   },
 

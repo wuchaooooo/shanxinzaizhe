@@ -98,6 +98,27 @@ async function _downloadWithLimit(tasks, limit) {
 }
 
 /**
+ * 异步持久化文件（不阻塞）
+ * @param {string} tempPath - 临时文件路径
+ * @param {string} localPath - 持久化目标路径
+ * @param {string} cacheIdentifier - 缓存标识
+ */
+function _persistFileAsync(tempPath, localPath, cacheIdentifier) {
+  wx.getFileSystemManager().saveFile({
+    tempFilePath: tempPath,
+    filePath: localPath,
+    success: () => {
+      console.log(`[图片缓存] 持久化成功: ${cacheIdentifier}`)
+      // 持久化成功后，下次 getCached 会直接返回永久路径
+    },
+    fail: (err) => {
+      console.warn(`[图片缓存] 持久化失败: ${cacheIdentifier}`, err)
+      // 失败不影响显示，临时路径仍然可用
+    }
+  })
+}
+
+/**
  * 从云存储下载图片（带重试机制）
  * @param {string} fileID - 云存储 fileID
  * @param {string} cacheIdentifier - 缓存文件名标识（使用 fileID）
@@ -153,28 +174,16 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
 
       // 如果 tempFilePath 是 http:// 开头，说明是开发者工具的模拟路径，直接返回
       if (downloadRes.tempFilePath.startsWith('http://')) {
-        console.warn(`[云存储] 开发者工具模拟路径，直接返回: ${downloadRes.tempFilePath}`)
         return downloadRes.tempFilePath
       }
 
-      // 持久化保存（使用 fileID 作为文件名）
+      const tempPath = downloadRes.tempFilePath
       const localPath = _localPath(cacheIdentifier)
 
-      try {
-        await new Promise((resolve, reject) => {
-          wx.getFileSystemManager().saveFile({
-            tempFilePath: downloadRes.tempFilePath,
-            filePath: localPath,
-            success: resolve,
-            fail: reject
-          })
-        })
-      } catch (saveErr) {
-        console.warn(`[云存储] 持久化失败，使用临时路径`, saveErr)
-        return downloadRes.tempFilePath
-      }
+      // 立即返回临时路径，异步持久化（不阻塞）
+      _persistFileAsync(tempPath, localPath, cacheIdentifier)
 
-      return localPath
+      return tempPath
     } catch (err) {
       lastError = err
       console.error(`[云存储] 下载失败 (尝试 ${attempt}/${maxRetries}):`, {
@@ -227,23 +236,14 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
               })
 
               if (downloadRes.statusCode === 200 && downloadRes.tempFilePath) {
-                // 持久化保存
+                const tempPath = downloadRes.tempFilePath
                 const localPath = _localPath(cacheIdentifier)
-                try {
-                  await new Promise((resolve, reject) => {
-                    wx.getFileSystemManager().saveFile({
-                      tempFilePath: downloadRes.tempFilePath,
-                      filePath: localPath,
-                      success: resolve,
-                      fail: reject
-                    })
-                  })
-                  console.log(`[云存储] 备选方案下载成功`)
-                  return localPath
-                } catch (saveErr) {
-                  console.warn(`[云存储] 持久化失败，使用临时路径`, saveErr)
-                  return downloadRes.tempFilePath
-                }
+
+                // 立即返回临时路径，异步持久化（不阻塞）
+                _persistFileAsync(tempPath, localPath, cacheIdentifier)
+
+                console.log(`[云存储] 备选方案下载成功`)
+                return tempPath
               }
             }
           }
