@@ -41,7 +41,7 @@ App({
 
       // 三个任务并行启动，互不阻塞，各自内部有锁防止重复执行
       this.preloadFeishuAssets()
-      this.preloadFeishuData()
+      this.preloadFeishuTeam()
       this.preloadFeishuEvents()
     }
 
@@ -91,7 +91,7 @@ App({
   },
 
   // 预加载飞书数据（从新表加载：文本数据先返回，图片后台下载）
-  async preloadFeishuData() {
+  async preloadFeishuTeam() {
     if (this._fetchingFeishuData) return
     this._fetchingFeishuData = true
     try {
@@ -102,7 +102,7 @@ App({
       const existingData = this.globalData.partnersData || []
       if (existingData.length > 0) {
         const existingWithImages = existingData.filter(p => p.image).length
-        console.log(`[App] preloadFeishuData: 现有数据 ${existingData.length} 条，其中 ${existingWithImages} 条有图片`)
+        console.log(`[App] preloadFeishuTeam: 现有数据 ${existingData.length} 条，其中 ${existingWithImages} 条有图片`)
 
         let preservedCount = 0
         profiles.forEach(profile => {
@@ -121,12 +121,12 @@ App({
             }
           }
         })
-        console.log(`[App] preloadFeishuData: 保留了 ${preservedCount} 条图片路径`)
+        console.log(`[App] preloadFeishuTeam: 保留了 ${preservedCount} 条图片路径`)
       }
 
       // 始终更新引用，保证图片路径的修改能同步到 globalData
       const finalWithImages = profiles.filter(p => p.image).length
-      console.log(`[App] preloadFeishuData: 最终数据 ${profiles.length} 条，其中 ${finalWithImages} 条有图片`)
+      console.log(`[App] preloadFeishuTeam: 最终数据 ${profiles.length} 条，其中 ${finalWithImages} 条有图片`)
       this.globalData.partnersData = profiles
 
       // 飞书数据更新后，若已有 openid，重新比对身份
@@ -232,10 +232,15 @@ App({
 
   // 预加载飞书活动数据（两阶段：文本数据先返回，图片后台下载）
   async preloadFeishuEvents() {
-    if (this._fetchingFeishuEvents) return
+    if (this._fetchingFeishuEvents) {
+      console.log('[App] preloadFeishuEvents 已在执行中，跳过')
+      return
+    }
     this._fetchingFeishuEvents = true
     try {
-      console.log('开始预加载飞书活动数据...')
+      console.log('[App] ========== 开始预加载飞书活动数据 ==========')
+      console.log('[App] 调用时间:', new Date().toISOString())
+      console.log('[App] 调用堆栈:', new Error().stack)
 
       const { events, changedIds, changedImageIds } = await fetchFeishuEventsText()
 
@@ -253,17 +258,28 @@ App({
         events.forEach(event => {
           const existing = existingData.find(e => e.id === event.id)
           if (existing) {
+            console.log(`[App] 检查活动 ${event.name} (${event.id}):`, {
+              'existing.imagePaths': existing.imagePaths ? `数组长度${existing.imagePaths.length}` : '无',
+              'existing.images': existing.images ? `数组长度${existing.images.length}` : '无',
+              'existing.image': existing.image ? '有' : '无'
+            })
+
             // 保留现有的图片路径（兼容多种字段名）
             if (existing.imagePaths && existing.imagePaths.length > 0) {
               event.imagePaths = existing.imagePaths
               preservedCount++
+              console.log(`[App] 保留 imagePaths: ${event.name}`)
             }
             if (existing.images && existing.images.length > 0) {
               event.images = existing.images
+              console.log(`[App] 保留 images: ${event.name}`)
             }
             if (existing.image) {
               event.image = existing.image
+              console.log(`[App] 保留 image: ${event.name}`)
             }
+          } else {
+            console.log(`[App] 新活动 ${event.name} (${event.id}): 在 existingData 中未找到`)
           }
         })
         console.log(`[App] preloadFeishuEvents: 保留了 ${preservedCount} 条图片路径`)
@@ -301,9 +317,10 @@ App({
         } else {
           console.log(`[App] 活动检测到变化，通知页面刷新`)
         }
+        console.log('[App] 通知 eventsDataListeners，监听器数量:', this.globalData.eventsDataListeners.length)
         this.globalData.eventsDataListeners.forEach(cb => cb(events))
       } else {
-        console.log('[App] 活动数据无变化')
+        console.log('[App] 活动数据无变化，不通知页面')
       }
 
       // 检查哪些活动需要下载图片：
@@ -382,7 +399,7 @@ App({
     // 每次显示时重新拉取飞书数据，优先加载静态资源
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
       await this.preloadFeishuAssets()
-      await this.preloadFeishuData()
+      await this.preloadFeishuTeam()
       await this.preloadFeishuEvents()
     }
   },

@@ -3,7 +3,6 @@
 
 const feishuApi = require('./feishu-api.js')
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
-const { downloadImageByKey } = require('./image-downloader.js')
 const { createCacheManager, isRecordChanged } = require('./text-cache.js')
 const { getCached, getImage, prefetchImages, evict } = require('./image-cache.js')
 
@@ -314,7 +313,6 @@ async function downloadEventImagesBackground(eventsData, onImageReady) {
     const firstCloudFileID = event.cloudImageFileIDs && event.cloudImageFileIDs[0]
     if (firstCloudFileID) {
       imageItems.push({
-        imageKey: firstCloudFileID,  // prefetchImages 需要这个字段名
         cloudFileID: firstCloudFileID
       })
       fileIDToEventId.set(firstCloudFileID, event.id)
@@ -333,6 +331,5 @@ module.exports = {
   fetchFeishuEventsText,
   downloadEventImagesBackground,
   downloadEventImages,
-  downloadImageByKey,   // re-export 供详情页使用
   calculateEventStatus
 }

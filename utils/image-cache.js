@@ -7,6 +7,9 @@
 //   prefetchImages(items, onEach, concurrency)     → Promise<void>  批量预下载，每张完成后回调
 //   evict(fileID)                                  → void  删除本地文件（图片更新时调用）
 
+// 内存缓存：用于开发者工具环境（http://tmp/ 路径）
+const _memoryCache = {}
+
 function _localPath(fileID) {
   // 清理 fileID：移除空格换行符、cloud:// 前缀，替换特殊字符
   const cleanID = String(fileID || '')
@@ -29,6 +32,12 @@ function _fileExists(path) {
 function getCached(fileID) {
   if (!fileID) return null
 
+  // 先检查内存缓存（开发者工具环境的 http://tmp/ 路径）
+  if (_memoryCache[fileID]) {
+    return _memoryCache[fileID]
+  }
+
+  // 再检查文件系统缓存
   const path = _localPath(fileID)
   return _fileExists(path) ? path : null
 }
@@ -59,25 +68,25 @@ async function getImage(cloudFileID) {
 
 /**
  * 批量预下载图片（并发控制）。已缓存的跳过，未缓存的下载。
- * @param {Array<{imageKey: string, cloudFileID: string}>} items - 包含 cloudFileID 的对象数组
- * @param {Function} [onEach] (imageKey, localPath) => void
+ * @param {Array<{cloudFileID: string}>} items - 包含 cloudFileID 的对象数组
+ * @param {Function} [onEach] (cloudFileID, localPath) => void
  * @param {number} [concurrency]
  */
 async function prefetchImages(items, onEach, concurrency = 10) {
   if (!items || items.length === 0) return
 
   const tasks = items.filter(item => item && item.cloudFileID).map(item => async () => {
-    const { imageKey, cloudFileID } = item
+    const { cloudFileID } = item
 
     const cached = getCached(cloudFileID)
     if (cached) {
-      if (onEach) onEach(imageKey, cached)
+      if (onEach) onEach(cloudFileID, cached)
       return
     }
 
     try {
       const path = await downloadFromCloudStorage(cloudFileID, cloudFileID)
-      if (onEach) onEach(imageKey, path)
+      if (onEach) onEach(cloudFileID, path)
     } catch (err) {
       console.error(`[ImageCache] 下载失败 ${cloudFileID}:`, err)
     }
@@ -92,6 +101,11 @@ async function prefetchImages(items, onEach, concurrency = 10) {
  */
 function evict(fileID) {
   if (!fileID) return
+
+  // 清除内存缓存
+  delete _memoryCache[fileID]
+
+  // 删除文件系统缓存
   try { wx.getFileSystemManager().unlinkSync(_localPath(fileID)) } catch (e) { /* 忽略 */ }
 }
 
@@ -102,24 +116,25 @@ async function _downloadWithLimit(tasks, limit) {
 }
 
 /**
- * 异步持久化文件（不阻塞）
+ * 同步持久化文件（阻塞直到完成）
  * @param {string} tempPath - 临时文件路径
  * @param {string} localPath - 持久化目标路径
  * @param {string} cacheIdentifier - 缓存标识
+ * @returns {string} 持久化后的路径
  */
-function _persistFileAsync(tempPath, localPath, cacheIdentifier) {
-  wx.getFileSystemManager().saveFile({
-    tempFilePath: tempPath,
-    filePath: localPath,
-    success: () => {
-      console.log(`[图片缓存] 持久化成功: ${cacheIdentifier}`)
-      // 持久化成功后，下次 getCached 会直接返回永久路径
-    },
-    fail: (err) => {
-      console.warn(`[图片缓存] 持久化失败: ${cacheIdentifier}`, err)
-      // 失败不影响显示，临时路径仍然可用
-    }
-  })
+function _persistFileSync(tempPath, localPath, cacheIdentifier) {
+  try {
+    wx.getFileSystemManager().saveFileSync(tempPath, localPath)
+    console.log(`[图片缓存] 持久化成功: ${cacheIdentifier}`)
+    // 更新内存缓存为永久路径
+    _memoryCache[cacheIdentifier] = localPath
+    return localPath
+  } catch (err) {
+    console.warn(`[图片缓存] 持久化失败: ${cacheIdentifier}`, err)
+    // 持久化失败，返回临时路径（仍然可用）
+    _memoryCache[cacheIdentifier] = tempPath
+    return tempPath
+  }
 }
 
 /**
@@ -176,18 +191,23 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
         throw new Error('tempFilePath is empty')
       }
 
-      // 如果 tempFilePath 是 http:// 开头，说明是开发者工具的模拟路径，直接返回
-      if (downloadRes.tempFilePath.startsWith('http://')) {
-        return downloadRes.tempFilePath
+      const tempPath = downloadRes.tempFilePath
+
+      // 立即存入内存缓存（避免在持久化完成之前重复下载）
+      _memoryCache[cacheIdentifier] = tempPath
+
+      // 如果 tempFilePath 是 http:// 开头，说明是开发者工具的模拟路径
+      // 无法持久化，直接返回
+      if (tempPath.startsWith('http://')) {
+        console.log(`[图片缓存] 开发者工具环境，存入内存缓存: ${cacheIdentifier}`)
+        return tempPath
       }
 
-      const tempPath = downloadRes.tempFilePath
+      // 真机环境：同步持久化（阻塞直到完成）
       const localPath = _localPath(cacheIdentifier)
+      const persistedPath = _persistFileSync(tempPath, localPath, cacheIdentifier)
 
-      // 立即返回临时路径，异步持久化（不阻塞）
-      _persistFileAsync(tempPath, localPath, cacheIdentifier)
-
-      return tempPath
+      return persistedPath
     } catch (err) {
       lastError = err
       console.error(`[云存储] 下载失败 (尝试 ${attempt}/${maxRetries}):`, {
@@ -243,11 +263,11 @@ async function downloadFromCloudStorage(fileID, cacheIdentifier) {
                 const tempPath = downloadRes.tempFilePath
                 const localPath = _localPath(cacheIdentifier)
 
-                // 立即返回临时路径，异步持久化（不阻塞）
-                _persistFileAsync(tempPath, localPath, cacheIdentifier)
+                // 同步持久化（阻塞直到完成）
+                const persistedPath = _persistFileSync(tempPath, localPath, cacheIdentifier)
 
                 console.log(`[云存储] 备选方案下载成功`)
-                return tempPath
+                return persistedPath
               }
             }
           }

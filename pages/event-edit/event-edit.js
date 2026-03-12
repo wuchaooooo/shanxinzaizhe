@@ -399,6 +399,12 @@ Page({
       return false
     }
 
+    // 验证活动海报必须至少选一张
+    if (!formData.images || formData.images.length === 0) {
+      wx.showToast({ title: '请至少上传一张活动海报', icon: 'none' })
+      return false
+    }
+
     return true
   },
 
@@ -505,7 +511,11 @@ Page({
 
             const cloudResult = await uploadToCloudStorage(
               newImages[i],
-              `images/event/${Date.now()}_${i}.png`
+              `images/event/${Date.now()}_${i}.png`,
+              {
+                employeeId: currentUser?.employeeId,
+                index: i
+              }
             )
             if (cloudResult.success) {
               cloudFileIDs.push(cloudResult.fileID)
@@ -556,7 +566,10 @@ Page({
 
               const cloudResult = await uploadToCloudStorage(
                 formData.checkinQrcode,
-                `images/event/${Date.now()}_checkin.png`
+                `images/event/${Date.now()}_checkin.png`,
+                {
+                  employeeId: currentUser?.employeeId
+                }
               )
               if (cloudResult.success) {
                 // 保存为 JSON 数组格式（单张图片也用数组）

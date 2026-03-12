@@ -134,6 +134,8 @@ Page({
     drag: { active: false, type: '', fromIndex: -1, toIndex: -1 },  // 拖拽状态
     customersPickerCols: [CUSTOMERS_COL0, CUSTOMERS_COL1],
     customersPickerIndex: [0, 0],
+    isInstructorOptions: ['否', '是'],
+    isInstructorIndex: 0,
     formData: {
       name: '',
       schoolList: [],       // 毕业院校列表 string[]
@@ -146,7 +148,8 @@ Page({
       timelineList: [],     // 成长足迹列表 {time,title,desc}[]
       activitiesList: [],   // 最近动态列表 {time,title,desc}[]
       avatarImage: null,
-      qrcodeImage: null
+      qrcodeImage: null,
+      isInstructor: undefined  // 是否为善心讲师
     }
   },
 
@@ -210,6 +213,16 @@ Page({
         'formData.activitiesList':  activitiesList,
         badgeOptions:               buildBadgeOptions(badgesList)
       })
+
+      // 加载是否为善心讲师字段
+      if (f[mapping.isInstructor] !== undefined) {
+        const isInstructorText = extractFieldText(f[mapping.isInstructor])
+        const isInstructor = isInstructorText === '是'
+        this.setData({
+          'formData.isInstructor': isInstructor,
+          isInstructorIndex: isInstructor ? 1 : 0
+        })
+      }
 
       // 从 globalData 中获取已下载的头像和二维码
       const app = getApp()
@@ -276,6 +289,16 @@ Page({
         'formData.activitiesList':  activitiesList,
         badgeOptions:               buildBadgeOptions(badgesList)
       })
+
+      // 加载是否为善心讲师字段
+      if (f[mapping.isInstructor] !== undefined) {
+        const isInstructorText = extractFieldText(f[mapping.isInstructor])
+        const isInstructor = isInstructorText === '是'
+        this.setData({
+          'formData.isInstructor': isInstructor,
+          isInstructorIndex: isInstructor ? 1 : 0
+        })
+      }
 
       // 从 globalData 中获取已下载的头像和二维码
       const app = getApp()
@@ -367,6 +390,16 @@ Page({
     this.setData({ 'formData.joinDate': e.detail.value })
   },
 
+  // ── 是否为善心讲师 ────────────────────────────────────────────────────────────
+
+  onIsInstructorChange(e) {
+    const index = e.detail.value
+    this.setData({
+      isInstructorIndex: index,
+      'formData.isInstructor': index === 1  // 0='否', 1='是'
+    })
+  },
+
   // ── 专业领域 ────────────────────────────────────────────────────────────
 
   onNewSkillInput(e) {
@@ -413,14 +446,25 @@ Page({
               return
             }
 
+            // 保存旧的 cloudFileID，用于删除旧图片
+            const oldCloudFileID = this.data.formData.avatarImage?.cloudFileID
             this.setData({
-              'formData.avatarImage': { path: filePath, isNew: true }
+              'formData.avatarImage': {
+                path: filePath,
+                isNew: true,
+                oldCloudFileID: oldCloudFileID
+              }
             })
           },
           fail: () => {
             // 如果获取文件信息失败，仍然允许上传
+            const oldCloudFileID = this.data.formData.avatarImage?.cloudFileID
             this.setData({
-              'formData.avatarImage': { path: filePath, isNew: true }
+              'formData.avatarImage': {
+                path: filePath,
+                isNew: true,
+                oldCloudFileID: oldCloudFileID
+              }
             })
           }
         })
@@ -449,14 +493,25 @@ Page({
               return
             }
 
+            // 保存旧的 cloudFileID，用于删除旧图片
+            const oldCloudFileID = this.data.formData.qrcodeImage?.cloudFileID
             this.setData({
-              'formData.qrcodeImage': { path: filePath, isNew: true }
+              'formData.qrcodeImage': {
+                path: filePath,
+                isNew: true,
+                oldCloudFileID: oldCloudFileID
+              }
             })
           },
           fail: () => {
             // 如果获取文件信息失败，仍然允许上传
+            const oldCloudFileID = this.data.formData.qrcodeImage?.cloudFileID
             this.setData({
-              'formData.qrcodeImage': { path: filePath, isNew: true }
+              'formData.qrcodeImage': {
+                path: filePath,
+                isNew: true,
+                oldCloudFileID: oldCloudFileID
+              }
             })
           }
         })
@@ -532,6 +587,12 @@ Page({
       return
     }
 
+    // 是否为善心浙里讲师必填
+    if (formData.isInstructor === undefined) {
+      wx.showToast({ title: '请选择是否为善心浙里讲师', icon: 'none' })
+      return
+    }
+
     this.setData({ saving: true })
 
     try {
@@ -551,6 +612,11 @@ Page({
         [mapping.badges]: JSON.stringify(formData.badgesList || []),
         [mapping.timeline]: JSON.stringify(formData.timelineList || []),
         [mapping.activities]: JSON.stringify(formData.activitiesList || [])
+      }
+
+      // 保存是否为善心讲师字段
+      if (formData.isInstructor !== undefined) {
+        fields[mapping.isInstructor] = formData.isInstructor ? '是' : '否'
       }
 
       // 如果是通过 openid 模式，添加 openid 字段
@@ -581,6 +647,11 @@ Page({
           if (cloudResult.success) {
             // 保存为 JSON 数组格式（单张图片也用数组）
             fields[mapping.cloudImageFileID] = JSON.stringify([cloudResult.fileID])
+            // 更新 formData 中的 cloudFileID，确保下次编辑时能正确删除
+            this.setData({
+              'formData.avatarImage.cloudFileID': cloudResult.fileID,
+              'formData.avatarImage.isNew': false
+            })
             console.log('[云存储] 头像上传成功:', cloudResult.fileID)
           } else {
             throw new Error('云存储上传失败')
@@ -618,6 +689,11 @@ Page({
           if (cloudResult.success) {
             // 保存为 JSON 数组格式（单张图片也用数组）
             fields[mapping.cloudQrcodeFileID] = JSON.stringify([cloudResult.fileID])
+            // 更新 formData 中的 cloudFileID，确保下次编辑时能正确删除
+            this.setData({
+              'formData.qrcodeImage.cloudFileID': cloudResult.fileID,
+              'formData.qrcodeImage.isNew': false
+            })
             console.log('[云存储] 二维码上传成功:', cloudResult.fileID)
           } else {
             throw new Error('云存储上传失败')
@@ -642,12 +718,34 @@ Page({
 
       wx.showToast({ title: '保存成功', icon: 'success' })
 
-      // 保存成功后，触发飞书数据刷新
+      // 立即更新 globalData 中的图片路径（不等待异步下载）
       const app = getApp()
-      if (app.preloadFeishuData) {
+      const partnersData = app.globalData.partnersData || []
+      const partnerIdx = partnersData.findIndex(p => p.employeeId === finalEmployeeId)
+      if (partnerIdx !== -1) {
+        // 更新头像
+        if (formData.avatarImage && formData.avatarImage.path) {
+          partnersData[partnerIdx].image = formData.avatarImage.path
+          if (formData.avatarImage.cloudFileID) {
+            partnersData[partnerIdx].cloudImageFileID = formData.avatarImage.cloudFileID
+          }
+          console.log('[ProfileEdit] 已更新 globalData 中的头像路径')
+        }
+        // 更新二维码
+        if (formData.qrcodeImage && formData.qrcodeImage.path) {
+          partnersData[partnerIdx].qrcode = formData.qrcodeImage.path
+          if (formData.qrcodeImage.cloudFileID) {
+            partnersData[partnerIdx].cloudQrcodeFileID = formData.qrcodeImage.cloudFileID
+          }
+          console.log('[ProfileEdit] 已更新 globalData 中的二维码路径')
+        }
+      }
+
+      // 保存成功后，触发飞书数据刷新
+      if (app.preloadFeishuTeam) {
         // 延迟刷新，让用户看到成功提示
         setTimeout(() => {
-          app.preloadFeishuData()
+          app.preloadFeishuTeam()
         }, 500)
       }
 

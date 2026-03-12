@@ -99,8 +99,6 @@ async function loadAllProfilesText() {
     const f = record.fields
     const employeeId = extractFieldText(f[mapping.employeeId])
     const name = extractFieldText(f[mapping.name])
-    const imageKey = extractFieldText(f[mapping.imageKey])
-    const qrcodeKey = extractFieldText(f[mapping.qrcodeKey])
 
     // 解析 cloudFileID（支持 JSON 数组格式和字符串格式）
     const parseCloudFileID = (fieldValue) => {
@@ -157,8 +155,6 @@ async function loadAllProfilesText() {
       skills: parseToArray(extractFieldText(f[mapping.skills])),
       isInstructor: parseIsInstructor(f[mapping.isInstructor]),
       wxOpenid: extractFieldText(f[mapping.wxOpenid]),
-      imageKey,
-      qrcodeKey,
       cloudImageFileID,
       cloudQrcodeFileID,
       // 图片路径：头像从缓存同步获取，二维码延迟到详情页再加载
@@ -201,7 +197,6 @@ async function downloadAllProfileImages(profiles, onImageReady, concurrency = 10
     if (p.cloudImageFileID) {
       fileIDToProfile[p.cloudImageFileID] = { profile: p, type: 'avatar' }
       avatarItems.push({
-        imageKey: p.cloudImageFileID,  // prefetchImages 需要这个字段名
         cloudFileID: p.cloudImageFileID
       })
     }
@@ -215,7 +210,7 @@ async function downloadAllProfileImages(profiles, onImageReady, concurrency = 10
     const item = fileIDToProfile[fileID]
     if (!item || !onImageReady) return
     const { profile, type } = item
-    onImageReady(type, localPath, profile.employeeId, profile.name)
+    onImageReady(type, profile.employeeId, localPath)
   }, concurrency)
 
   console.log('[飞书] 团队图片下载完成')

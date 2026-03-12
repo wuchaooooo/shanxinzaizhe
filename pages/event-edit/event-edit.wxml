@@ -153,7 +153,7 @@
     <!-- 活动图片 -->
     <view class="form-item">
       <view class="form-label">
-        <text class="label-text">活动海报</text>
+        <text class="label-text">活动海报<text class="required">*</text></text>
         <text class="label-hint">（最多9张）</text>
       </view>
       <view class="images-grid">

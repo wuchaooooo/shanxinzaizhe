@@ -408,7 +408,7 @@ Page({
   },
 
   onShow() {
-    getApp().preloadFeishuData()
+    getApp().preloadFeishuTeam()
   },
 
   onShowActionSheet() {
@@ -713,7 +713,7 @@ Page({
 
       // 触发重新下载
       setTimeout(() => {
-        app.preloadFeishuData()
+        app.preloadFeishuTeam()
       }, 100)
     }
   },
@@ -740,7 +740,7 @@ Page({
 
       // 触发重新下载
       setTimeout(() => {
-        app.preloadFeishuData()
+        app.preloadFeishuTeam()
       }, 100)
     }
   }

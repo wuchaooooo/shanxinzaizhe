@@ -41,7 +41,6 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
         if (currentPartner) {
             console.log(`[海报生成] 当前合伙人: ${currentPartner.name}`)
             console.log(`[海报生成] 个人二维码路径: ${personalQRCode || '(空)'}`)
-            console.log(`[海报生成] qrcodeKey: ${currentPartner.qrcodeKey || '(空)'}`)
         }
 
         // 生成动态小程序码（如果是联合创始人）

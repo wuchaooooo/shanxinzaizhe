@@ -107,6 +107,19 @@
       <input class="row-input" type="number" value="{{formData.customersServed}}" data-field="customersServed" bindinput="onInput" placeholder="请输入"/>
     </view>
     <view class="row-divider"></view>
+    <view class="info-row">
+      <view class="info-label">
+        <text class="info-icon">🎤</text>
+        <text class="info-label-text">是否为善心浙里讲师<text class="required">*</text></text>
+      </view>
+      <picker mode="selector" range="{{isInstructorOptions}}" value="{{isInstructorIndex}}" bindchange="onIsInstructorChange">
+        <view class="row-picker">
+          <text class="{{formData.isInstructor !== undefined ? 'row-picker-value' : 'row-picker-placeholder'}}">{{formData.isInstructor !== undefined ? (formData.isInstructor ? '是' : '否') : '请选择'}}</text>
+          <text class="row-picker-arrow">›</text>
+        </view>
+      </picker>
+    </view>
+    <view class="row-divider"></view>
     <view class="info-col-row">
       <view class="info-label">
         <text class="info-icon">✍️</text>

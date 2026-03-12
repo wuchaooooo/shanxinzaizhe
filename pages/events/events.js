@@ -238,9 +238,30 @@ Page({
 
     // 监听活动图片下载完成
     this._eventsImageReadyCb = (eventId, path) => {
+      console.log(`[Events ImageReady] ========== 收到图片下载回调 ==========`)
+      console.log(`[Events ImageReady] 时间戳: ${new Date().toISOString()}`)
+      console.log(`[Events ImageReady] eventId: ${eventId}`)
+      console.log(`[Events ImageReady] path: ${path}`)
+
       const events = this.data.events
       const idx = events.findIndex(e => e.id === eventId)
-      if (idx === -1) return
+      if (idx === -1) {
+        console.log(`[Events ImageReady] 未找到活动: ${eventId}`)
+        return
+      }
+
+      const event = events[idx]
+      console.log(`[Events ImageReady] ${event.name} 当前状态:`, {
+        currentImage: event.image ? '有' : '无',
+        currentLoaded: event.loaded,
+        newPath: path
+      })
+
+      // 如果图片路径已经相同，不需要更新（避免闪烁）
+      if (events[idx].image === path) {
+        console.log(`[Events ImageReady] ${event.name} 图片路径相同，跳过`)
+        return
+      }
 
       // 同时更新 globalData，确保其他页面能获取到最新数据
       const globalEvents = app.globalData.eventsData || []
@@ -252,21 +273,92 @@ Page({
           globalEvents[globalIdx].images = [path]
         }
         app.globalData.eventsData = globalEvents
+        console.log(`[Events ImageReady] 已更新 globalData`)
       }
 
-      // 更新图片路径
+      // 构建更新对象：同时更新 events、leftColumn、rightColumn
       const updates = {}
-      // 如果图片路径已经相同，不需要更新（避免闪烁）
-      if (events[idx].image === path) return
       updates[`events[${idx}].image`] = path
-
-      // 第一张图片下载完成，立即设置 loaded: true
       updates[`events[${idx}].loaded`] = true
+      updates[`events[${idx}].imageLoaded`] = true
 
+      // 查找活动在 leftColumn 或 rightColumn 中的位置
+      console.log(`[Events ImageReady] 开始查找活动在列表中的位置`)
+      console.log(`[Events ImageReady] leftColumn 长度: ${this.data.leftColumn.length}`)
+      console.log(`[Events ImageReady] rightColumn 长度: ${this.data.rightColumn.length}`)
+      console.log(`[Events ImageReady] leftColumn IDs:`, this.data.leftColumn.map(e => e.id))
+      console.log(`[Events ImageReady] rightColumn IDs:`, this.data.rightColumn.map(e => e.id))
+
+      const leftIdx = this.data.leftColumn.findIndex(e => e.id === eventId)
+      const rightIdx = this.data.rightColumn.findIndex(e => e.id === eventId)
+
+      console.log(`[Events ImageReady] leftIdx: ${leftIdx}, rightIdx: ${rightIdx}`)
+
+      // 判断活动是否已经在列表中
+      const isInList = leftIdx !== -1 || rightIdx !== -1
+
+      if (leftIdx !== -1) {
+        updates[`leftColumn[${leftIdx}].image`] = path
+        updates[`leftColumn[${leftIdx}].imageLoaded`] = true
+        console.log(`[Events ImageReady] 找到活动在 leftColumn[${leftIdx}]，同步更新图片`)
+        console.log(`[Events ImageReady] leftColumn[${leftIdx}] 当前 image:`, this.data.leftColumn[leftIdx].image)
+      }
+
+      if (rightIdx !== -1) {
+        updates[`rightColumn[${rightIdx}].image`] = path
+        updates[`rightColumn[${rightIdx}].imageLoaded`] = true
+        console.log(`[Events ImageReady] 找到活动在 rightColumn[${rightIdx}]，同步更新图片`)
+        console.log(`[Events ImageReady] rightColumn[${rightIdx}] 当前 image:`, this.data.rightColumn[rightIdx].image)
+      }
+
+      if (!isInList) {
+        console.log(`[Events ImageReady] ⚠️ 活动不在 leftColumn 或 rightColumn 中！`)
+      }
+
+      console.log(`[Events ImageReady] ${event.name} 更新图片到所有位置`)
+      console.log(`[Events ImageReady] 待更新内容:`, updates)
+
+      // 单次 setData 更新所有数据
       this.setData(updates, () => {
-        this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.events) })
-        // 图片加载完成后重新过滤，显示新加载的活动
-        this.filterEvents()
+        console.log(`[Events ImageReady] setData 完成`)
+        // 验证更新后的状态
+        const updatedEvent = this.data.events[idx]
+        console.log(`[Events ImageReady] 更新后的 ${event.name} 状态:`, {
+          image: updatedEvent.image ? updatedEvent.image.substring(0, 50) + '...' : '无',
+          loaded: updatedEvent.loaded
+        })
+
+        // 验证 leftColumn 和 rightColumn 的更新
+        if (leftIdx !== -1) {
+          const updatedLeft = this.data.leftColumn[leftIdx]
+          console.log(`[Events ImageReady] 验证 leftColumn[${leftIdx}]:`, {
+            id: updatedLeft.id,
+            name: updatedLeft.name,
+            image: updatedLeft.image ? updatedLeft.image.substring(0, 50) + '...' : '无',
+            imageLoaded: updatedLeft.imageLoaded
+          })
+        }
+
+        if (rightIdx !== -1) {
+          const updatedRight = this.data.rightColumn[rightIdx]
+          console.log(`[Events ImageReady] 验证 rightColumn[${rightIdx}]:`, {
+            id: updatedRight.id,
+            name: updatedRight.name,
+            image: updatedRight.image ? updatedRight.image.substring(0, 50) + '...' : '无',
+            imageLoaded: updatedRight.imageLoaded
+          })
+        }
+
+        // 如果活动不在列表中，需要调用 filterEvents() 重新构建列表
+        if (!isInList) {
+          console.log(`[Events ImageReady] 活动不在列表中，调用 filterEvents() 重新构建`)
+          this.filterEvents()
+        }
+
+        // 更新 allImagesLoaded 状态
+        this.setData({
+          allImagesLoaded: this.checkAllImagesLoaded(this.data.events)
+        })
       })
     }
     if (!app.globalData.eventsImageReadyListeners) {
@@ -277,9 +369,11 @@ Page({
     // 监听活动文本数据刷新
     this._eventsDataCb = (eventsData) => {
       console.log('[Events] 收到活动数据刷新通知:', eventsData.length)
+      console.log('[Events] 刷新时间戳:', new Date().toISOString())
 
       // 保存当前的 events
       const currentEvents = this.data.events || []
+      console.log('[Events] 当前页面活动数量:', currentEvents.length)
 
       // 检查是否需要完全重建列表（活动数量变化、顺序变化等）
       const needRebuild =
@@ -289,20 +383,31 @@ Page({
           return !curr || e.id !== curr.id
         })
 
+      console.log('[Events] 是否需要重建列表:', needRebuild)
+
       if (needRebuild) {
         // 需要重建列表：保留已下载的图片和 loaded 状态
-        console.log('[Events] 重建列表')
+        console.log('[Events] 重建列表，活动数量:', eventsData.length)
         const imageMap = {}
         const loadedMap = {}
         currentEvents.forEach(e => {
           if (e.id) {
-            if (e.image) imageMap[e.id] = e.image
-            if (e.loaded) loadedMap[e.id] = true
+            if (e.image) {
+              imageMap[e.id] = e.image
+              console.log(`[Events] 保存图片映射: ${e.name} (${e.id}) -> ${e.image.substring(0, 50)}...`)
+            }
+            if (e.loaded) {
+              loadedMap[e.id] = true
+              console.log(`[Events] 保存 loaded 状态: ${e.name} (${e.id}) -> true`)
+            }
           }
         })
+        console.log('[Events] imageMap 大小:', Object.keys(imageMap).length)
+        console.log('[Events] loadedMap 大小:', Object.keys(loadedMap).length)
 
         const events = eventsData.map(event => {
           const existingImage = imageMap[event.id]
+          const wasLoaded = loadedMap[event.id]
           const finalImage = existingImage || event.image
           // 如果有图片且图片路径存在，标记为已加载
           const hasImage = finalImage && finalImage.length > 0
@@ -310,11 +415,29 @@ Page({
           // 删除可能存在的 loaded 字段（避免飞书数据中的 loaded 字段干扰）
           const { loaded: _, ...eventWithoutLoaded } = event
 
+          // 判断是否应该立即显示：
+          // 1. 如果已有图片（hasImage），立即显示
+          // 2. 如果之前已经显示过（wasLoaded），继续显示（避免已显示的活动消失）
+          // 3. 如果没有 cloudImageFileIDs（不需要下载图片），立即显示
+          // 4. 否则，等待图片下载完成后再显示
+          const shouldLoad = hasImage || wasLoaded || !event.cloudImageFileIDs || event.cloudImageFileIDs.length === 0
+
+          // 诊断日志：记录每个活动的状态
+          console.log(`[Events Rebuild] ${event.name}:`, {
+            id: event.id,
+            existingImage: existingImage ? '有' : '无',
+            eventImage: event.image ? '有' : '无',
+            finalImage: finalImage ? '有' : '无',
+            wasLoaded: !!wasLoaded,
+            hasImage,
+            shouldLoad,
+            cloudImageFileIDs: event.cloudImageFileIDs ? event.cloudImageFileIDs.length : 0
+          })
+
           return {
             ...eventWithoutLoaded,
             image: finalImage,
-            // 始终设置为 true，让活动显示出来
-            loaded: true,
+            loaded: shouldLoad,
             imageLoaded: hasImage,  // 如果已有图片路径，标记为已加载
             organizerData: this.findOrganizerData(event.organizer)
           }
@@ -353,7 +476,8 @@ Page({
             organizerData: this.findOrganizerData(event.organizer)
           }
         })
-        console.log('[Events] 更新文字数据')
+        console.log('[Events] 更新文字数据（不重建列表）')
+        console.log('[Events] 更新的活动数量:', Object.keys(updates).length)
         this.setData(updates, () => {
           this.filterEvents()
           this.updateTabStatistics()
@@ -529,11 +653,19 @@ Page({
   // 过滤活动
   filterEvents() {
     const { events, searchQuery, activeTab } = this.data
+    console.log('[Events filterEvents] 开始过滤，总活动数:', events.length)
+    console.log('[Events filterEvents] 活动详情:', events.map(e => ({
+      name: e.name,
+      id: e.id,
+      image: e.image ? '有' : '无',
+      loaded: e.loaded
+    })))
     let filtered = events
 
     // 只显示已加载完成的活动（loaded: true）
     // 活动的第一张图片和文字都加载好才展示，但组织者头像可以异步加载
     filtered = filtered.filter(e => e.loaded === true)
+    console.log('[Events filterEvents] loaded=true 的活动数:', filtered.length)
 
     // 按类型过滤
     if (activeTab === '星享会') {
@@ -582,6 +714,15 @@ Page({
       leftColumn,
       rightColumn
     })
+    console.log('[Events filterEvents] 最终结果 - leftColumn:', leftColumn.length, 'rightColumn:', rightColumn.length)
+    console.log('[Events filterEvents] leftColumn 详情:', leftColumn.map(e => ({
+      name: e.name,
+      image: e.image ? e.image.substring(0, 50) + '...' : '无'
+    })))
+    console.log('[Events filterEvents] rightColumn 详情:', rightColumn.map(e => ({
+      name: e.name,
+      image: e.image ? e.image.substring(0, 50) + '...' : '无'
+    })))
   },
 
   // 更新当前 tab 的统计数据

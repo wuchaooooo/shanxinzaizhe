@@ -286,6 +286,29 @@ Page({
       event.images = []
     }
 
+    // 如果活动已结束且有签到码，将签到码添加到图片列表的最后
+    if (event.status === '已结束' && event.checkinQrcode) {
+      console.log('活动已结束，检查签到码:', {
+        status: event.status,
+        hasCheckinQrcode: !!event.checkinQrcode,
+        checkinQrcode: event.checkinQrcode
+      })
+
+      // 检查签到码是否已经在 images 数组中
+      if (!event.images.includes(event.checkinQrcode)) {
+        // 验证签到码文件是否存在
+        try {
+          fs.accessSync(event.checkinQrcode)
+          event.images.push(event.checkinQrcode)
+          console.log('签到码已添加到图片列表:', event.checkinQrcode)
+        } catch (e) {
+          console.log('签到码文件不存在，跳过添加:', event.checkinQrcode)
+        }
+      } else {
+        console.log('签到码已在图片列表中，跳过添加')
+      }
+    }
+
     // 如果 images 数组为空但有 cloudImageFileIDs，说明图片还未下载
     // 保持 images 为空数组，让下载逻辑正确判断
     console.log('详情页图片状态:', {
@@ -548,7 +571,7 @@ Page({
           wx.showLoading({ title: '删除中...' })
 
           try {
-            // 确定使用哪个表格
+            // 1. 确定使用哪个表格
             const config = feishuApi.FEISHU_CONFIG
             let appToken, tableId
 
@@ -573,8 +596,41 @@ Page({
 
             console.log('删除活动:', { eventId: event.id, type: event.type, appToken, tableId })
 
-            // 调用飞书 API 删除记录
+            // 2. 先调用飞书 API 删除记录
             await feishuApi.deleteRecord(event.id, { appToken, tableId })
+            console.log('飞书记录删除成功')
+
+            // 3. 再删除腾讯云存储的图片
+            console.log('开始删除腾讯云图片:', event.cloudImageFileIDs)
+            if (event.cloudImageFileIDs && event.cloudImageFileIDs.length > 0) {
+              try {
+                const deleteResults = await wx.cloud.deleteFile({
+                  fileList: event.cloudImageFileIDs
+                })
+                console.log('腾讯云图片删除结果:', deleteResults)
+
+                // 检查删除结果
+                const failedFiles = deleteResults.fileList.filter(f => f.status !== 0)
+                if (failedFiles.length > 0) {
+                  console.warn('部分图片删除失败:', failedFiles)
+                }
+              } catch (cloudError) {
+                console.error('删除腾讯云图片失败:', cloudError)
+                // 飞书记录已删除，图片删除失败不影响整体流程
+              }
+            }
+
+            // 4. 删除签到码图片
+            if (event.cloudCheckinQrcodeFileID) {
+              try {
+                await wx.cloud.deleteFile({
+                  fileList: [event.cloudCheckinQrcodeFileID]
+                })
+                console.log('签到码图片删除成功')
+              } catch (cloudError) {
+                console.error('删除签到码图片失败:', cloudError)
+              }
+            }
 
             wx.hideLoading()
             wx.showToast({

@@ -143,12 +143,15 @@
             data-type="{{item.type}}"
           >
             <image
+              wx:if="{{item.image}}"
               class="event-image {{item.imageLoaded ? 'event-image-loaded' : ''}}"
-              src="{{item.image || '/images/placeholder.png'}}"
+              src="{{item.image}}"
               mode="widthFix"
               bindload="onImageLoadComplete"
+              binderror="onImageError"
               data-id="{{item.id}}"
             ></image>
+            <view wx:else class="event-image-skeleton"></view>
             <view class="event-content">
               <view class="event-title-row">
                 <text class="event-title">{{item.name || '活动'}}</text>
@@ -179,12 +182,15 @@
             data-type="{{item.type}}"
           >
             <image
+              wx:if="{{item.image}}"
               class="event-image {{item.imageLoaded ? 'event-image-loaded' : ''}}"
-              src="{{item.image || '/images/placeholder.png'}}"
+              src="{{item.image}}"
               mode="widthFix"
               bindload="onImageLoadComplete"
+              binderror="onImageError"
               data-id="{{item.id}}"
             ></image>
+            <view wx:else class="event-image-skeleton"></view>
             <view class="event-content">
               <view class="event-title-row">
                 <text class="event-title">{{item.name || '活动'}}</text>
