@@ -415,6 +415,11 @@
   font-size: 26rpx;
   color: #c20000;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .chip-delete {
@@ -423,6 +428,9 @@
   opacity: 0.6;
   line-height: 1;
   padding: 0 2rpx;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .add-skill-row {

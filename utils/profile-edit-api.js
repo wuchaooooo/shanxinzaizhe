@@ -150,24 +150,6 @@ async function saveProfileEditRecord(employeeId, fields, existingRecordId) {
 }
 
 /**
- * 上传图片并返回 image_key（复用现有 IM 上传接口）
- * @param {string} filePath - 本地临时文件路径
- * @returns {Promise<string>} - image_key
- */
-function uploadProfileImage(filePath) {
-  return feishuApi.uploadImage(filePath)
-}
-
-/**
- * 从飞书 IM 下载图片到本地临时文件
- * @param {string} imageKey - IM image_key
- * @returns {Promise<string>} - 本地文件路径
- */
-function downloadProfileImage(imageKey) {
-  return feishuApi.downloadFeishuImage(imageKey)
-}
-
-/**
  * 将飞书日期字段值（Unix ms 时间戳或字符串）转换为 "YYYY-MM" 字符串
  * 飞书 date 类型字段 API 返回 Unix 毫秒时间戳（数字）
  */

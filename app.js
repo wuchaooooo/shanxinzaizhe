@@ -178,13 +178,15 @@ App({
         console.log(`[飞书] 团队需要下载 ${needDownload.length} 张图片（图片变更${changedImageIds.size}张 + 缺失图片${needDownload.length - changedImageIds.size}张）`)
 
         // 等待图片下载完成
-        downloadAllProfileImages(needDownload, (type, path, employeeId, name) => {
+        downloadAllProfileImages(needDownload, (type, employeeId, path) => {
+          console.log(`[App ImageReady] 收到回调 - type: ${type}, employeeId: ${employeeId}, path: ${path}`)
           // 更新 globalData 中对应的记录
           const profile = profiles.find(p => p.employeeId === employeeId)
           if (profile) {
             if (type === 'avatar') {
               profile.image = path
               profile.loaded = true
+              console.log(`[App ImageReady] 更新 ${profile.name} 的头像: ${path}`)
               // 只在头像下载完成时通知监听器（用于 team 页面更新头像）
               this.globalData.imageReadyListeners.forEach(cb => cb(type, employeeId, path))
             } else if (type === 'qrcode') {
@@ -192,6 +194,8 @@ App({
               // 二维码下载完成后，通知数据监听器更新显示
               this.globalData.partnersDataListeners.forEach(cb => cb(profiles))
             }
+          } else {
+            console.log(`[App ImageReady] 未找到 employeeId: ${employeeId}`)
           }
         }, DATA_SOURCE_CONFIG.imageConcurrency || 2).then(() => {
           console.log(`[飞书] 团队图片下载完成`)

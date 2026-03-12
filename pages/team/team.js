@@ -696,14 +696,14 @@ Page({
     }, [])
     const uniqueSkills = Array.from(new Set(allSkills)).length
 
+    // 数据变化时清空分享图，下次分享时重新生成（在动画前设置，避免冲突）
+    this.setData({ shareImageUrl: '' })
+
     animateNumbers(this, {
       teamCount: { to: teamCount },
       totalBadges: { to: totalBadges },
       uniqueSkills: { to: uniqueSkills }
     })
-
-    // 数据变化时清空分享图，下次分享时重新生成
-    this.setData({ shareImageUrl: '' })
   },
 
   // 生成分享图（如果还没有生成）

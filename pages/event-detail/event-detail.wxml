@@ -172,12 +172,6 @@
         </view>
         <text class="action-icon-label">编辑</text>
       </view>
-      <view wx:if="{{canEdit}}" class="action-icon-item" catchtap="onDelete">
-        <view class="action-icon-circle danger">
-          <text class="action-icon-emoji">🗑️</text>
-        </view>
-        <text class="action-icon-label danger">删除</text>
-      </view>
     </view>
   </view>
 </view>

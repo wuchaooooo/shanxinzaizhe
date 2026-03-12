@@ -304,10 +304,16 @@
   background-color: #ffffff;
   border-top: 1rpx solid rgba(226, 29, 39, 0.1);
   box-shadow: 0 -2rpx 8rpx rgba(0, 0, 0, 0.05);
+  z-index: 1000;
+}
+
+.actions-buttons {
+  display: flex;
+  gap: 16rpx;
 }
 
 .save-btn {
-  width: 100%;
+  flex: 1;
   height: 88rpx;
   background: linear-gradient(135deg, #E21D27 0%, #B81820 100%);
   color: #ffffff;
@@ -326,4 +332,22 @@
 
 .save-btn[disabled] {
   opacity: 0.6;
+}
+
+.delete-btn {
+  width: 160rpx;
+  height: 88rpx;
+  background: #ffffff;
+  color: #ef4444;
+  border: 2rpx solid #ef4444;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-btn::after {
+  border: none;
 }

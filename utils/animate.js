@@ -4,10 +4,10 @@
  * 数字滚动动画
  * @param {Object} page     - 页面实例 (this)
  * @param {Object} targets  - { dataKey: { to: number, suffix?: string } }
- * @param {number} duration - 动画时长 ms，默认 800
+ * @param {number} duration - 动画时长 ms，默认 600
  */
 function animateNumbers(page, targets, duration) {
-  if (!duration) duration = 800
+  if (!duration) duration = 600
 
   // 取消上一个还在运行的动画
   if (page._animateTimer) {
@@ -43,7 +43,7 @@ function animateNumbers(page, targets, duration) {
       clearInterval(page._animateTimer)
       page._animateTimer = null
     }
-  }, 16) // ~60fps
+  }, 50) // 优化：从 16ms 增加到 50ms，减少 setData 调用次数
 }
 
 module.exports = { animateNumbers }

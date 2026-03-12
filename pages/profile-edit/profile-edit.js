@@ -393,10 +393,16 @@ Page({
   // ── 是否为善心讲师 ────────────────────────────────────────────────────────────
 
   onIsInstructorChange(e) {
-    const index = e.detail.value
+    const index = parseInt(e.detail.value)
+    console.log('[onIsInstructorChange] 选择索引:', index, '对应值:', this.data.isInstructorOptions[index])
     this.setData({
       isInstructorIndex: index,
       'formData.isInstructor': index === 1  // 0='否', 1='是'
+    }, () => {
+      console.log('[onIsInstructorChange] 更新后的状态:', {
+        isInstructorIndex: this.data.isInstructorIndex,
+        isInstructor: this.data.formData.isInstructor
+      })
     })
   },
 
@@ -713,6 +719,7 @@ Page({
       }
 
       wx.showLoading({ title: '保存中...' })
+      console.log('[ProfileEdit] 准备保存，fields:', fields)
       await saveProfileEditRecord(finalEmployeeId, fields, this.data.existingRecordId)
       wx.hideLoading()
 
@@ -862,11 +869,34 @@ Page({
           try {
             const feishuApi = require('../../utils/feishu-api.js')
 
-            // 删除记录
+            // 先删除飞书记录
             await feishuApi.deleteRecord(this.data.existingRecordId, {
               appToken: DATA_SOURCE_CONFIG.profileEditAppToken,
               tableId: DATA_SOURCE_CONFIG.profileEditTableId
             })
+
+            // 飞书删除成功后，清理云存储文件和本地缓存
+            const { deleteFromCloudStorage } = require('../../utils/cloud-storage-uploader.js')
+            const { evict } = require('../../utils/image-cache.js')
+
+            const fileIDsToDelete = []
+            if (this.data.oldCloudImageFileID) {
+              fileIDsToDelete.push(this.data.oldCloudImageFileID)
+              evict(this.data.oldCloudImageFileID)
+            }
+            if (this.data.oldCloudQrcodeFileID) {
+              fileIDsToDelete.push(this.data.oldCloudQrcodeFileID)
+              evict(this.data.oldCloudQrcodeFileID)
+            }
+
+            if (fileIDsToDelete.length > 0) {
+              try {
+                await deleteFromCloudStorage(fileIDsToDelete)
+                console.log('[删除] 云存储文件清理成功')
+              } catch (err) {
+                console.error('[删除] 云存储文件清理失败:', err)
+              }
+            }
 
             wx.hideLoading()
             wx.showToast({ title: '删除成功', icon: 'success' })

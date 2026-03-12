@@ -5,6 +5,7 @@ const { getAllProfileRecords, extractFieldText, feishuDateToYYYYMM } = require('
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
 const { getCached, getImage, prefetchImages, evict } = require('./image-cache.js')
 const { createCacheManager, isRecordChanged } = require('./text-cache.js')
+const { deleteFromCloudStorage } = require('./cloud-storage-uploader.js')
 
 // ─── 文字缓存配置 ─────────────────────────────────────────────────────────────
 const CACHE_VERSION = 'v1'
@@ -94,6 +95,7 @@ async function loadAllProfilesText() {
   const newCache = {}
   const changedTextIds = new Set()
   const changedImageIds = new Set()
+  const currentEmployeeIds = new Set()
 
   const results = records.map((record) => {
     const f = record.fields
@@ -138,6 +140,9 @@ async function loadAllProfilesText() {
       if (oldCloudQrcodeFileID && oldCloudQrcodeFileID !== cloudQrcodeFileID) evict(oldCloudQrcodeFileID)
     }
 
+    // 记录当前存在的 employeeId
+    if (cacheKey) currentEmployeeIds.add(cacheKey)
+
     // 更新文字缓存（只存文字元数据 + cloudFileID，不存路径）
     newCache[cacheKey] = { lastModified, cloudImageFileID, cloudQrcodeFileID }
 
@@ -163,6 +168,38 @@ async function loadAllProfilesText() {
       loaded: false
     }
   })
+
+  // 检测被删除的成员（在旧缓存中存在但在新数据中不存在）
+  const deletedEmployeeIds = Object.keys(cache).filter(id => !currentEmployeeIds.has(id))
+  if (deletedEmployeeIds.length > 0) {
+    console.log(`[飞书] 检测到 ${deletedEmployeeIds.length} 个被删除的成员，开始清理...`)
+
+    const fileIDsToDelete = []
+    deletedEmployeeIds.forEach(employeeId => {
+      const oldData = cache[employeeId]
+      if (oldData) {
+        // 清理本地缓存
+        if (oldData.cloudImageFileID) {
+          evict(oldData.cloudImageFileID)
+          fileIDsToDelete.push(oldData.cloudImageFileID)
+        }
+        if (oldData.cloudQrcodeFileID) {
+          evict(oldData.cloudQrcodeFileID)
+          fileIDsToDelete.push(oldData.cloudQrcodeFileID)
+        }
+      }
+    })
+
+    // 批量删除云存储文件
+    if (fileIDsToDelete.length > 0) {
+      try {
+        const deleteResult = await deleteFromCloudStorage(fileIDsToDelete)
+        console.log(`[飞书] 云存储清理完成: 成功删除 ${deleteResult.deletedCount} 个文件`)
+      } catch (err) {
+        console.error('[飞书] 云存储清理失败:', err)
+      }
+    }
+  }
 
   cacheManager.save(newCache)
 

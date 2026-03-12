@@ -693,5 +693,99 @@ Page({
       this.setData({ saving: false })
     }
     // 注意：成功时不重置 saving 状态，保持按钮禁用直到页面返回
+  },
+
+  // ── 删除活动 ────────────────────────────────────────────────────────────
+
+  onDelete() {
+    const { formData, eventId } = this.data
+
+    wx.showModal({
+      title: '确认删除',
+      content: `确定要删除活动"${formData.name}"吗？删除后无法恢复。`,
+      confirmText: '删除',
+      confirmColor: '#ef4444',
+      success: async (res) => {
+        if (res.confirm) {
+          wx.showLoading({ title: '删除中...' })
+
+          try {
+            const feishuApi = require('../../utils/feishu-api.js')
+            const { deleteFromCloudStorage } = require('../../utils/cloud-storage-uploader.js')
+            const { evict } = require('../../utils/image-cache.js')
+
+            // 1. 确定使用哪个表格
+            const config = feishuApi.FEISHU_CONFIG
+            let appToken, tableId
+
+            if (formData.type === '星享会') {
+              appToken = config.starClubAppToken
+              tableId = config.starClubTableId
+            } else if (formData.type === '午餐会') {
+              appToken = config.lunchAppToken
+              tableId = config.lunchTableId
+            } else if (formData.type === '销售门诊') {
+              appToken = config.salesClinicAppToken
+              tableId = config.salesClinicTableId
+            } else if (formData.type === '销售建设') {
+              appToken = config.salesBuildingAppToken
+              tableId = config.salesBuildingTableId
+            } else if (formData.type === '客户活动' || formData.type === '看电影' || formData.type === '徒步活动' || formData.type === '其他活动') {
+              appToken = config.otherActivitiesAppToken
+              tableId = config.otherActivitiesTableId
+            } else {
+              throw new Error(`未知的活动类型: ${formData.type}`)
+            }
+
+            console.log('[删除] 删除活动:', { eventId, type: formData.type, appToken, tableId })
+
+            // 2. 先删除飞书记录
+            await feishuApi.deleteRecord(eventId, { appToken, tableId })
+            console.log('[删除] 飞书记录删除成功')
+
+            // 3. 清理云存储文件和本地缓存
+            const fileIDsToDelete = []
+
+            // 收集活动图片的 fileID
+            if (this.data.originalCloudFileIDs && this.data.originalCloudFileIDs.length > 0) {
+              this.data.originalCloudFileIDs.forEach(fileID => {
+                if (fileID) {
+                  fileIDsToDelete.push(fileID)
+                  evict(fileID)
+                }
+              })
+            }
+
+            // 收集签到码的 fileID
+            if (this.data.originalCheckinQrcodeCloudFileID) {
+              fileIDsToDelete.push(this.data.originalCheckinQrcodeCloudFileID)
+              evict(this.data.originalCheckinQrcodeCloudFileID)
+            }
+
+            // 批量删除云存储文件
+            if (fileIDsToDelete.length > 0) {
+              try {
+                await deleteFromCloudStorage(fileIDsToDelete)
+                console.log('[删除] 云存储文件清理成功')
+              } catch (err) {
+                console.error('[删除] 云存储文件清理失败:', err)
+              }
+            }
+
+            wx.hideLoading()
+            wx.showToast({ title: '删除成功', icon: 'success' })
+
+            // 延迟返回，让用户看到成功提示
+            setTimeout(() => {
+              wx.navigateBack()
+            }, 1500)
+          } catch (err) {
+            console.error('[删除] 删除失败:', err)
+            wx.hideLoading()
+            wx.showToast({ title: '删除失败', icon: 'none' })
+          }
+        }
+      }
+    })
   }
 })
