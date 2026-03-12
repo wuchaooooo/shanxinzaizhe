@@ -266,6 +266,24 @@ Page({
 
     if (hasUpdates) {
       console.log(`[Team Sync] 同步完成，更新了 ${syncCount} 个合伙人`)
+
+      // 计算更新后的 allImagesLoaded 状态
+      const updatedPartners = [...this.data.partners]
+      Object.keys(updates).forEach(key => {
+        const match = key.match(/partners\[(\d+)\]\.(\w+)/)
+        if (match) {
+          const idx = parseInt(match[1])
+          const field = match[2]
+          if (updatedPartners[idx]) {
+            updatedPartners[idx] = { ...updatedPartners[idx], [field]: updates[key] }
+          }
+        }
+      })
+
+      // 同时更新 allImagesLoaded
+      updates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
+      console.log(`[Team Sync] allImagesLoaded: ${updates.allImagesLoaded}`)
+
       this.setData(updates)
     } else {
       console.log('[Team Sync] 无需更新')
@@ -866,22 +884,43 @@ Page({
     const currentUser = app.globalData.currentUser
     if (!currentUser) return
 
-    // 确保二维码已下载（使用统一的 getImage 接口）
-    if (currentUser.cloudQrcodeFileID) {
-      try {
-        const { getImage } = require('../../utils/image-cache.js')
-        const qrcodePath = await getImage(currentUser.cloudQrcodeFileID)
+    // 预加载：确保二维码和小程序码都已准备好
+    const preparePromises = []
 
-        if (qrcodePath) {
-          currentUser.qrcode = qrcodePath
-          console.log(`[${currentUser.name}] 二维码已准备好:`, qrcodePath)
-        } else {
-          console.log(`[${currentUser.name}] 二维码下载失败，将不显示个人二维码`)
+    // 1. 确保个人二维码已下载
+    if (currentUser.cloudQrcodeFileID && !currentUser.qrcode) {
+      const qrcodePromise = (async () => {
+        try {
+          const { getImage } = require('../../utils/image-cache.js')
+          const qrcodePath = await getImage(currentUser.cloudQrcodeFileID)
+          if (qrcodePath) {
+            currentUser.qrcode = qrcodePath
+            console.log(`[${currentUser.name}] 二维码已准备好:`, qrcodePath)
+          }
+        } catch (error) {
+          console.error('下载二维码失败:', error)
         }
-      } catch (error) {
-        console.error('下载二维码失败:', error)
-        // 即使下载失败也继续生成海报
-      }
+      })()
+      preparePromises.push(qrcodePromise)
+    }
+
+    // 2. 预生成动态小程序码（如果还没有缓存）
+    if (currentUser.employeeId) {
+      const miniProgramCodePromise = (async () => {
+        try {
+          const { generateMiniProgramCode } = require('../../utils/qrcode-generator.js')
+          await generateMiniProgramCode(currentUser.employeeId)
+          console.log(`[${currentUser.name}] 小程序码已准备好`)
+        } catch (error) {
+          console.error('预生成小程序码失败:', error)
+        }
+      })()
+      preparePromises.push(miniProgramCodePromise)
+    }
+
+    // 并行执行所有预加载任务
+    if (preparePromises.length > 0) {
+      await Promise.all(preparePromises)
     }
 
     // 调试日志：确认传递给海报生成器的数据

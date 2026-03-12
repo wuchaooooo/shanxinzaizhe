@@ -5,6 +5,22 @@ const { getAssetPath } = require('./assets-loader.js')
 const { generateMiniProgramCode } = require('./qrcode-generator.js')
 const feishuApi = require('./feishu-api.js')
 
+// 图片信息缓存（避免重复调用 wx.getImageInfo）
+const imageInfoCache = new Map()
+
+function getImageInfoCache(imagePath) {
+    return imageInfoCache.get(imagePath)
+}
+
+function setImageInfoCache(imagePath, info) {
+    imageInfoCache.set(imagePath, info)
+    // 限制缓存大小，避免内存泄漏
+    if (imageInfoCache.size > 100) {
+        const firstKey = imageInfoCache.keys().next().value
+        imageInfoCache.delete(firstKey)
+    }
+}
+
 /**
  * 生成团队海报
  * @param {Object} page         - 调用页面的 this（用于 createCanvasContext / setData）
@@ -89,7 +105,14 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
         // 头部图片
         if (headerImageUrl) {
             try {
-                const imgInfo = await wx.getImageInfo({ src: headerImageUrl })
+                // 优先使用缓存的图片信息
+                let imgInfo = getImageInfoCache(headerImageUrl)
+                if (!imgInfo) {
+                    const info = await wx.getImageInfo({ src: headerImageUrl })
+                    imgInfo = { width: info.width, height: info.height }
+                    setImageInfoCache(headerImageUrl, imgInfo)
+                }
+
                 const imgRatio = imgInfo.width / imgInfo.height
                 const targetRatio = canvasWidth / headerHeight
                 let drawWidth, drawHeight, drawX, drawY
@@ -115,7 +138,7 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
             } catch (e) { console.error('绘制头部图片失败:', e) }
         }
 
-        // 批量获取头像信息 (限制并发数为5)
+        // 批量获取头像信息 (限制并发数为10，与 imageConcurrency 一致)
         const avatarInfoMap = new Map()
         const executing = []
         for (const partner of partners) {
@@ -123,8 +146,18 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
 
             const promise = (async () => {
                 try {
+                    // 优先使用缓存的图片信息
+                    const cached = getImageInfoCache(partner.image)
+                    if (cached) {
+                        avatarInfoMap.set(partner.image, cached)
+                        return
+                    }
+
                     const info = await wx.getImageInfo({ src: partner.image })
-                    avatarInfoMap.set(partner.image, { width: info.width, height: info.height, ratio: info.width / info.height })
+                    const imageInfo = { width: info.width, height: info.height, ratio: info.width / info.height }
+                    avatarInfoMap.set(partner.image, imageInfo)
+                    // 缓存图片信息
+                    setImageInfoCache(partner.image, imageInfo)
                 } catch (e) {
                     console.error('获取头像信息失败:', partner.name, partner.image, e)
                 }
@@ -134,7 +167,7 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
             const p = promise.then(() => executing.splice(executing.indexOf(p), 1))
             executing.push(p)
 
-            if (executing.length >= 5) {
+            if (executing.length >= 10) {
                 await Promise.race(executing)
             }
         }
@@ -312,7 +345,7 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
             } catch (e) { console.error('绘制个人二维码失败:', e) }
         }
 
-        // 转换为图片
+        // 转换为图片（优化延迟时间）
         ctx.draw(false, () => {
             setTimeout(() => {
                 wx.canvasToTempFilePath({
@@ -331,7 +364,7 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
                         wx.showToast({ title: '生成失败', icon: 'none' })
                     }
                 }, page)
-            }, 300)
+            }, 200)  // 从300ms优化到200ms
         })
 
     } catch (error) {
