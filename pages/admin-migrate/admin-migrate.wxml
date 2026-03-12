@@ -1,0 +1,82 @@
+<!--pages/admin-migrate/admin-migrate.wxml-->
+<view class="container">
+  <view class="header">
+    <text class="title">图片迁移管理</text>
+    <text class="subtitle">将飞书图片迁移到腾讯云存储</text>
+  </view>
+
+  <view class="status-card">
+    <view class="status-row">
+      <text class="label">状态:</text>
+      <text class="value status-{{status}}">
+        {{status === 'idle' ? '待开始' : ''}}
+        {{status === 'loading' ? '加载中...' : ''}}
+        {{status === 'migrating' ? '迁移中...' : ''}}
+        {{status === 'completed' ? '已完成' : ''}}
+        {{status === 'error' ? '错误' : ''}}
+      </text>
+    </view>
+
+    <view class="progress-section" wx:if="{{status === 'migrating' || status === 'completed'}}">
+      <view class="progress-row">
+        <text class="label">总数:</text>
+        <text class="value">{{progress.total}}</text>
+      </view>
+      <view class="progress-row">
+        <text class="label">当前:</text>
+        <text class="value">{{progress.current}}</text>
+      </view>
+      <view class="progress-row">
+        <text class="label">成功:</text>
+        <text class="value success">{{progress.success}}</text>
+      </view>
+      <view class="progress-row">
+        <text class="label">失败:</text>
+        <text class="value failed">{{progress.failed}}</text>
+      </view>
+
+      <progress
+        percent="{{progress.total > 0 ? (progress.current / progress.total * 100) : 0}}"
+        stroke-width="8"
+        activeColor="#07c160"
+        backgroundColor="#e5e5e5"
+      />
+    </view>
+  </view>
+
+  <button
+    class="start-btn"
+    type="primary"
+    bindtap="onStartMigration"
+    disabled="{{status === 'loading' || status === 'migrating'}}"
+  >
+    {{status === 'idle' ? '开始迁移' : ''}}
+    {{status === 'loading' ? '加载中...' : ''}}
+    {{status === 'migrating' ? '迁移中...' : ''}}
+    {{status === 'completed' ? '重新迁移' : ''}}
+    {{status === 'error' ? '重试' : ''}}
+  </button>
+
+  <view class="logs-section">
+    <view class="logs-header">
+      <text class="logs-title">迁移日志</text>
+    </view>
+    <scroll-view
+      class="logs-container"
+      scroll-y
+      scroll-into-view="{{scrollIntoView}}"
+    >
+      <view
+        wx:for="{{logs}}"
+        wx:key="index"
+        class="log-item"
+        id="log-{{index}}"
+      >
+        {{item}}
+      </view>
+      <view wx:if="{{logs.length === 0}}" class="log-empty">
+        暂无日志
+      </view>
+    </scroll-view>
+  </view>
+</view>

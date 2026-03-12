@@ -9,7 +9,7 @@ const DATA_SOURCE_CONFIG = {
   imageConcurrency: 10,
 
   // 云存储功能开关（默认关闭，测试通过后再开启）
-  useCloudStorage: false,
+  useCloudStorage: true,
 
   // 静态资源源类型: 'feishu' 或 'cloud'
   assetsSource: 'cloud',
