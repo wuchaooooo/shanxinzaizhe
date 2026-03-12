@@ -45,9 +45,13 @@ async function getImage(cloudFileID) {
 
   // 1. 检查本地缓存
   const cached = getCached(cloudFileID)
-  if (cached) return cached
+  if (cached) {
+    console.log(`[图片缓存] 命中缓存: ${cloudFileID.substring(0, 50)}...`)
+    return cached
+  }
 
   // 2. 从云存储下载（使用 fileID 作为缓存文件名）
+  console.log(`[图片缓存] 缓存未命中，开始下载: ${cloudFileID.substring(0, 50)}...`)
   const path = await downloadFromCloudStorage(cloudFileID, cloudFileID)
   console.log(`[图片缓存] 云存储下载成功: ${cloudFileID}`)
   return path

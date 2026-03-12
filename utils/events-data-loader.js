@@ -53,8 +53,10 @@ function transformFeishuEventRecord(record, eventType) {
   let cloudImageFileIDs = []
   if (cloudImageFileIDStr) {
     try {
+      // 清理 JSON 字符串中的换行符和多余空格
+      const cleanedStr = cloudImageFileIDStr.replace(/\n/g, '').replace(/\s+/g, ' ').trim()
       // 尝试解析 JSON 数组
-      const parsed = JSON.parse(cloudImageFileIDStr)
+      const parsed = JSON.parse(cleanedStr)
       // 清理每个 fileID 的空格和换行符，并移除可能的 JSON 数组标记
       cloudImageFileIDs = Array.isArray(parsed)
         ? parsed.map(id => {
