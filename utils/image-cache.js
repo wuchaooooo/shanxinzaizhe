@@ -151,7 +151,13 @@ async function downloadFromCloudStorage(fileID, imageKey) {
       const tempFileURL = res.fileList[0].tempFileURL
 
       // 2. 下载到本地
-      const downloadRes = await wx.downloadFile({ url: tempFileURL })
+      const downloadRes = await new Promise((resolve, reject) => {
+        wx.downloadFile({
+          url: tempFileURL,
+          success: resolve,
+          fail: reject
+        })
+      })
 
       if (downloadRes.statusCode !== 200) {
         throw new Error(`Download failed with status ${downloadRes.statusCode}`)
@@ -161,9 +167,13 @@ async function downloadFromCloudStorage(fileID, imageKey) {
       const localPath = _localPath(imageKey)
 
       try {
-        await wx.getFileSystemManager().saveFile({
-          tempFilePath: downloadRes.tempFilePath,
-          filePath: localPath
+        await new Promise((resolve, reject) => {
+          wx.getFileSystemManager().saveFile({
+            tempFilePath: downloadRes.tempFilePath,
+            filePath: localPath,
+            success: resolve,
+            fail: reject
+          })
         })
       } catch (saveErr) {
         console.warn(`[云存储] 持久化失败，使用临时路径`, saveErr)
