@@ -9,7 +9,8 @@
     "pages/profile-edit/profile-edit",
     "pages/timeline-item-edit/timeline-item-edit",
     "pages/badge-select/badge-select",
-    "pages/about-aia/about-aia"
+    "pages/about-aia/about-aia",
+    "pages/admin-migrate/admin-migrate"
   ],
   "window": {
     "backgroundTextStyle": "dark",

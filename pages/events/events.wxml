@@ -77,10 +77,10 @@
   </view>
 
   <!-- 可滚动内容区域 -->
-  <scroll-view class="events-scroll-container" scroll-y="{{true}}" scroll-top="{{scrollTop}}" scroll-with-animation="{{true}}">
+  <scroll-view class="events-scroll-container" scroll-y="{{true}}">
     <!-- 活动统计 -->
     <view class="events-stats-section">
-      <view class="events-stats-content">
+      <view class="events-stats-content {{!isCofounder ? 'events-stats-content-no-button' : ''}}">
         <view class="event-stat-item">
           <text class="event-stat-number">{{currentTabInProgress}}</text>
           <text class="event-stat-label">进行中</text>
@@ -94,6 +94,8 @@
           <text class="event-stat-label">已结束</text>
         </view>
       </view>
+      <image wx:if="{{aiaFooterUrl}}" class="stats-footer-image" src="{{aiaFooterUrl}}" mode="aspectFit"></image>
+      <!-- 联合创始人：创建活动按钮 -->
       <view wx:if="{{isCofounder}}" class="events-create-btn" catchtap="onCreateEvent">
         <view class="create-btn-icon">
           <text class="create-icon">✨</text>
@@ -131,17 +133,21 @@
         <!-- 左列 -->
         <view class="waterfall-column left-column">
           <view
-            class="event-card"
+            class="event-card {{enableCardAnimation ? 'card-animating' : ''}}"
+            style="{{enableCardAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}"
             wx:for="{{leftColumn}}"
             wx:key="id"
+            wx:for-index="index"
             bindtap="onEventTap"
             data-id="{{item.id}}"
             data-type="{{item.type}}"
           >
             <image
-              class="event-image"
+              class="event-image {{item.imageLoaded ? 'event-image-loaded' : ''}}"
               src="{{item.image || '/images/placeholder.png'}}"
               mode="widthFix"
+              bindload="onImageLoadComplete"
+              data-id="{{item.id}}"
             ></image>
             <view class="event-content">
               <view class="event-title-row">
@@ -163,17 +169,21 @@
         <!-- 右列 -->
         <view class="waterfall-column right-column">
           <view
-            class="event-card"
+            class="event-card {{enableCardAnimation ? 'card-animating' : ''}}"
+            style="{{enableCardAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}"
             wx:for="{{rightColumn}}"
             wx:key="id"
+            wx:for-index="index"
             bindtap="onEventTap"
             data-id="{{item.id}}"
             data-type="{{item.type}}"
           >
             <image
-              class="event-image"
+              class="event-image {{item.imageLoaded ? 'event-image-loaded' : ''}}"
               src="{{item.image || '/images/placeholder.png'}}"
               mode="widthFix"
+              bindload="onImageLoadComplete"
+              data-id="{{item.id}}"
             ></image>
             <view class="event-content">
               <view class="event-title-row">

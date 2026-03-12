@@ -68,11 +68,22 @@ function getInitialPartners() {
   if (cached.length > 0) {
     // 过滤掉未完善的资料，只显示有 employeeId 的
     const completeProfiles = filterCompleteProfiles(cached)
-    return completeProfiles.map(partner => processPartnerData({
-      ...partner,
-      // 初始都显示骨架图，等待图片加载完成后一起显示
-      loaded: false
-    }))
+    const partners = completeProfiles.map(partner => {
+      // 改进逻辑：
+      // 1. 如果有有效的 image 路径（非空字符串），标记为 loaded
+      // 2. 如果没有 imageKey，说明没有图片要下载，也标记为 loaded
+      // 3. 其他情况（有 imageKey 但 image 为空），标记为未加载
+      const hasValidImage = partner.image && partner.image.length > 0
+      const hasNoImageKey = !partner.imageKey
+
+      return processPartnerData({
+        ...partner,
+        loaded: hasValidImage || hasNoImageKey
+      })
+    })
+
+    // 关键修复：确保排序一致性，避免与 onLoad 中的排序不一致
+    return sortByJoinDate(partners)
   }
   // 如果没有缓存数据，返回占位符
   return generatePlaceholders()
@@ -93,6 +104,7 @@ Page({
     loading: false,
     allImagesLoaded: false, // 是否所有合伙人头像已加载完成
     shanxinLogoUrl: '', // 善心logo
+    aiaFooterUrl: '', // AIA footer 图片
     posterBtnLogoLoaded: false, // 海报按钮logo是否加载完成
     posterScrollReady: true, // 控制scroll-view的渲染，用于重置滚动位置
     shareImageUrl: '', // 分享图片路径
@@ -107,6 +119,80 @@ Page({
     return partners.every(p => p.loaded)
   },
 
+  // 同步已下载的图片路径（从 globalData 到页面数据）
+  _syncDownloadedImages() {
+    const app = getApp()
+    const globalPartners = app.globalData.partnersData || []
+    if (globalPartners.length === 0) return
+
+    const partners = this.data.partners
+    const updates = {}
+    let hasUpdates = false
+
+    partners.forEach((partner, idx) => {
+      // 使用 employeeId 匹配（更可靠）
+      const globalPartner = globalPartners.find(p => p.employeeId === partner.employeeId)
+      if (!globalPartner) return
+
+      // 同步头像 - 改进逻辑
+      // 1. 如果 globalPartner.image 存在且不同，直接同步
+      // 2. 如果 globalPartner.image 为空但有 imageKey，尝试从缓存读取
+      let imageToSync = null
+      if (globalPartner.image && globalPartner.image !== partner.image) {
+        imageToSync = globalPartner.image
+      } else if (!globalPartner.image && globalPartner.imageKey) {
+        // 尝试从缓存读取
+        const { getCached } = require('../../utils/image-cache.js')
+        const cachedPath = getCached(globalPartner.imageKey)
+        if (cachedPath && cachedPath !== partner.image) {
+          imageToSync = cachedPath
+          // 同时更新 globalData
+          globalPartner.image = cachedPath
+        }
+      }
+
+      if (imageToSync) {
+        updates[`partners[${idx}].image`] = imageToSync
+        updates[`partners[${idx}].loaded`] = true
+        hasUpdates = true
+
+        // 同时更新 filteredPartners
+        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
+        if (fidx !== -1) {
+          updates[`filteredPartners[${fidx}].image`] = imageToSync
+          updates[`filteredPartners[${fidx}].loaded`] = true
+        }
+      } else if (partner.image && !partner.loaded) {
+        // 图片路径已同步但 loaded 仍为 false（竞态导致），直接修复
+        updates[`partners[${idx}].loaded`] = true
+        hasUpdates = true
+        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
+        if (fidx !== -1) {
+          updates[`filteredPartners[${fidx}].loaded`] = true
+        }
+      }
+
+      // 同步二维码
+      if (globalPartner.qrcode && globalPartner.qrcode !== partner.qrcode) {
+        updates[`partners[${idx}].qrcode`] = globalPartner.qrcode
+        hasUpdates = true
+
+        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
+        if (fidx !== -1) {
+          updates[`filteredPartners[${fidx}].qrcode`] = globalPartner.qrcode
+        }
+      }
+    })
+
+    if (hasUpdates) {
+      console.log('[Team] 同步已下载的图片')
+      this.setData(updates, () => {
+        // 重新计算 allImagesLoaded 状态
+        this.setData({ allImagesLoaded: this.checkAllImagesLoaded(this.data.partners) })
+      })
+    }
+  },
+
   onLoad() {
     // 首次加载时不启用动画，让骨架屏一开始就全部显示
     // （动画会导致骨架屏一个一个出现）
@@ -117,12 +203,22 @@ Page({
       this.setData({ shanxinLogoUrl: shanxinLogoPath })
     }
 
+    // 加载 AIA footer（代码：aia_footer）
+    const aiaFooterPath = getAssetPath('aia_footer')
+    if (aiaFooterPath) {
+      this.setData({ aiaFooterUrl: aiaFooterPath })
+    }
+
     const app = getApp()
     // 注册静态资源下载完成回调
     this._assetsDataCb = (assets) => {
       if (assets && assets['shanxinzheli']) {
         const path = typeof assets['shanxinzheli'] === 'string' ? assets['shanxinzheli'] : assets['shanxinzheli'].path
         this.setData({ shanxinLogoUrl: path })
+      }
+      if (assets && assets['aia_footer']) {
+        const path = typeof assets['aia_footer'] === 'string' ? assets['aia_footer'] : assets['aia_footer'].path
+        this.setData({ aiaFooterUrl: path })
       }
     }
     app.globalData.assetsDataListeners.push(this._assetsDataCb)
@@ -137,11 +233,19 @@ Page({
       // 过滤掉未完善的资料，只显示有 employeeId 的
       const completeProfiles = filterCompleteProfiles(partnersData)
       const sortedData = sortByJoinDate([...completeProfiles])
-      const partners = sortedData.map(partner => processPartnerData({
-        ...partner,
-        // 初始都显示骨架图，等待图片加载完成后再显示
-        loaded: false
-      }))
+      const partners = sortedData.map(partner => {
+        // 改进逻辑：
+        // 1. 如果有有效的 image 路径（非空字符串），标记为 loaded
+        // 2. 如果没有 imageKey，说明没有图片要下载，也标记为 loaded
+        // 3. 其他情况（有 imageKey 但 image 为空），标记为未加载
+        const hasValidImage = partner.image && partner.image.length > 0
+        const hasNoImageKey = !partner.imageKey
+
+        return processPartnerData({
+          ...partner,
+          loaded: hasValidImage || hasNoImageKey
+        })
+      })
       this.setData({
         partners,
         filteredPartners: partners,
@@ -150,19 +254,21 @@ Page({
         incompleteProfileOpenid: currentOpenid
       })
       this.calculateStats()
+      // 同步已下载的图片路径（解决竞态条件）
+      this._syncDownloadedImages()
     } else {
       this.loadFeishuData()
     }
 
     // 注册图片下载完成回调，处理头像和二维码
-    this._imageReadyCb = (type, name, path) => {
+    this._imageReadyCb = (type, employeeId, path) => {
       const partners = this.data.partners
-      const idx = partners.findIndex(p => p.name === name)
+      const idx = partners.findIndex(p => p.employeeId === employeeId)
       if (idx === -1) return
 
       // 同时更新 globalData，确保其他页面能获取到最新数据
       const globalPartners = app.globalData.partnersData || []
-      const globalIdx = globalPartners.findIndex(p => p.name === name)
+      const globalIdx = globalPartners.findIndex(p => p.employeeId === employeeId)
       if (globalIdx !== -1) {
         if (type === 'avatar') {
           globalPartners[globalIdx].image = path
@@ -183,7 +289,7 @@ Page({
         updates[`partners[${idx}].loaded`] = true
 
         // 同时更新 filteredPartners（WXML 渲染使用）
-        const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
+        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
         if (fidx !== -1) {
           updates[`filteredPartners[${fidx}].image`] = path
           updates[`filteredPartners[${fidx}].loaded`] = true
@@ -201,13 +307,16 @@ Page({
         updates[`partners[${idx}].qrcode`] = path
 
         // 同时更新 filteredPartners
-        const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
+        const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
         if (fidx !== -1) {
           updates[`filteredPartners[${fidx}].qrcode`] = path
         }
       }
 
-      this.setData(updates)
+      this.setData(updates, () => {
+        // 图片下载完成后，立即同步所有图片（解决竞态条件）
+        this._syncDownloadedImages()
+      })
     }
     app.globalData.imageReadyListeners.push(this._imageReadyCb)
 
@@ -238,10 +347,24 @@ Page({
         console.log('[Team] 重建列表')
         const imageMap = {}
         const loadedMap = {}
+        // 优先从 globalData 取（_imageReadyCb 会同步更新 globalData）
+        const globalPartners = app.globalData.partnersData || []
+        globalPartners.forEach(p => {
+          if (p.employeeId && p.image) imageMap[p.employeeId] = p.image
+        })
+        // 再从当前页面数据补充（可能有 globalData 里没有的）
         currentPartners.forEach(p => {
           if (p.employeeId) {
-            if (p.image) imageMap[p.employeeId] = p.image
+            if (p.image && !imageMap[p.employeeId]) imageMap[p.employeeId] = p.image
             if (p.loaded) loadedMap[p.employeeId] = true
+          }
+        })
+        // 最后用 getCached 兜底：直接读文件系统，不依赖内存状态
+        const { getCached } = require('../../utils/image-cache.js')
+        sortedData.forEach(p => {
+          if (p.employeeId && !imageMap[p.employeeId] && p.imageKey) {
+            const cached = getCached(p.imageKey)
+            if (cached) imageMap[p.employeeId] = cached
           }
         })
 
@@ -252,8 +375,7 @@ Page({
           return processPartnerData({
             ...partner,
             image: finalImage,
-            // 保持之前的加载状态，新数据初始为未加载
-            loaded: wasLoaded || false
+            loaded: !!(wasLoaded || finalImage || !partner.imageKey)
           })
         })
 
@@ -264,6 +386,9 @@ Page({
           allImagesLoaded: this.checkAllImagesLoaded(partners),
           hasIncompleteProfile,
           incompleteProfileOpenid: currentOpenid
+        }, () => {
+          // setData 完成后立即同步图片，修复 loaded 竞态问题
+          this._syncDownloadedImages()
         })
         this.calculateStats()
       } else {
@@ -337,21 +462,14 @@ Page({
     }
     app.globalData.currentUserListeners.push(this._currentUserCb)
 
-    // 立即应用已有结果（如果身份识别已完成）
-    // 注意：只有当 openid 和 partnersData 都存在时，才能确定身份识别已完成
-    if (app.globalData.openid && app.globalData.partnersData && app.globalData.partnersData.length > 0) {
+    // 立即应用已有结果（partnersData 已加载即可，openid 可能还未到）
+    if (app.globalData.partnersData && app.globalData.partnersData.length > 0) {
       const currentUser = app.globalData.currentUser
+      const currentOpenid = app.globalData.openid || ''
       this.setData({
         isCofounder: !!(currentUser && currentUser.employeeId),
-        identityChecked: true
-      })
-
-      // 重新检查是否需要显示占位符
-      const partnersData = app.globalData.partnersData
-      const currentOpenid = app.globalData.openid
-      const hasIncompleteProfile = checkIncompleteProfile(partnersData, currentOpenid)
-      this.setData({
-        hasIncompleteProfile,
+        identityChecked: true,
+        hasIncompleteProfile: checkIncompleteProfile(app.globalData.partnersData, currentOpenid),
         incompleteProfileOpenid: currentOpenid
       })
     }
@@ -427,7 +545,7 @@ Page({
       // 阶段二：后台下载图片
       downloadAllProfileImages(partnersData, (type, path, employeeId, name) => {
         // 通知所有监听器（头像和二维码）
-        app.globalData.imageReadyListeners.forEach(cb => cb(type, name, path))
+        app.globalData.imageReadyListeners.forEach(cb => cb(type, employeeId, path))
       }, DATA_SOURCE_CONFIG.imageConcurrency || 10)
     } catch (error) {
       console.error('加载飞书数据失败:', error)
@@ -437,7 +555,79 @@ Page({
   },
 
   onShow() {
-    getApp().preloadFeishuData()
+    const app = getApp()
+
+    // 立即同步一次已下载的图片（解决竞态条件）
+    this._syncDownloadedImages()
+
+    // 延迟 500ms 再同步一次，确保文件系统操作完成
+    setTimeout(() => {
+      this._syncDownloadedImages()
+    }, 500)
+
+    // 延迟 1500ms 再同步一次，应对隔较长时间后数据刷新的情况
+    setTimeout(() => {
+      this._syncDownloadedImages()
+    }, 1500)
+
+    // 检查监听器是否已注册，如果没有则重新注册
+    if (!this._partnersDataCb) {
+      console.log('[Team] onShow: 监听器未注册，重新注册')
+      // 重新注册 partnersDataListeners
+      this._partnersDataCb = () => {
+        console.log('[Team] 收到团队数据刷新通知')
+        this.loadFeishuData()
+      }
+      app.globalData.partnersDataListeners.push(this._partnersDataCb)
+    }
+
+    if (!this._imageReadyCb) {
+      console.log('[Team] onShow: 图片监听器未注册，重新注册')
+      // 重新注册 imageReadyListeners
+      this._imageReadyCb = (type, employeeId, path) => {
+        const partners = this.data.partners
+        const idx = partners.findIndex(p => p.employeeId === employeeId)
+        if (idx === -1) return
+
+        const globalPartners = app.globalData.partnersData || []
+        const globalIdx = globalPartners.findIndex(p => p.employeeId === employeeId)
+        if (globalIdx !== -1) {
+          if (type === 'avatar') {
+            globalPartners[globalIdx].image = path
+          } else if (type === 'qrcode') {
+            globalPartners[globalIdx].qrcode = path
+          }
+          app.globalData.partnersData = globalPartners
+        }
+
+        const updates = {}
+        if (type === 'avatar') {
+          if (partners[idx].image === path) return
+          updates[`partners[${idx}].image`] = path
+          updates[`partners[${idx}].loaded`] = true
+          const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
+          if (fidx !== -1) {
+            updates[`filteredPartners[${fidx}].image`] = path
+            updates[`filteredPartners[${fidx}].loaded`] = true
+          }
+          const updatedPartners = [...partners]
+          updatedPartners[idx] = { ...updatedPartners[idx], image: path, loaded: true }
+          updates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
+        } else if (type === 'qrcode') {
+          if (partners[idx].qrcode === path) return
+          updates[`partners[${idx}].qrcode`] = path
+          const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
+          if (fidx !== -1) {
+            updates[`filteredPartners[${fidx}].qrcode`] = path
+          }
+        }
+
+        this.setData(updates)
+      }
+      app.globalData.imageReadyListeners.push(this._imageReadyCb)
+    }
+
+    app.preloadFeishuData()
   },
 
   calculateStats() {
@@ -629,8 +819,6 @@ Page({
     const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
 
     if (currentUser.qrcodeKey) {
-      wx.showLoading({ title: '准备中...', mask: true })
-
       try {
         const qrcodePath = await ensureQrcodeDownloaded(currentUser.employeeId)
 
@@ -640,10 +828,7 @@ Page({
         } else {
           console.log(`[${currentUser.name}] 二维码下载失败，将不显示个人二维码`)
         }
-
-        wx.hideLoading()
       } catch (error) {
-        wx.hideLoading()
         console.error('下载二维码失败:', error)
         // 即使下载失败也继续生成海报
       }
@@ -721,35 +906,26 @@ Page({
     const name = e.currentTarget.dataset.name
     console.log('图片加载失败:', name)
 
-    const app = getApp()
     const partners = this.data.partners
     const idx = partners.findIndex(p => p.name === name)
 
     if (idx !== -1) {
-      // 清除失效的图片路径，保持骨架图状态，等待重试
+      // 只清空页面数据，不清空 globalData（避免触发连锁反应导致集体消失）
       const updates = {
         [`partners[${idx}].image`]: '',
-        [`partners[${idx}].loaded`]: false  // 保持 false，继续显示骨架图
+        [`partners[${idx}].loaded`]: false
       }
       const fidx = this.data.filteredPartners.findIndex(p => p.name === name)
       if (fidx !== -1) {
         updates[`filteredPartners[${fidx}].image`] = ''
-        updates[`filteredPartners[${fidx}].loaded`] = false  // 保持 false，继续显示骨架图
+        updates[`filteredPartners[${fidx}].loaded`] = false
       }
-      this.setData(updates)
-
-      // 同步更新 globalData
-      const globalPartners = app.globalData.partnersData || []
-      const globalIdx = globalPartners.findIndex(p => p.name === name)
-      if (globalIdx !== -1) {
-        globalPartners[globalIdx].image = ''
-        globalPartners[globalIdx].loaded = false
-
-        // 触发 app.js 重新检查并下载缺失的图片
+      this.setData(updates, () => {
+        // 延迟后尝试从 globalData 重新同步（可能是临时失败）
         setTimeout(() => {
-          app.preloadFeishuData()
-        }, 100)
-      }
+          this._syncDownloadedImages()
+        }, 500)
+      })
     }
   }
 })

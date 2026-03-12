@@ -21,6 +21,7 @@
       <text class="banner-desc">以专业诚信与爱，助力家庭和企业健康长久好生活</text>
       <button class="banner-btn" bindtap="onConsult">加入团队</button>
     </view>
+    <image wx:if="{{aiaFooterUrl}}" class="banner-footer-image" src="{{aiaFooterUrl}}" mode="aspectFit"></image>
     <view class="banner-decoration banner-decoration-1"></view>
     <view class="banner-decoration banner-decoration-2"></view>
   </view>

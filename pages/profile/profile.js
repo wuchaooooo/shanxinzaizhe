@@ -314,11 +314,11 @@ Page({
 
       // 若头像还未下载，注册监听，下载完成后自动更新
       if (!partner.image) {
-        const partnerName = partner.name
-        this._imageReadyCb = (type, name, path) => {
-          if (name !== partnerName) return
+        const partnerEmployeeId = partner.employeeId
+        this._imageReadyCb = (type, employeeId, path) => {
+          if (employeeId !== partnerEmployeeId) return
           // 根据当前合伙人的 image/qrcode 字段判断是头像还是二维码
-          const current = (app.globalData.partnersData || []).find(p => p.name === name)
+          const current = (app.globalData.partnersData || []).find(p => p.employeeId === employeeId)
           if (!current) return
           const update = {}
           if (type === 'avatar' && current.image === path) {

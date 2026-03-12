@@ -488,7 +488,7 @@
 
 .poster-content {
   width: 100%;
-  max-height: 88vh;
+  max-height: 90vh;
   background-color: #ffffff;
   border-radius: 32rpx 32rpx 0 0;
   overflow: hidden;
@@ -530,24 +530,24 @@
 }
 
 .poster-image-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24rpx;
+  padding: 40rpx 40rpx 60rpx;
+  min-height: 60vh;
   position: relative;
-  padding: 40rpx;
-  min-height: 1280rpx;  /* 骨架图高度 1200rpx + padding 80rpx，防止图片加载后高度跳动 */
 }
 
 .poster-skeleton {
   width: 100%;
-  height: 1200rpx;
+  aspect-ratio: 0.65;
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
   border-radius: 16rpx;
   position: relative;
   overflow: hidden;
-}
-
-.poster-skeleton-hide {
-  display: none;
 }
 
 @keyframes skeleton-loading {
@@ -587,12 +587,28 @@
   display: block;
   border-radius: 16rpx;
   box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.1);
+  background-color: transparent;
+  position: relative;
   opacity: 0;
-  transition: opacity 0.3s;
 }
 
 .poster-image-show {
-  opacity: 1;
+  animation: image-fade-in 0.4s ease both;
+}
+
+@keyframes image-fade-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .poster-tip {

@@ -525,7 +525,7 @@ Page({
             if (DATA_SOURCE_CONFIG.useCloudStorage) {
               const cloudResult = await uploadToCloudStorage(
                 newImages[i],
-                `events/${Date.now()}_${i}_${imageKey}.png`
+                `images/event/${Date.now()}_${i}_${imageKey}.png`
               )
               if (cloudResult.success) {
                 cloudFileIDs.push(cloudResult.fileID)
@@ -593,7 +593,7 @@ Page({
               if (DATA_SOURCE_CONFIG.useCloudStorage) {
                 const cloudResult = await uploadToCloudStorage(
                   formData.checkinQrcode,
-                  `checkin-qrcodes/${Date.now()}_${checkinQrcodeKey}.png`
+                  `images/event/${Date.now()}_checkin_${checkinQrcodeKey}.png`
                 )
                 if (cloudResult.success) {
                   fields['活动签到码链接_腾讯云_file_id'] = cloudResult.fileID

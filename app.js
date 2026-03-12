@@ -1,7 +1,7 @@
 // app.js
 const { DATA_SOURCE_CONFIG } = require('./utils/data-source-config.js')
 const { loadAllProfilesText, downloadAllProfileImages } = require('./utils/profile-loader.js')
-const { fetchFeishuAssets, getAssetsFromCache } = require('./utils/assets-loader.js')
+const { fetchAssets, getAssetsFromCache } = require('./utils/assets-loader.js')
 const { fetchFeishuEventsText, downloadEventImagesBackground, getEventsFromCache } = require('./utils/events-data-loader.js')
 const { updateShareTracking } = require('./utils/feishu-api.js')
 
@@ -33,18 +33,16 @@ App({
         this.globalData.assetsData = cachedAssets
       }
 
-      // 等待静态资源下载完成后再下载头像,确保首页图片优先展示
-      await this.preloadFeishuAssets()
-
-      // 加载团队数据：直接从 API 拉取最新数据（不再从旧缓存恢复）
-      await this.preloadFeishuData()
-
-      // 最后加载活动数据
+      // 加载活动缓存
       const cachedEvents = getEventsFromCache()
       if (cachedEvents.length > 0) {
         this.globalData.eventsData = cachedEvents
       }
-      await this.preloadFeishuEvents()
+
+      // 三个任务并行启动，互不阻塞，各自内部有锁防止重复执行
+      this.preloadFeishuAssets()
+      this.preloadFeishuData()
+      this.preloadFeishuEvents()
     }
 
     // 小程序启动时执行
@@ -140,11 +138,17 @@ App({
       const isFirstLoad = !this.globalData.partnersDataTimestamp
       this.globalData.partnersDataTimestamp = Date.now()
 
+      // 检测是否有记录被删除（记录数量减少）
+      const hasDeleted = existingData.length > 0 && profiles.length < existingData.length
+
       // 首次加载时，即使没有变化也要通知页面（让页面获取初始数据）
       // 后续加载时，只在有变化时通知页面刷新（避免不必要的重新渲染）
-      if (isFirstLoad || changedIds.size > 0) {
+      // 变化包括：记录修改、新增、删除
+      if (isFirstLoad || changedIds.size > 0 || hasDeleted) {
         if (isFirstLoad) {
           console.log('[App] 首次加载，通知页面初始化')
+        } else if (hasDeleted) {
+          console.log(`[App] 检测到记录删除（${existingData.length} → ${profiles.length}），通知页面刷新`)
         } else {
           console.log(`[App] 检测到变化，通知页面刷新`)
         }
@@ -162,6 +166,12 @@ App({
         // 有 imageKey 但没有图片路径，需要下载
         if (p.imageKey && !p.image) return true
         return false
+      }).sort((a, b) => {
+        // 工号越大（越新入职）排越前，优先下载
+        const numA = parseInt(a.employeeId, 10)
+        const numB = parseInt(b.employeeId, 10)
+        if (!isNaN(numA) && !isNaN(numB)) return numB - numA
+        return (b.employeeId || '').localeCompare(a.employeeId || '')
       })
 
       if (needDownload.length > 0) {
@@ -176,7 +186,7 @@ App({
               profile.image = path
               profile.loaded = true
               // 只在头像下载完成时通知监听器（用于 team 页面更新头像）
-              this.globalData.imageReadyListeners.forEach(cb => cb(type, name, path))
+              this.globalData.imageReadyListeners.forEach(cb => cb(type, employeeId, path))
             } else if (type === 'qrcode') {
               profile.qrcode = path
               // 二维码下载完成后，通知数据监听器更新显示
@@ -197,14 +207,14 @@ App({
     }
   },
 
-  // 预加载飞书静态资源
+  // 预加载静态资源（根据配置从飞书或腾讯云加载）
   async preloadFeishuAssets() {
     if (this._fetchingFeishuAssets) return
     this._fetchingFeishuAssets = true
     try {
-      console.log('开始预加载飞书静态资源...')
+      console.log('开始预加载静态资源...')
 
-      const { assets } = await fetchFeishuAssets((code) => {
+      const { assets } = await fetchAssets((code) => {
         // 每个资源下载完成后立即更新 globalData 并通知页面
         console.log(`静态资源 [${code}] 就绪,立即通知页面`)
         this.globalData.assetsData = getAssetsFromCache()
@@ -232,17 +242,27 @@ App({
       // 保留现有的图片路径（如果有的话）
       const existingData = this.globalData.eventsData || []
       if (existingData.length > 0 && !this.globalData.forceRedownloadImages) {
-        const existingWithImages = existingData.filter(e => e.imagePaths && e.imagePaths.length > 0).length
+        const existingWithImages = existingData.filter(e =>
+          (e.imagePaths && e.imagePaths.length > 0) ||
+          (e.images && e.images.length > 0) ||
+          e.image
+        ).length
         console.log(`[App] preloadFeishuEvents: 现有数据 ${existingData.length} 条，其中 ${existingWithImages} 条有图片`)
 
         let preservedCount = 0
         events.forEach(event => {
           const existing = existingData.find(e => e.id === event.id)
           if (existing) {
-            // 保留现有的图片路径（只要不是空数组）
+            // 保留现有的图片路径（兼容多种字段名）
             if (existing.imagePaths && existing.imagePaths.length > 0) {
               event.imagePaths = existing.imagePaths
               preservedCount++
+            }
+            if (existing.images && existing.images.length > 0) {
+              event.images = existing.images
+            }
+            if (existing.image) {
+              event.image = existing.image
             }
           }
         })

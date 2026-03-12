@@ -31,10 +31,13 @@ function downloadImageWithAuth(url, token, prefix = 'image', id = '') {
         if (res.statusCode === 200) {
           console.log(`[${prefix}_${id}] 图片下载成功（临时文件）:`, res.tempFilePath)
 
-          // 持久化存储到 USER_DATA_PATH
+          // 持久化存储到 USER_DATA_PATH（固定文件名，避免重复累积）
           const fs = wx.getFileSystemManager()
-          const fileName = `${prefix}_${id}_${Date.now()}.png`
+          const fileName = `${prefix}_${id}.png`
           const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
+
+          // 如果旧文件存在，先删除再保存（避免 saveFile 在文件已存在时报错）
+          try { fs.unlinkSync(filePath) } catch (e) { /* 文件不存在，忽略 */ }
 
           fs.saveFile({
             tempFilePath: res.tempFilePath,

@@ -203,12 +203,16 @@ Page({
 
       await Promise.all(batch.map(async (image) => {
         try {
+          // 确定图片类型（avatar 或 event）
+          const imageType = image.type.startsWith('event_') ? 'event' : 'avatar'
+
           // 调用云函数迁移
           const result = await wx.cloud.callFunction({
             name: 'migrateImagesToCloud',
             data: {
               feishuImageKey: image.imageKey,
-              feishuToken: this.data.feishuToken
+              feishuToken: this.data.feishuToken,
+              imageType: imageType
             }
           })
 

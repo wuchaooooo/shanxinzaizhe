@@ -1,5 +1,5 @@
 // utils/assets-loader.js
-// 静态资源加载器 - 从飞书 base 加载和缓存静态资源
+// 静态资源加载器 - 支持从飞书或腾讯云加载和缓存静态资源
 
 const { getAllRecords, getTenantAccessToken, FEISHU_CONFIG } = require('./feishu-api.js')
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
@@ -46,9 +46,11 @@ function downloadImageWithAuth(url, token, code, ext) {
       success: (res) => {
         if (res.statusCode === 200) {
           const fs = wx.getFileSystemManager()
-          // 生成持久化路径
-          const fileName = `asset_${code}_${Date.now()}${ext || ''}`
-          const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
+          // 用 code 作为固定文件名，避免时间戳导致文件累积
+          const filePath = `${wx.env.USER_DATA_PATH}/asset_${code}${ext || ''}`
+
+          // 先删旧文件，避免 saveFile 在文件已存在时报错
+          try { fs.unlinkSync(filePath) } catch (e) { /* 文件不存在，忽略 */ }
 
           fs.saveFile({
             tempFilePath: res.tempFilePath,
@@ -282,23 +284,9 @@ async function fetchFeishuAssets(onAssetReady) {
     const downloadTasks = needDownload.map(asset => {
       return async () => {
         try {
-          // 保存旧路径用于删除
-          const oldPath = cache[asset.code]?.path
-
           // 使用 downloadWithRetry 下载，失败会自动重试最多 3 次
           const path = await downloadWithRetry(asset.fileUrl, token, asset.code, asset.ext)
           console.log(`[${asset.code}] 下载成功,路径:`, path)
-
-          // 删除旧文件（如果存在）
-          if (oldPath && oldPath !== path) {
-            try {
-              const fs = wx.getFileSystemManager()
-              fs.unlinkSync(oldPath)
-              console.log(`[${asset.code}] 已删除旧文件:`, oldPath)
-            } catch (e) {
-              console.warn(`[${asset.code}] 删除旧文件失败:`, oldPath, e)
-            }
-          }
 
           // 更新缓存
           cache[asset.code] = {
@@ -346,6 +334,265 @@ async function fetchFeishuAssets(onAssetReady) {
 }
 
 /**
+ * 从腾讯云下载静态资源
+ * @param {string} cloudPath - 腾讯云路径（cloud:// 或 https://）
+ * @param {string} code - 资源代码
+ * @param {string} ext - 文件扩展名
+ */
+async function downloadFromCloud(cloudPath, code, ext) {
+  console.log(`[${code}] 从腾讯云下载:`, cloudPath)
+
+  // 如果是 cloud:// 路径，先获取临时 URL，然后使用临时 URL 下载
+  if (cloudPath.startsWith('cloud://')) {
+    try {
+      console.log(`[${code}] 获取云存储临时 URL...`)
+
+      // 先获取临时 URL
+      const tempUrlResult = await new Promise((resolve, reject) => {
+        wx.cloud.getTempFileURL({
+          fileList: [cloudPath],
+          success: resolve,
+          fail: reject
+        })
+      })
+
+      if (!tempUrlResult.fileList || tempUrlResult.fileList.length === 0) {
+        throw new Error('获取临时 URL 失败：返回结果为空')
+      }
+
+      const fileInfo = tempUrlResult.fileList[0]
+      if (fileInfo.status !== 0) {
+        throw new Error(`获取临时 URL 失败：${fileInfo.errMsg || 'status=' + fileInfo.status}`)
+      }
+
+      const tempFileURL = fileInfo.tempFileURL
+      console.log(`[${code}] 临时 URL 获取成功:`, tempFileURL.substring(0, 100) + '...')
+
+      // 使用临时 URL 下载（临时 URL 是腾讯云的域名，应该在白名单中）
+      return await new Promise((resolve, reject) => {
+        wx.downloadFile({
+          url: tempFileURL,
+          success: (res) => {
+            if (res.statusCode === 200) {
+              const fs = wx.getFileSystemManager()
+              const filePath = `${wx.env.USER_DATA_PATH}/asset_${code}${ext || ''}`
+
+              // 先删旧文件
+              try { fs.unlinkSync(filePath) } catch (e) { /* 文件不存在，忽略 */ }
+
+              fs.saveFile({
+                tempFilePath: res.tempFilePath,
+                filePath: filePath,
+                success: (saveRes) => {
+                  console.log(`[${code}] 腾讯云资源持久化成功:`, saveRes.savedFilePath)
+                  resolve(saveRes.savedFilePath)
+                },
+                fail: (saveErr) => {
+                  console.error(`[${code}] 腾讯云资源持久化失败,退而使用临时路径:`, saveErr)
+                  resolve(res.tempFilePath)
+                }
+              })
+            } else {
+              console.error('下载腾讯云资源HTTP状态码错误:', {
+                url: tempFileURL,
+                statusCode: res.statusCode
+              })
+              reject({
+                statusCode: res.statusCode,
+                errMsg: `HTTP ${res.statusCode}`,
+                url: tempFileURL
+              })
+            }
+          },
+          fail: (err) => {
+            console.error('下载腾讯云资源网络请求失败:', {
+              url: tempFileURL,
+              error: err
+            })
+            reject({
+              statusCode: 0,
+              errMsg: err.errMsg || '网络请求失败',
+              url: tempFileURL
+            })
+          }
+        })
+      })
+    } catch (error) {
+      console.error(`[${code}] 云存储下载失败:`, error)
+      throw error
+    }
+  } else {
+    // 如果是 https:// 路径，直接使用普通下载
+    console.log(`[${code}] 使用普通下载 API...`)
+    return new Promise((resolve, reject) => {
+      wx.downloadFile({
+        url: cloudPath,
+        success: (res) => {
+          if (res.statusCode === 200) {
+            const fs = wx.getFileSystemManager()
+            const filePath = `${wx.env.USER_DATA_PATH}/asset_${code}${ext || ''}`
+
+            // 先删旧文件
+            try { fs.unlinkSync(filePath) } catch (e) { /* 文件不存在，忽略 */ }
+
+            fs.saveFile({
+              tempFilePath: res.tempFilePath,
+              filePath: filePath,
+              success: (saveRes) => {
+                console.log(`[${code}] 腾讯云资源持久化成功:`, saveRes.savedFilePath)
+                resolve(saveRes.savedFilePath)
+              },
+              fail: (saveErr) => {
+                console.error(`[${code}] 腾讯云资源持久化失败,退而使用临时路径:`, saveErr)
+                resolve(res.tempFilePath)
+              }
+            })
+          } else {
+            console.error('下载腾讯云资源HTTP状态码错误:', {
+              url: cloudPath,
+              statusCode: res.statusCode
+            })
+            reject({
+              statusCode: res.statusCode,
+              errMsg: `HTTP ${res.statusCode}`,
+              url: cloudPath
+            })
+          }
+        },
+        fail: (err) => {
+          console.error('下载腾讯云资源网络请求失败:', {
+            url: cloudPath,
+            error: err
+          })
+          reject({
+            statusCode: 0,
+            errMsg: err.errMsg || '网络请求失败',
+            url: cloudPath
+          })
+        }
+      })
+    })
+  }
+}
+
+/**
+ * 从腾讯云加载静态资源
+ * @param {Function} onAssetReady - 单个资源下载完成的回调 (code, path)
+ */
+async function fetchCloudAssets(onAssetReady) {
+  try {
+    console.log('开始从腾讯云加载静态资源...')
+
+    const cloudAssets = DATA_SOURCE_CONFIG.cloudAssets || {}
+    const codes = Object.keys(cloudAssets)
+
+    if (codes.length === 0) {
+      console.log('没有配置腾讯云资源')
+      return { assets: {}, hasChanges: false }
+    }
+
+    console.log(`配置了 ${codes.length} 个腾讯云资源`)
+
+    // 检查哪些资源需要下载
+    const cache = loadAssetsCache()
+    const needDownload = []
+    const fs = wx.getFileSystemManager()
+
+    codes.forEach(code => {
+      const cloudPath = cloudAssets[code]
+      const cached = cache[code]
+
+      // 检查缓存是否有效（文件路径存在）
+      let isCacheValid = false
+      if (cached && cached.path && cached.source === 'cloud') {
+        try {
+          fs.accessSync(cached.path)
+          isCacheValid = true
+        } catch (e) {
+          console.warn(`[${code}] 腾讯云资源文件丢失,准备重新下载:`, cached.path)
+        }
+      }
+
+      if (!isCacheValid) {
+        // 获取文件扩展名
+        const ext = cloudPath.includes('.') ? '.' + cloudPath.split('.').pop().split('?')[0] : ''
+        needDownload.push({ code, cloudPath, ext })
+      }
+    })
+
+    if (needDownload.length === 0) {
+      console.log('所有腾讯云资源已是最新，无需下载')
+      return { assets: getAssetsFromCache(), hasChanges: false }
+    }
+
+    // 下载资源
+    console.log(`开始下载 ${needDownload.length} 个腾讯云资源...`)
+
+    const downloadTasks = needDownload.map(asset => {
+      return async () => {
+        try {
+          const path = await downloadFromCloud(asset.cloudPath, asset.code, asset.ext)
+          console.log(`[${asset.code}] 腾讯云下载成功,路径:`, path)
+
+          // 更新缓存
+          cache[asset.code] = {
+            code: asset.code,
+            source: 'cloud',
+            cloudPath: asset.cloudPath,
+            ext: asset.ext,
+            path: path,
+            updatedAt: Date.now()
+          }
+
+          // 立即保存缓存
+          saveAssetsCache(cache)
+
+          // 立即通知页面该资源已就绪
+          if (onAssetReady) {
+            onAssetReady(asset.code, path)
+          }
+
+          return { success: true, code: asset.code }
+        } catch (error) {
+          console.error(`下载腾讯云资源失败 (${asset.code}):`, error)
+          return { success: false, code: asset.code, error }
+        }
+      }
+    })
+
+    // 使用配置的并发数
+    const concurrency = DATA_SOURCE_CONFIG.imageConcurrency || 5
+    await downloadWithLimit(downloadTasks, concurrency)
+
+    // 保存缓存
+    saveAssetsCache(cache)
+
+    console.log(`腾讯云资源下载完成，共 ${needDownload.length} 个`)
+
+    return { assets: getAssetsFromCache(), hasChanges: true }
+  } catch (error) {
+    console.error('加载腾讯云资源失败:', error)
+    // 返回缓存的资源
+    return { assets: getAssetsFromCache(), hasChanges: false }
+  }
+}
+
+/**
+ * 根据配置加载静态资源（自动选择飞书或腾讯云）
+ * @param {Function} onAssetReady - 单个资源下载完成的回调 (code, path)
+ */
+async function fetchAssets(onAssetReady) {
+  const assetsSource = DATA_SOURCE_CONFIG.assetsSource || 'feishu'
+  console.log(`静态资源源: ${assetsSource}`)
+
+  if (assetsSource === 'cloud') {
+    return await fetchCloudAssets(onAssetReady)
+  } else {
+    return await fetchFeishuAssets(onAssetReady)
+  }
+}
+
+/**
  * 根据 code 获取资源路径
  */
 function getAssetPath(code) {
@@ -369,6 +616,8 @@ function getAssetPaths(codes) {
 
 module.exports = {
   fetchFeishuAssets,
+  fetchCloudAssets,
+  fetchAssets,
   getAssetsFromCache,
   getAssetPath,
   getAssetPaths

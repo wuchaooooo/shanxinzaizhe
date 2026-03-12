@@ -15,11 +15,18 @@
     "miniprogram": {
       "list": [
         {
-          "name": "events",
-          "pathName": "pages/events/events",
+          "name": "admin-migrate",
+          "pathName": "pages/admin-migrate/admin-migrate",
           "query": "",
           "scene": null,
           "launchMode": "default"
+        },
+        {
+          "name": "events",
+          "pathName": "pages/events/events",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
         },
         {
           "name": "pages/profile/profile",

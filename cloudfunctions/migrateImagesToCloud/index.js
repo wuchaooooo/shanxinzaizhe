@@ -7,7 +7,7 @@ cloud.init({
 })
 
 exports.main = async (event, context) => {
-  const { feishuImageKey, feishuToken } = event
+  const { feishuImageKey, feishuToken, imageType = 'avatar' } = event
 
   if (!feishuImageKey || !feishuToken) {
     return {
@@ -29,8 +29,9 @@ exports.main = async (event, context) => {
       responseType: 'arraybuffer'
     })
 
-    // 2. 上传到云存储
-    const cloudPath = `migrated/${feishuImageKey}.png`
+    // 2. 上传到云存储（根据类型选择文件夹）
+    const folder = imageType === 'event' ? 'images/event' : 'images/avatar'
+    const cloudPath = `${folder}/${feishuImageKey}.png`
 
     console.log(`[迁移] 开始上传到云存储: ${cloudPath}`)
 

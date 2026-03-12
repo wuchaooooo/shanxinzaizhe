@@ -79,15 +79,14 @@
 /* 团队统计 */
 .team-stats-section {
   margin-top: 176rpx;
-  margin-left: 32rpx;
-  margin-right: 32rpx;
+  margin-left: 16rpx;
+  margin-right: 16rpx;
   margin-bottom: 48rpx;
   background-color: #ffffff;
   border-radius: 24rpx;
   box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
   overflow: hidden;
   position: relative;
-  transition: all 0.3s ease;
 }
 
 .team-stats-content {
@@ -95,7 +94,10 @@
   display: flex;
   justify-content: space-between;
   text-align: center;
-  transition: padding 0.3s ease;
+}
+
+.team-stats-content-no-button {
+  padding-bottom: 64rpx;
 }
 
 .team-stat-item {
@@ -121,6 +123,16 @@
   font-size: 22rpx;
   color: #64748b;
   margin-top: 6rpx;
+}
+
+.stats-footer-image {
+  position: absolute;
+  bottom: 12rpx;
+  right: 12rpx;
+  width: 100rpx;
+  height: 100rpx;
+  z-index: 0;
+  opacity: 0.9;
 }
 
 .team-stats-poster-btn-skeleton {
@@ -154,6 +166,7 @@
   gap: 12rpx;
   width: fit-content;
   min-width: 240rpx;
+  height: 56rpx;
   box-shadow: 0 4rpx 16rpx rgba(194, 0, 0, 0.2);
   transition: all 0.3s ease;
   animation: poster-btn-breathing 2s ease-in-out infinite;
@@ -249,23 +262,21 @@
 }
 
 .partner-avatar {
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: 70rpx;
+  width: 170rpx;
+  height: 170rpx;
+  border-radius: 50%;
   background-color: rgba(194, 0, 0, 0.08);
   overflow: hidden;
   position: relative;
   display: block;
   flex-shrink: 0;
   transition: opacity 0.3s ease-out;
-  clip-path: circle(70rpx at center);
-  box-shadow: 0 0 0 4rpx rgba(194, 0, 0, 0.8);
 }
 
 .partner-avatar-img-wrapper {
   position: absolute;
-  width: 140rpx;
-  height: 175rpx;
+  width: 170rpx;
+  height: 218rpx;
   top: 0;
   left: 0;
   background-color: transparent;
@@ -307,6 +318,7 @@
 /* 图片加载完成的水波纹动画 - 已禁用以避免闪烁 */
 .partner-avatar-loaded {
   /* animation: splash-ripple 0.6s ease-out forwards; */
+  border: 8rpx solid rgba(255, 255, 255, 0.5);
 }
 
 @keyframes splash-ripple {
@@ -539,8 +551,8 @@
   flex-direction: column;
   align-items: center;
   gap: 24rpx;
-  padding: 40rpx;
-  min-height: 80vh;
+  padding: 40rpx 40rpx 60rpx;
+  min-height: 60vh;
   position: relative;
 }
 
@@ -554,21 +566,12 @@
   );
   background-size: 200% 100%;
   border-radius: 16rpx;
-  position: absolute;
-  top: 40rpx;
-  left: 40rpx;
-  right: 40rpx;
-  width: calc(100% - 80rpx);
   overflow: hidden;
   animation: skeleton-pulse 2s ease-in-out infinite;
   opacity: 1;
-  transition: opacity 0.3s ease;
   pointer-events: none;
-}
-
-.poster-skeleton-hide {
-  opacity: 0;
-  animation: none;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 @keyframes skeleton-pulse {
@@ -620,15 +623,15 @@
 @keyframes image-fade-in {
   0% {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.98) translateZ(0);
   }
   60% {
     opacity: 1;
-    transform: scale(1.02);
+    transform: scale(1.02) translateZ(0);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateZ(0);
   }
 }
 

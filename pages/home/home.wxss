@@ -121,13 +121,15 @@
 
 /* 欢迎横幅 */
 .welcome-banner {
-  margin: 48rpx 32rpx;
-  margin-top: 176rpx;
+  margin-left: 16rpx;
+  margin-right: 16rpx;
+  margin-top: 152rpx;
+  margin-bottom: 48rpx;
   position: relative;
   overflow: hidden;
   border-radius: 24rpx;
   background-color: #c20000;
-  padding: 48rpx;
+  padding: 24rpx 32rpx;
   box-shadow: 0 8rpx 32rpx rgba(194, 0, 0, 0.2);
 }
 
@@ -173,6 +175,16 @@
     transform: scale(1.05);
     box-shadow: 0 8rpx 24rpx rgba(194, 0, 0, 0.3);
   }
+}
+
+.banner-footer-image {
+  position: absolute;
+  bottom: 10rpx;
+  right: 16rpx;
+  width: 100rpx;
+  height: 100rpx;
+  z-index: 5;
+  opacity: 0.9;
 }
 
 .banner-decoration {
@@ -299,7 +311,7 @@
 
 .value-card {
   display: inline-block;
-  width: 560rpx;
+  width: 640rpx;
   background-color: #ffffff;
   border-radius: 24rpx;
   overflow: hidden;
@@ -316,7 +328,7 @@
 }
 
 .value-content {
-  padding: 32rpx;
+  padding: 24rpx 32rpx;
   min-height: 200rpx;
 }
 
@@ -338,7 +350,7 @@
 }
 
 .value-desc {
-  font-size: 22rpx;
+  font-size: 26rpx;
   color: #64748b;
   line-height: 1.8;
   display: block;
@@ -348,7 +360,11 @@
 
 /* 统计数据 */
 .stats-section {
-  padding: 32rpx 32rpx;
+  margin-left: 16rpx;
+  margin-right: 16rpx;
+  margin-top: 24rpx;
+  margin-bottom: 24rpx;
+  padding: 24rpx 32rpx;
   display: flex;
   justify-content: space-between;
   text-align: center;

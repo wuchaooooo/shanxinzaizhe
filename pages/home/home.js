@@ -6,6 +6,7 @@ Page({
   data: {
     shanxinzheliLogoUrl: '',
     aiaLogoUrl: '',
+    aiaFooterUrl: '',
     logoLoaded: false,
     logoAnimate: false,
     teamCount: 0,
@@ -24,14 +25,14 @@ Page({
         loaded: false
       },
       {
-        icon: '👁️',
+        icon: '🏆',
         title: '我们的愿景',
         desc: '成为创业者和客户最受信赖的金融保险代理平台；\n树立金融保险行业标杆，造就国际业界典范！',
         image: '',
         loaded: false
       },
       {
-        icon: '❤️',
+        icon: '🌈',
         title: '核心价值观',
         desc: '利他精神，\n培养有价值的人',
         image: '',
@@ -111,6 +112,13 @@ Page({
       this.setData({ aiaLogoUrl: aiaLogoPath })
     }
 
+    // 加载 AIA footer（代码：aia_footer）
+    const aiaFooterPath = getAssetPath('aia_footer')
+    console.log('aia_footer 路径:', aiaFooterPath)
+    if (aiaFooterPath) {
+      this.setData({ aiaFooterUrl: aiaFooterPath })
+    }
+
     // 加载 banner 图片（代码：mission_banner, vision_banner, value_banner）
     const missionPath = getAssetPath('mission_banner')
     const visionPath = getAssetPath('vision_banner')
@@ -154,6 +162,9 @@ Page({
   onShow() {
     // 数据可能在后台加载完成后才可用，重新计算统计
     this.calculateStats()
+
+    // 重新加载静态资源（preloadFeishuAssets 可能在 onLoad 之前就完成了，通知已丢失）
+    this.loadAssetsFromFeishu()
 
     // 重置动画状态，让logo重新播放心跳动画（只重置动画class，不影响显示）
     if (this.data.logoLoaded) {

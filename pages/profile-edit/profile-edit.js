@@ -575,7 +575,7 @@ Page({
           if (DATA_SOURCE_CONFIG.useCloudStorage) {
             const cloudResult = await uploadToCloudStorage(
               formData.avatarImage.path,
-              `avatars/${Date.now()}_${imageKey}.png`
+              `images/avatar/${Date.now()}_${imageKey}.png`
             )
             if (cloudResult.success) {
               fields[mapping.cloudImageFileID] = cloudResult.fileID
@@ -609,7 +609,7 @@ Page({
           if (DATA_SOURCE_CONFIG.useCloudStorage) {
             const cloudResult = await uploadToCloudStorage(
               formData.qrcodeImage.path,
-              `qrcodes/${Date.now()}_${qrcodeKey}.png`
+              `images/avatar/${Date.now()}_qrcode_${qrcodeKey}.png`
             )
             if (cloudResult.success) {
               fields[mapping.cloudQrcodeFileID] = cloudResult.fileID

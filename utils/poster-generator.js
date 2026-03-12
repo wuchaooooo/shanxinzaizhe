@@ -35,7 +35,7 @@ async function generateTeamPoster(page, canvasId, currentPartner, partnersData =
         }
 
         const personalQRCode = currentPartner ? currentPartner.qrcode : ''
-        const headerImageUrl = getAssetPath('team_post_header')
+        const headerImageUrl = getAssetPath('team_poster_header')
 
         // 调试日志：检查个人二维码路径
         if (currentPartner) {
