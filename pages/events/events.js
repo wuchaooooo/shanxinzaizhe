@@ -1,6 +1,6 @@
 // pages/events/events.js
-const { getEventsDataSync } = require('../../utils/events-data-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
+const { runSplashIfNeeded } = require('../../utils/splash.js')
 
 // 生成占位符数据（用于首次加载时显示骨架屏）
 function generatePlaceholders(count = 6) {
@@ -28,9 +28,9 @@ function getInitialEvents() {
 
       return {
         ...eventWithoutLoaded,
-        // 始终设置为 true，让活动显示出来（即使图片未下载）
         loaded: true,
-        imageLoaded: hasImage,  // 如果已有图片路径，标记为已加载（直接显示，不需要动画）
+        imageLoaded: hasImage,
+        animated: hasImage,  // 有图片立即触发动画，否则等 onImageLoadComplete
         organizerData: null
       }
     })
@@ -41,14 +41,25 @@ function getInitialEvents() {
 
 Page({
   data: {
+    // 开屏动画
+    showSplash: false,
+    splashLogoUrl: '',
+    splashLogoVisible: false,
+    splashHeartbeat: false,
+    splashMeltOut: false,
+    splashNavBarHeight: 0,
     activeTab: '全部活动',
     tabs: ['全部活动', '星享会', '午餐会', '销售门诊', '销售建设', '客户活动'],
     events: getInitialEvents(),
     filteredEvents: [],
+    pageSize: 6,       // 每页显示数量
+    displayCount: 6,   // 当前已显示数量
+    hasMore: false,    // 是否还有更多
     leftColumn: [],
     rightColumn: [],
     tabScrollLeft: 0,
     searchQuery: '',
+    isSearching: false,
     // 当前 tab 的统计数据
     currentTabInProgress: 0,
     currentTabUpcoming: 0,
@@ -56,7 +67,6 @@ Page({
     loading: false,
     allImagesLoaded: false,
     isCofounder: false,
-    enableCardAnimation: false,
     aiaFooterUrl: '' // AIA footer 图片
   },
 
@@ -66,7 +76,8 @@ Page({
   },
 
   onLoad() {
-    console.log('Events 页面加载')
+    // 开屏动画（全局只播一次）
+    runSplashIfNeeded(this)
 
     // 加载 AIA footer（代码：aia_footer）
     const { getAssetPath } = require('../../utils/assets-loader.js')
@@ -92,7 +103,6 @@ Page({
       // 如果图片路径为空，尝试从缓存加载
       const { getEventsFromCache } = require('../../utils/events-data-loader.js')
       const cachedEvents = getEventsFromCache()
-      const fs = wx.getFileSystemManager()
 
       // 合并缓存的图片路径到 eventsData，并验证文件是否存在
       eventsData.forEach(event => {
@@ -111,27 +121,6 @@ Page({
           }
         }
 
-        // 验证图片文件是否存在（参考个人二维码的下载逻辑）
-        if (event.images && event.images.length > 0) {
-          const validImages = []
-          event.images.forEach((imagePath, index) => {
-            if (imagePath) {
-              try {
-                fs.accessSync(imagePath)
-                validImages.push(imagePath)
-              } catch (e) {
-                console.log(`[${event.name}] 图片 ${index + 1} 文件已失效，需要重新下载`)
-              }
-            }
-          })
-
-          // 更新为有效的图片列表
-          if (validImages.length !== event.images.length) {
-            event.images = validImages
-            event.image = validImages[0] || ''
-            console.log(`[${event.name}] 图片文件验证完成，有效图片数: ${validImages.length}`)
-          }
-        }
       })
 
       const events = eventsData.map(event => {
@@ -144,9 +133,9 @@ Page({
 
         return {
           ...eventWithoutLoaded,
-          // 始终设置为 true，让活动显示出来
           loaded: true,
-          imageLoaded: hasImage,  // 如果已有图片路径，标记为已加载
+          imageLoaded: hasImage,
+          animated: hasImage,  // 有图片立即触发动画
           organizerData: this.findOrganizerData(event.organizer)
         }
       })
@@ -171,6 +160,10 @@ Page({
 
   onShow() {
     const app = getApp()
+    // 同步自定义 tabBar 选中状态
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 'pages/events/events', hidden: false })
+    }
 
     // 检查监听器是否已注册，如果没有则重新注册
     if (!this._eventsDataCb) {
@@ -193,15 +186,21 @@ Page({
     if (app.globalData.partnersData && app.globalData.partnersData.length > 0) {
       const events = this.data.events
       if (events && events.length > 0) {
-        // 检查是否有活动的 organizerData 为 null
         const needUpdate = events.some(e => e.organizer && !e.organizerData)
         if (needUpdate) {
-          console.log('[Events] onShow: partnersData 已加载，更新组织者信息')
           const updatedEvents = events.map(event => ({
             ...event,
             organizerData: this.findOrganizerData(event.organizer)
           }))
-          this.setData({ events: updatedEvents })
+          const updatedLeft = this.data.leftColumn.map(event => ({
+            ...event,
+            organizerData: this.findOrganizerData(event.organizer)
+          }))
+          const updatedRight = this.data.rightColumn.map(event => ({
+            ...event,
+            organizerData: this.findOrganizerData(event.organizer)
+          }))
+          this.setData({ events: updatedEvents, leftColumn: updatedLeft, rightColumn: updatedRight })
         }
       }
     }
@@ -390,6 +389,7 @@ Page({
         console.log('[Events] 重建列表，活动数量:', eventsData.length)
         const imageMap = {}
         const loadedMap = {}
+        const animatedMap = {}
         currentEvents.forEach(e => {
           if (e.id) {
             if (e.image) {
@@ -400,6 +400,7 @@ Page({
               loadedMap[e.id] = true
               console.log(`[Events] 保存 loaded 状态: ${e.name} (${e.id}) -> true`)
             }
+            if (e.animated) animatedMap[e.id] = true
           }
         })
         console.log('[Events] imageMap 大小:', Object.keys(imageMap).length)
@@ -438,7 +439,8 @@ Page({
             ...eventWithoutLoaded,
             image: finalImage,
             loaded: shouldLoad,
-            imageLoaded: hasImage,  // 如果已有图片路径，标记为已加载
+            imageLoaded: hasImage,
+            animated: hasImage || !!animatedMap[event.id],  // 保留已动画过的状态
             organizerData: this.findOrganizerData(event.organizer)
           }
         })
@@ -450,14 +452,14 @@ Page({
           this.filterEvents()
           this.updateTabStatistics()
 
-          // 如果是从 onShow 触发的数据更新，启用动画
+          // 数据更新后触发入场动画（对所有可见卡片）
           if (this._shouldAnimateOnDataUpdate) {
             this._shouldAnimateOnDataUpdate = false
             setTimeout(() => {
-              this.setData({ enableCardAnimation: true })
-              setTimeout(() => {
-                this.setData({ enableCardAnimation: false })
-              }, 600)
+              const animUpdates = {}
+              this.data.leftColumn.forEach((_, i) => { animUpdates[`leftColumn[${i}].animated`] = true })
+              this.data.rightColumn.forEach((_, i) => { animUpdates[`rightColumn[${i}].animated`] = true })
+              this.setData(animUpdates)
             }, 50)
           }
         })
@@ -491,13 +493,19 @@ Page({
 
     // 监听团队数据加载完成（用于更新组织者头像）
     this._partnersDataCb = () => {
-      console.log('[Events] 收到团队数据加载完成通知，更新组织者信息')
-      // 只更新组织者数据
       const events = this.data.events.map(event => ({
         ...event,
         organizerData: this.findOrganizerData(event.organizer)
       }))
-      this.setData({ events })
+      const leftColumn = this.data.leftColumn.map(event => ({
+        ...event,
+        organizerData: this.findOrganizerData(event.organizer)
+      }))
+      const rightColumn = this.data.rightColumn.map(event => ({
+        ...event,
+        organizerData: this.findOrganizerData(event.organizer)
+      }))
+      this.setData({ events, leftColumn, rightColumn })
     }
     if (!app.globalData.partnersDataListeners) {
       app.globalData.partnersDataListeners = []
@@ -511,7 +519,7 @@ Page({
     }
 
     // 监听团队成员头像下载完成（用于更新组织者头像）
-    this._imageReadyCb = (type, name, path) => {
+    this._imageReadyCb = (type, name) => {
       if (type !== 'avatar') return
 
       console.log(`[Events] 收到团队成员头像下载完成通知: ${name}`)
@@ -578,13 +586,23 @@ Page({
     })
   },
 
+  // 打开搜索
+  onSearchOpen() {
+    this.setData({ isSearching: true })
+  },
+
+  // 关闭搜索
+  onSearchClose() {
+    this.setData({ isSearching: false, searchQuery: '' }, () => {
+      this.filterEvents(true)
+    })
+  },
+
   // 搜索输入
   onSearchInput(e) {
     const query = e.detail.value
-    this.setData({
-      searchQuery: query
-    }, () => {
-      this.filterEvents()
+    this.setData({ searchQuery: query }, () => {
+      this.filterEvents(true)
     })
   },
 
@@ -593,27 +611,22 @@ Page({
     const tab = e.currentTarget.dataset.tab
     const index = this.data.tabs.indexOf(tab)
 
-    // 先禁用动画，确保重置状态
-    this.setData({
-      activeTab: tab,
-      enableCardAnimation: false
-    }, () => {
-      this.filterEvents()
-      this.updateTabStatistics()
-      // 滚动 tab 到可见位置
-      this.scrollTabIntoView(index)
-      // 延迟滚动到顶部，让用户先看到 tab 切换
-      setTimeout(() => {
-        this.scrollToTop()
-      }, 100)
+    // 重置所有活动的 animated 状态，以便切换后重新触发动画
+    const resetUpdates = { activeTab: tab }
+    this.data.events.forEach((_, i) => { resetUpdates[`events[${i}].animated`] = false })
 
-      // 延迟启用动画，确保卡片重新渲染后再触发动画
+    this.setData(resetUpdates, () => {
+      this.filterEvents(true)
+      this.updateTabStatistics()
+      this.scrollTabIntoView(index)
+      setTimeout(() => this.scrollToTop(), 100)
+
+      // 延迟触发所有可见卡片的入场动画
       setTimeout(() => {
-        this.setData({ enableCardAnimation: true })
-        // 动画完成后禁用，避免影响后续的图片加载更新
-        setTimeout(() => {
-          this.setData({ enableCardAnimation: false })
-        }, 600) // 动画时长 400ms + 最大延迟 (rightColumn.length * 50)ms
+        const animUpdates = {}
+        this.data.leftColumn.forEach((_, i) => { animUpdates[`leftColumn[${i}].animated`] = true })
+        this.data.rightColumn.forEach((_, i) => { animUpdates[`rightColumn[${i}].animated`] = true })
+        this.setData(animUpdates)
       }, 50)
     })
   },
@@ -627,6 +640,11 @@ Page({
 
   // 滚动标签栏，确保指定的 tab 居中显示
   scrollTabIntoView(index) {
+    // 前两个 tab 直接回到起点，确保第一个 tab 完整显示
+    if (index <= 1) {
+      this.setData({ tabScrollLeft: 0 })
+      return
+    }
     const query = wx.createSelectorQuery().in(this)
     query.select('.tabs-container').boundingClientRect()
     query.selectAll('.tab-item').boundingClientRect()
@@ -651,21 +669,14 @@ Page({
   },
 
   // 过滤活动
-  filterEvents() {
-    const { events, searchQuery, activeTab } = this.data
-    console.log('[Events filterEvents] 开始过滤，总活动数:', events.length)
-    console.log('[Events filterEvents] 活动详情:', events.map(e => ({
-      name: e.name,
-      id: e.id,
-      image: e.image ? '有' : '无',
-      loaded: e.loaded
-    })))
+  filterEvents(resetPage = false) {
+    const { events, searchQuery, activeTab, pageSize } = this.data
+    let displayCount = resetPage ? pageSize : this.data.displayCount
+
     let filtered = events
 
     // 只显示已加载完成的活动（loaded: true）
-    // 活动的第一张图片和文字都加载好才展示，但组织者头像可以异步加载
     filtered = filtered.filter(e => e.loaded === true)
-    console.log('[Events filterEvents] loaded=true 的活动数:', filtered.length)
 
     // 按类型过滤
     if (activeTab === '星享会') {
@@ -694,35 +705,26 @@ Page({
     filtered.sort((a, b) => {
       const timeA = new Date(a.time || 0).getTime()
       const timeB = new Date(b.time || 0).getTime()
-      return timeB - timeA // 降序：最新的在前
+      return timeB - timeA
     })
 
-    // 简单的左右交替布局，直接渲染
+    const hasMore = filtered.length > displayCount
+    const paged = filtered.slice(0, displayCount)
+
     const leftColumn = []
     const rightColumn = []
-
-    filtered.forEach((event, index) => {
-      if (index % 2 === 0) {
-        leftColumn.push(event)
-      } else {
-        rightColumn.push(event)
-      }
+    paged.forEach((event, index) => {
+      if (index % 2 === 0) leftColumn.push(event)
+      else rightColumn.push(event)
     })
 
     this.setData({
       filteredEvents: filtered,
       leftColumn,
-      rightColumn
+      rightColumn,
+      displayCount,
+      hasMore
     })
-    console.log('[Events filterEvents] 最终结果 - leftColumn:', leftColumn.length, 'rightColumn:', rightColumn.length)
-    console.log('[Events filterEvents] leftColumn 详情:', leftColumn.map(e => ({
-      name: e.name,
-      image: e.image ? e.image.substring(0, 50) + '...' : '无'
-    })))
-    console.log('[Events filterEvents] rightColumn 详情:', rightColumn.map(e => ({
-      name: e.name,
-      image: e.image ? e.image.substring(0, 50) + '...' : '无'
-    })))
   },
 
   // 更新当前 tab 的统计数据
@@ -803,6 +805,19 @@ Page({
     }
   },
 
+  // 上滑加载更多
+  onLoadMore() {
+    const { hasMore, displayCount, pageSize } = this.data
+    if (!hasMore) return
+    this.setData({ displayCount: displayCount + pageSize }, () => {
+      this.filterEvents()
+    })
+  },
+
+  onReachBottom() {
+    this.onLoadMore()
+  },
+
   // 图片加载成功
   onImageLoad(e) {
     const eventId = e.currentTarget.dataset.id
@@ -829,10 +844,22 @@ Page({
     const idx = events.findIndex(e => e.id === eventId)
     if (idx === -1) return
 
-    // 标记图片已加载，触发弹出动画
-    this.setData({
-      [`events[${idx}].imageLoaded`]: true
-    })
+    const updates = {}
+    updates[`events[${idx}].imageLoaded`] = true
+    updates[`events[${idx}].animated`] = true
+
+    const leftIdx = this.data.leftColumn.findIndex(e => e.id === eventId)
+    if (leftIdx !== -1) {
+      updates[`leftColumn[${leftIdx}].imageLoaded`] = true
+      updates[`leftColumn[${leftIdx}].animated`] = true
+    }
+    const rightIdx = this.data.rightColumn.findIndex(e => e.id === eventId)
+    if (rightIdx !== -1) {
+      updates[`rightColumn[${rightIdx}].imageLoaded`] = true
+      updates[`rightColumn[${rightIdx}].animated`] = true
+    }
+
+    this.setData(updates)
   },
 
   // 图片加载失败

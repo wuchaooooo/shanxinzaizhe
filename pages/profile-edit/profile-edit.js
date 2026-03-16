@@ -643,9 +643,12 @@ Page({
         try {
           // 如果有旧的 cloudFileID，先删除旧图片
           if (formData.avatarImage.oldCloudFileID) {
+            console.log('[云存储] 准备删除旧头像:', formData.avatarImage.oldCloudFileID)
             const { deleteFromCloudStorage } = require('../../utils/cloud-storage-uploader.js')
-            await deleteFromCloudStorage(formData.avatarImage.oldCloudFileID)
-            console.log('[云存储] 已删除旧头像')
+            const deleteResult = await deleteFromCloudStorage(formData.avatarImage.oldCloudFileID)
+            console.log('[云存储] 删除旧头像结果:', deleteResult)
+          } else {
+            console.log('[云存储] 没有旧头像需要删除')
           }
 
           const cloudResult = await uploadToCloudStorage(
@@ -685,9 +688,12 @@ Page({
         try {
           // 如果有旧的 cloudFileID，先删除旧图片
           if (formData.qrcodeImage.oldCloudFileID) {
+            console.log('[云存储] 准备删除旧二维码:', formData.qrcodeImage.oldCloudFileID)
             const { deleteFromCloudStorage } = require('../../utils/cloud-storage-uploader.js')
-            await deleteFromCloudStorage(formData.qrcodeImage.oldCloudFileID)
-            console.log('[云存储] 已删除旧二维码')
+            const deleteResult = await deleteFromCloudStorage(formData.qrcodeImage.oldCloudFileID)
+            console.log('[云存储] 删除旧二维码结果:', deleteResult)
+          } else {
+            console.log('[云存储] 没有旧二维码需要删除')
           }
 
           const cloudResult = await uploadToCloudStorage(

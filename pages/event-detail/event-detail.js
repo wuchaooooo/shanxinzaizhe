@@ -1,10 +1,18 @@
 // pages/event-detail/event-detail.js
-const { getEventsDataSync } = require('../../utils/events-data-loader.js')
+const { getEventsDataSync, fetchEventById } = require('../../utils/events-data-loader.js')
 const { generateEventPoster } = require('../../utils/event-poster-generator.js')
 const feishuApi = require('../../utils/feishu-api.js')
+const { runSplashIfNeeded } = require('../../utils/splash.js')
 
 Page({
   data: {
+    // 开屏动画
+    showSplash: false,
+    splashLogoUrl: '',
+    splashLogoVisible: false,
+    splashHeartbeat: false,
+    splashMeltOut: false,
+    splashNavBarHeight: 0,
     event: null,
     organizerData: null,
     isCofounder: false,
@@ -23,11 +31,13 @@ Page({
   },
 
   onLoad(options) {
+    runSplashIfNeeded(this)
     const { eventId, type, shareFrom } = options
-    console.log('Event Detail 页面加载:', eventId, type, shareFrom)
 
     // 保存 eventId 用于监听器
     this.eventId = eventId
+    this.eventType = type      // 保存 type，用于冷启动时直接拉单条记录
+    this.shareFrom = shareFrom // 保存分享来源，用于海报二维码
     this.isFirstShow = true  // 标记首次显示
 
     // 获取当前用户身份
@@ -52,8 +62,20 @@ Page({
   },
 
   // 记录分享访问
-  async recordShareVisit(shareFromEmployeeId, eventId) {
+  async recordShareVisit(shareFromEmployeeId) {
     const app = getApp()
+
+    // 如果没有分享来源且身份还未识别完成，等待识别后再上报
+    if (!shareFromEmployeeId && !app.globalData.currentUserResolved) {
+      const listener = () => {
+        const idx = app.globalData.currentUserListeners.indexOf(listener)
+        if (idx > -1) app.globalData.currentUserListeners.splice(idx, 1)
+        this.recordShareVisit(shareFromEmployeeId)
+      }
+      app.globalData.currentUserListeners.push(listener)
+      return
+    }
+
     const partnersData = app.globalData.partnersData || []
     const currentUser = app.globalData.currentUser
     const feishuApi = require('../../utils/feishu-api.js')
@@ -160,7 +182,7 @@ Page({
     app.globalData.partnersDataListeners.push(this.partnersDataListener)
 
     // 监听团队成员头像下载完成（用于更新组织者头像）
-    this._imageReadyCb = (type, name, path) => {
+    this._imageReadyCb = (type, name) => {
       if (type !== 'avatar') return
 
       console.log(`[EventDetail] 收到团队成员头像下载完成通知: ${name}`)
@@ -195,6 +217,36 @@ Page({
     })
 
     if (!event) {
+      // 如果 eventsData 还未加载（冷启动分享链接场景），等待数据就绪后重试
+      const app = getApp()
+      if (!app.globalData.eventsData || app.globalData.eventsData.length === 0) {
+        const retry = () => {
+          app.globalData.eventsDataListeners = app.globalData.eventsDataListeners.filter(cb => cb !== retry)
+          this.loadEventData(eventId)
+        }
+        if (!app.globalData.eventsDataListeners) app.globalData.eventsDataListeners = []
+        app.globalData.eventsDataListeners.push(retry)
+
+        // 同时直接拉单条记录，不等全量加载（更快）
+        if (this.eventType && !this._fetchingEvent) {
+          this._fetchingEvent = true
+          fetchEventById(eventId, this.eventType).then(singleEvent => {
+            this._fetchingEvent = false
+            if (singleEvent && !this.data.event) {
+              // 注入到 globalData，让 loadEventData 正常走渲染逻辑
+              if (!app.globalData.eventsData) app.globalData.eventsData = []
+              if (!app.globalData.eventsData.find(e => e.id === eventId)) {
+                app.globalData.eventsData.push(singleEvent)
+              }
+              this.loadEventData(eventId)
+            }
+          }).catch(e => {
+            this._fetchingEvent = false
+            console.error('[EventDetail] 直接拉单条记录失败:', e)
+          })
+        }
+        return
+      }
       wx.showToast({
         title: '活动不存在',
         icon: 'none'
@@ -220,41 +272,6 @@ Page({
       }
     }
 
-    // 验证图片文件是否存在（参考个人二维码的下载逻辑）
-    const fs = wx.getFileSystemManager()
-    let needRedownload = false
-
-    // 检查 images 数组中的所有图片
-    if (event.images && event.images.length > 0) {
-      const validImages = []
-      event.images.forEach((imagePath, index) => {
-        if (imagePath) {
-          try {
-            fs.accessSync(imagePath)
-            validImages.push(imagePath)
-            console.log(`[${event.name}] 图片 ${index + 1} 文件验证通过:`, imagePath)
-          } catch (e) {
-            console.log(`[${event.name}] 图片 ${index + 1} 文件已失效，需要重新下载:`, imagePath)
-            needRedownload = true
-          }
-        }
-      })
-
-      // 更新为有效的图片列表
-      event.images = validImages
-      event.image = validImages[0] || ''
-    }
-
-    // 如果有图片失效且有 cloudImageFileIDs，触发重新下载
-    if (needRedownload && event.cloudImageFileIDs && event.cloudImageFileIDs.length > 0) {
-      console.log(`[${event.name}] 检测到图片文件失效，将触发重新下载`)
-      // 清空失效的图片路径，让后续逻辑触发下载
-      if (event.images.length === 0) {
-        event.image = ''
-        event.images = []
-      }
-    }
-
     // 判断是否可以编辑
     const app = getApp()
     const currentUser = app.globalData.currentUser
@@ -275,7 +292,6 @@ Page({
         latitude: parseFloat(event.latitude),
         longitude: parseFloat(event.longitude),
         title: event.organizer || '活动地点',
-        iconPath: '/images/marker.png',
         width: 30,
         height: 30
       })
@@ -297,16 +313,7 @@ Page({
 
       // 检查签到码是否已经在 images 数组中
       if (!event.images.includes(event.checkinQrcode)) {
-        // 验证签到码文件是否存在
-        try {
-          fs.accessSync(event.checkinQrcode)
-          event.images.push(event.checkinQrcode)
-          console.log('签到码已添加到图片列表:', event.checkinQrcode)
-        } catch (e) {
-          console.log('签到码文件不存在，跳过添加:', event.checkinQrcode)
-        }
-      } else {
-        console.log('签到码已在图片列表中，跳过添加')
+        event.images.push(event.checkinQrcode)
       }
     }
 
@@ -695,31 +702,34 @@ Page({
       return
     }
 
-    // 确保组织者二维码已下载（使用统一接口）
+    // 确保联系二维码已下载（优先级：当前联合创始人 > shareFrom > 组织者）
     const { ensureQrcodeDownloaded } = require('../../utils/profile-loader.js')
+    const app2 = getApp()
+    const currentUser2 = app2.globalData.currentUser
+    const partnersData2 = app2.globalData.partnersData || []
 
-    if (organizerData && organizerData.employeeId) {
-      // 移除 wx.showLoading，使用弹窗中的骨架图代替
+    let qrcodeEmployeeId = null
+    if (currentUser2 && currentUser2.employeeId) {
+      qrcodeEmployeeId = currentUser2.employeeId
+    } else if (this.shareFrom) {
+      const shareFromPartner = partnersData2.find(p => p.employeeId === this.shareFrom)
+      if (shareFromPartner) qrcodeEmployeeId = this.shareFrom
+    } else if (organizerData && organizerData.employeeId) {
+      qrcodeEmployeeId = organizerData.employeeId
+    }
 
+    if (qrcodeEmployeeId) {
       try {
-        const qrcodePath = await ensureQrcodeDownloaded(organizerData.employeeId)
-
-        if (qrcodePath) {
-          console.log('组织者二维码已准备:', qrcodePath)
-        } else {
-          console.warn('组织者二维码下载失败，将使用默认二维码')
-        }
-
-        // 移除 wx.hideLoading
+        await ensureQrcodeDownloaded(qrcodeEmployeeId)
+        console.log('联系二维码已准备:', qrcodeEmployeeId)
       } catch (error) {
-        console.error('下载组织者二维码失败:', error)
-        // 移除 wx.hideLoading
+        console.error('下载联系二维码失败:', error)
         // 继续生成海报，即使二维码下载失败
       }
     }
 
     try {
-      generateEventPoster(this, 'posterCanvas', event)
+      generateEventPoster(this, 'posterCanvas', event, { shareFrom: this.shareFrom || '' })
       // 海报生成成功后会自动设置 showPoster，在那时重置 loading
       setTimeout(() => {
         this.setData({

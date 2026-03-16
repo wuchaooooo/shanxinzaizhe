@@ -44,40 +44,55 @@
   }
 </wxs>
 
+<!-- 开屏动画 -->
+<view wx:if="{{showSplash}}" class="splash-overlay {{splashMeltOut ? 'splash-melt' : ''}}" style="padding-bottom: {{splashNavBarHeight}}px">
+  <image wx:if="{{splashLogoUrl}}" class="splash-logo {{splashLogoVisible ? 'splash-logo-in' : ''}} {{splashHeartbeat ? 'splash-heartbeat' : ''}}" src="{{splashLogoUrl}}" mode="aspectFit" />
+</view>
+
 <view class="events-page">
-  <!-- 搜索框 -->
-  <view class="search-container-fixed">
-    <view class="search-box">
-      <text class="search-icon">🔍</text>
-      <input
-        class="search-input"
-        placeholder="搜索活动名称、组织者"
-        placeholder-class="search-placeholder"
-        bindinput="onSearchInput"
-        value="{{searchQuery}}"
-      />
+  <!-- 标签页（固定在顶部）-->
+  <view class="tabs-fixed-wrapper">
+    <!-- 默认态：搜索图标 + tab -->
+    <view wx:if="{{!isSearching}}" class="tabs-row">
+      <view class="search-icon-btn" bindtap="onSearchOpen">
+        <text class="search-icon-text">🔍</text>
+      </view>
+      <scroll-view class="tabs-container" scroll-x="{{true}}" show-scrollbar="{{false}}" scroll-with-animation="{{true}}" scroll-left="{{tabScrollLeft}}">
+        <view class="tabs">
+          <view
+            class="tab-item {{activeTab === item ? 'tab-active' : ''}}"
+            wx:for="{{tabs}}"
+            wx:key="index"
+            bindtap="onTabChange"
+            data-tab="{{item}}"
+          >
+            <text class="tab-text">{{item}}</text>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+    <!-- 搜索态：返回图标 + 搜索框 -->
+    <view wx:else class="tabs-row">
+      <view class="search-icon-btn" bindtap="onSearchClose">
+        <text class="search-back-icon-text">←</text>
+      </view>
+      <view class="search-box">
+        <text class="search-tab-label">{{activeTab}}</text>
+        <text class="search-divider">|</text>
+        <input
+          class="search-input"
+          placeholder="搜索活动信息"
+          placeholder-class="search-placeholder"
+          bindinput="onSearchInput"
+          value="{{searchQuery}}"
+          focus="{{isSearching}}"
+        />
+      </view>
     </view>
   </view>
 
-  <!-- 标签页（固定在搜索框下方）-->
-  <view class="tabs-fixed-wrapper">
-    <scroll-view class="tabs-container" scroll-x="{{true}}" show-scrollbar="{{false}}" scroll-with-animation="{{true}}" scroll-left="{{tabScrollLeft}}">
-      <view class="tabs">
-        <view
-          class="tab-item {{activeTab === item ? 'tab-active' : ''}}"
-          wx:for="{{tabs}}"
-          wx:key="index"
-          bindtap="onTabChange"
-          data-tab="{{item}}"
-        >
-          <text class="tab-text">{{item}}</text>
-        </view>
-      </view>
-    </scroll-view>
-  </view>
-
   <!-- 可滚动内容区域 -->
-  <scroll-view class="events-scroll-container" scroll-y="{{true}}">
+  <view class="events-scroll-container">
     <!-- 活动统计 -->
     <view class="events-stats-section">
       <view class="events-stats-content {{!isCofounder ? 'events-stats-content-no-button' : ''}}">
@@ -133,8 +148,8 @@
         <!-- 左列 -->
         <view class="waterfall-column left-column">
           <view
-            class="event-card {{enableCardAnimation ? 'card-animating' : ''}}"
-            style="{{enableCardAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}"
+            class="event-card {{item.animated ? 'card-animating' : (item.image ? 'card-pre-animate' : '')}}"
+            style="animation-delay: {{index * 80}}ms"
             wx:for="{{leftColumn}}"
             wx:key="id"
             wx:for-index="index"
@@ -172,8 +187,8 @@
         <!-- 右列 -->
         <view class="waterfall-column right-column">
           <view
-            class="event-card {{enableCardAnimation ? 'card-animating' : ''}}"
-            style="{{enableCardAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}"
+            class="event-card {{item.animated ? 'card-animating' : (item.image ? 'card-pre-animate' : '')}}"
+            style="animation-delay: {{index * 80 + 40}}ms"
             wx:for="{{rightColumn}}"
             wx:key="id"
             wx:for-index="index"
@@ -215,6 +230,12 @@
         <text class="empty-text">暂无活动</text>
         <text class="empty-desc">敬请期待精彩活动</text>
       </view>
+
+      <!-- 底部状态 -->
+      <view wx:if="{{leftColumn.length + rightColumn.length > 0}}" class="load-more-footer">
+        <text wx:if="{{hasMore}}" class="load-more-hint">上滑加载更多</text>
+        <text wx:else class="load-more-end">— 已显示全部活动 —</text>
+      </view>
     </view>
-  </scroll-view>
+  </view>
 </view>

@@ -1,6 +1,7 @@
 // pages/profile/profile.js
 const { getAssetPath } = require('../../utils/assets-loader.js')
 const { generateTeamPoster } = require('../../utils/poster-generator.js')
+const { runSplashIfNeeded } = require('../../utils/splash.js')
 
 // 从时间字符串提取年月，支持 "2024-01"、"2024年1月"、"2024.01" 等格式
 function extractYearMonth(timeStr) {
@@ -127,6 +128,13 @@ function parseSkills(data) {
 
 Page({
   data: {
+    // 开屏动画
+    showSplash: false,
+    splashLogoUrl: '',
+    splashLogoVisible: false,
+    splashHeartbeat: false,
+    splashMeltOut: false,
+    splashNavBarHeight: 0,
     coverImage: '',
     avatar: '',
     name: '',
@@ -193,6 +201,7 @@ Page({
   },
 
   async onLoad(options) {
+    runSplashIfNeeded(this)
     this.options = options
     const app = getApp()
 
@@ -260,18 +269,6 @@ Page({
         this.useEmployeeId = false
       }
       if (!partner) partner = partnersData[0]
-
-      // 检查二维码文件是否存在（验证缓存路径的有效性）
-      if (partner.qrcode) {
-        try {
-          const fs = wx.getFileSystemManager()
-          fs.accessSync(partner.qrcode)
-          console.log(`[${partner.name}] 二维码文件验证通过`)
-        } catch (e) {
-          console.log(`[${partner.name}] 二维码文件已失效，清空路径:`, partner.qrcode)
-          partner.qrcode = '' // 清空失效的路径
-        }
-      }
 
       // 打印二维码状态日志
       console.log(`[${partner.name}] 二维码状态检查:`, {
@@ -492,29 +489,13 @@ Page({
       pageQrcodeImage: this.data.qrcodeImage || '无'
     })
 
-    // 检查二维码文件是否存在（如果有路径的话）
-    let qrcodeFileExists = false
-    if (partner.qrcode) {
-      try {
-        const fs = wx.getFileSystemManager()
-        fs.accessSync(partner.qrcode)
-        qrcodeFileExists = true
-        console.log(`[${partner.name}] 二维码文件存在，路径有效`)
-      } catch (e) {
-        console.log(`[${partner.name}] 二维码文件不存在，路径已失效:`, partner.qrcode)
-        // 清空失效的路径
-        partner.qrcode = ''
-        this.setData({ qrcodeImage: '' })
-      }
-    }
-
     // 先显示弹窗
     this.setData({
       showQRCode: true
     })
 
-    // 如果二维码未下载或文件已失效，显示加载提示并下载
-    if (partner.cloudQrcodeFileID && (!partner.qrcode || !qrcodeFileExists)) {
+    // 如果二维码未下载，显示加载提示并下载
+    if (partner.cloudQrcodeFileID && !partner.qrcode) {
       console.log(`[${partner.name}] 二维码需要下载，弹窗中开始下载...`)
 
       // 显示加载中的二维码占位
@@ -530,8 +511,8 @@ Page({
         console.error(`[${partner.name}] 弹窗中下载二维码失败:`, error)
         wx.showToast({ title: '二维码加载失败', icon: 'error' })
       }
-    } else if (partner.qrcode && qrcodeFileExists) {
-      console.log(`[${partner.name}] 二维码已缓存且文件有效，直接显示`)
+    } else if (partner.qrcode) {
+      console.log(`[${partner.name}] 二维码已缓存，直接显示`)
       // 确保页面数据是最新的
       this.setData({ qrcodeImage: partner.qrcode })
     } else {

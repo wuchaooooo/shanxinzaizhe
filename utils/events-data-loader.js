@@ -4,10 +4,10 @@
 const feishuApi = require('./feishu-api.js')
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
 const { createCacheManager, isRecordChanged } = require('./text-cache.js')
-const { getCached, getImage, prefetchImages, evict } = require('./image-cache.js')
+const { fileIDToCdnUrl, evict } = require('./image-cache.js')
 
 // ─── 本地缓存：基于 record_id + Last Modified Date 增量更新 ─────────────────
-const CACHE_KEY = 'events_cache_v2'  // 升级到 v2：使用 cloudFileID 而非 imageKey
+const CACHE_KEY = 'events_cache_v2'
 const cacheManager = createCacheManager(CACHE_KEY)
 
 function loadEventsCache() { return cacheManager.get() }
@@ -64,11 +64,6 @@ function transformFeishuEventRecord(record, eventType) {
             return cleanId
           }).filter(id => id)
         : []
-
-      console.log(`[活动数据] 解析 cloudImageFileIDs:`, {
-        原始: cloudImageFileIDStr,
-        解析后: cloudImageFileIDs
-      })
     } catch (e) {
       console.warn(`[活动数据] JSON 解析失败，使用逗号分隔格式:`, cloudImageFileIDStr)
       // 兼容旧格式：逗号分隔的字符串
@@ -110,6 +105,7 @@ function transformFeishuEventRecord(record, eventType) {
     address: fields[mapping.address] || '',
     latitude: fields[mapping.latitude] ? parseFloat(fields[mapping.latitude]) : null,
     longitude: fields[mapping.longitude] ? parseFloat(fields[mapping.longitude]) : null,
+    notes: fields[mapping.notes] || '',
     lastModified: String(fields[mapping.lastModifiedDate] || '')
   }
 }
@@ -118,7 +114,7 @@ function transformFeishuEventRecord(record, eventType) {
 
 function _buildImages(cloudFileIDs) {
   if (!cloudFileIDs || cloudFileIDs.length === 0) return { images: [], image: '', loaded: true }
-  const images = cloudFileIDs.map(fileID => getCached(fileID) || '').filter(p => p)
+  const images = cloudFileIDs.map(fileID => fileIDToCdnUrl(fileID) || '').filter(p => p)
   return { images, image: images[0] || '', loaded: images.length > 0 }
 }
 
@@ -133,7 +129,7 @@ function getEventsFromCache() {
     event.images = images
     event.image = image
     event.loaded = loaded
-    event.checkinQrcode = entry.cloudCheckinQrcodeFileID ? (getCached(entry.cloudCheckinQrcodeFileID) || '') : ''
+    event.checkinQrcode = entry.cloudCheckinQrcodeFileID ? (fileIDToCdnUrl(entry.cloudCheckinQrcodeFileID) || '') : ''
     return event
   }).sort((a, b) => {
     if (!a.time || !b.time) return 0
@@ -193,8 +189,36 @@ function processEventRecord(record, eventType, cache, newCache, changedTextIds, 
     ...transformed,
     images,
     image,
-    checkinQrcode: transformed.cloudCheckinQrcodeFileID ? (getCached(transformed.cloudCheckinQrcodeFileID) || '') : '',
+    checkinQrcode: transformed.cloudCheckinQrcodeFileID ? (fileIDToCdnUrl(transformed.cloudCheckinQrcodeFileID) || '') : '',
     loaded
+  }
+}
+
+/**
+ * 按 record_id + 活动类型直接获取单条活动（用于冷启动分享链接快速加载）
+ */
+async function fetchEventById(eventId, eventType) {
+  const config = feishuApi.FEISHU_CONFIG
+  const typeToTable = {
+    '星享会':  { appToken: config.starClubAppToken,        tableId: config.starClubTableId },
+    '午餐会':  { appToken: config.lunchAppToken,           tableId: config.lunchTableId },
+    '销售门诊': { appToken: config.salesClinicAppToken,    tableId: config.salesClinicTableId },
+    '销售建设': { appToken: config.salesBuildingAppToken,  tableId: config.salesBuildingTableId },
+    '客户活动': { appToken: config.otherActivitiesAppToken, tableId: config.otherActivitiesTableId },
+  }
+  const tableConfig = typeToTable[eventType]
+  if (!tableConfig) return null
+  try {
+    const result = await feishuApi.getRecord(eventId, tableConfig)
+    if (!result || !result.record) return null
+    const cache = loadEventsCache()
+    const newCache = {}
+    const changedTextIds = new Set()
+    const changedImageIds = new Set()
+    return processEventRecord(result.record, eventType, cache, newCache, changedTextIds, changedImageIds)
+  } catch (e) {
+    console.error('[fetchEventById] 失败:', e)
+    return null
   }
 }
 
@@ -245,7 +269,7 @@ async function fetchFeishuEventsText() {
     const hasChanges = changedIds.size > 0 || Object.keys(cache).some(k => !newCache[k])
 
     saveEventsCache(newCache)
-    console.log(`[飞书] 活动加载${events.length}条 | 文字变更${changedTextIds.size}条 | 图片变更${changedImageIds.size}条`)
+    console.log(`[飞书数据源] 活动加载${events.length}条 | 文字变更${changedTextIds.size}条 | 图片变更${changedImageIds.size}条`)
     return { events, hasChanges, changedIds, changedImageIds }
   } catch (error) {
     console.error('获取飞书活动数据失败:', error)
@@ -261,42 +285,25 @@ async function fetchFeishuEventsText() {
  * @param {number} startIndex
  */
 async function downloadEventImages(event, onImageReady, downloadAll = false, startIndex = 0) {
-  const { id, name, cloudImageFileIDs } = event
+  const { id, cloudImageFileIDs } = event
 
   if (cloudImageFileIDs && cloudImageFileIDs.length > 0) {
     const endIndex = downloadAll ? cloudImageFileIDs.length : 1
-    const downloadedPaths = []
-
+    const paths = []
     for (let i = Math.max(0, startIndex); i < endIndex; i++) {
-      try {
-        const cloudFileID = cloudImageFileIDs[i]
-        if (!cloudFileID) {
-          console.warn(`[${name}] 图片 ${i + 1} 没有 cloudFileID，跳过`)
-          continue
-        }
-        const path = await getImage(cloudFileID)
-        downloadedPaths.push(path)
-        console.log(`[${name}] 图片 ${i + 1}/${endIndex} 下载成功: ${path}`)
-        if (onImageReady) onImageReady(id, path)
-      } catch (error) {
-        console.error(`[${name}] 图片 ${i + 1} 下载失败:`, error)
+      const url = fileIDToCdnUrl(cloudImageFileIDs[i])
+      if (url) {
+        paths.push(url)
+        if (onImageReady) onImageReady(id, url)
       }
     }
-
-    // 直接使用下载的路径，而不是从缓存重建
-    event.images = downloadedPaths
-    event.image = downloadedPaths[0] || ''
-    event.loaded = downloadedPaths.length > 0
-
-    console.log(`[${name}] 下载完成，共 ${downloadedPaths.length} 张图片`)
+    event.images = paths
+    event.image = paths[0] || ''
+    event.loaded = paths.length > 0
   }
 
   if (downloadAll && event.cloudCheckinQrcodeFileID) {
-    try {
-      event.checkinQrcode = await getImage(event.cloudCheckinQrcodeFileID)
-    } catch (error) {
-      console.error(`[${name}] 签到码下载失败:`, error)
-    }
+    event.checkinQrcode = fileIDToCdnUrl(event.cloudCheckinQrcodeFileID) || ''
   }
 }
 
@@ -304,31 +311,21 @@ async function downloadEventImages(event, onImageReady, downloadAll = false, sta
  * 在后台批量下载活动图片（列表页：每个活动只下载第一张）
  */
 async function downloadEventImagesBackground(eventsData, onImageReady) {
-  if (eventsData.length === 0) return
-
-  const imageItems = []
-  const fileIDToEventId = new Map()
-
+  // CDN 模式下图片已通过 fileIDToCdnUrl 直接可用，无需下载
   eventsData.forEach(event => {
     const firstCloudFileID = event.cloudImageFileIDs && event.cloudImageFileIDs[0]
     if (firstCloudFileID) {
-      imageItems.push({
-        cloudFileID: firstCloudFileID
-      })
-      fileIDToEventId.set(firstCloudFileID, event.id)
+      const url = fileIDToCdnUrl(firstCloudFileID)
+      if (url && onImageReady) onImageReady(event.id, url)
     }
   })
-
-  await prefetchImages(imageItems, (fileID, localPath) => {
-    const eventId = fileIDToEventId.get(fileID)
-    if (eventId && onImageReady) onImageReady(eventId, localPath)
-  }, DATA_SOURCE_CONFIG.imageConcurrency || 10)
 }
 
 module.exports = {
   getEventsFromCache,
   getEventsDataSync,
   fetchFeishuEventsText,
+  fetchEventById,
   downloadEventImagesBackground,
   downloadEventImages,
   calculateEventStatus

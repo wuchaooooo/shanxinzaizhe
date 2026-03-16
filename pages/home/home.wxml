@@ -1,4 +1,15 @@
 <!--pages/home/home.wxml-->
+
+<!-- 开屏动画 -->
+<view wx:if="{{showSplash}}" class="splash-overlay {{splashMeltOut ? 'splash-melt' : ''}}" style="padding-bottom: {{splashNavBarHeight}}px">
+  <image
+    wx:if="{{splashLogoUrl}}"
+    class="splash-logo {{splashLogoVisible ? 'splash-logo-in' : ''}} {{splashHeartbeat ? 'splash-heartbeat' : ''}}"
+    src="{{splashLogoUrl}}"
+    mode="aspectFit"
+  />
+</view>
+
 <view class="home-container">
   <!-- 头部 -->
   <view class="header">

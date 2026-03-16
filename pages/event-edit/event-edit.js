@@ -24,10 +24,18 @@ Page({
       displayEndTime: '', // 结束时间
       address: '',
       latitude: null,
-      longitude: null
+      longitude: null,
+      notes: '' // 活动备注（可选）
     },
     typeOptions: ['星享会', '午餐会', '销售门诊', '销售建设', '客户活动'],
-    saving: false
+    saving: false,
+    // 拖拽排序状态
+    dragging: false,
+    dragIndex: -1,
+    dropIndex: -1,
+    dragX: 0,
+    dragY: 0,
+    dragImageSrc: ''
   },
 
   onLoad(options) {
@@ -149,7 +157,8 @@ Page({
         checkinQrcode: checkinQrcode, // 签到码图片（优先用缓存路径）
         address: event.address || '',
         latitude: event.latitude || null,
-        longitude: event.longitude || null
+        longitude: event.longitude || null,
+        notes: event.notes || ''
       }
     })
   },
@@ -166,6 +175,64 @@ Page({
     this.setData({
       'formData.name': e.detail.value
     })
+  },
+
+  // 活动备注输入
+  onNotesInput(e) {
+    this.setData({ 'formData.notes': e.detail.value })
+  },
+
+  // 图片长按开始拖拽
+  onImageLongPress(e) {
+    const index = e.currentTarget.dataset.index
+    const touch = e.touches[0]
+    wx.vibrateShort({ type: 'medium' })
+    // 缓存各图片项位置，供 touchmove 计算 dropIndex
+    wx.createSelectorQuery().in(this)
+      .selectAll('.image-item')
+      .boundingClientRect(rects => { this._imageItemRects = rects || [] })
+      .exec()
+    this.setData({
+      dragging: true,
+      dragIndex: index,
+      dropIndex: index,
+      dragX: touch.clientX,
+      dragY: touch.clientY,
+      dragImageSrc: this.data.formData.images[index]
+    })
+  },
+
+  // 拖拽移动
+  onImageTouchMove(e) {
+    if (!this.data.dragging) return
+    const touch = e.touches[0]
+    const updates = { dragX: touch.clientX, dragY: touch.clientY }
+    const rects = this._imageItemRects
+    if (rects && rects.length > 0) {
+      let closestIndex = this.data.dragIndex
+      let closestDist = Infinity
+      rects.forEach((rect, i) => {
+        if (!rect) return
+        const dist = Math.abs(touch.clientX - (rect.left + rect.width / 2))
+                   + Math.abs(touch.clientY - (rect.top + rect.height / 2))
+        if (dist < closestDist) { closestDist = dist; closestIndex = i }
+      })
+      updates.dropIndex = closestIndex
+    }
+    this.setData(updates)
+  },
+
+  // 拖拽结束，更新顺序
+  onImageTouchEnd() {
+    if (!this.data.dragging) return
+    const { dragIndex, dropIndex, formData } = this.data
+    if (dragIndex !== dropIndex && dropIndex !== -1) {
+      const images = [...formData.images]
+      const [removed] = images.splice(dragIndex, 1)
+      images.splice(dropIndex, 0, removed)
+      this.setData({ 'formData.images': images })
+    }
+    this.setData({ dragging: false, dragIndex: -1, dropIndex: -1, dragX: 0, dragY: 0, dragImageSrc: '' })
   },
 
   // 组织者输入
@@ -456,7 +523,8 @@ Page({
         '组织者': formData.organizer,
         '开始时间': startTime,
         '结束时间': endTime,
-        '营销员工号': currentUser?.employeeId || ''
+        '营销员工号': currentUser?.employeeId || '',
+        '活动备注': formData.notes || ''
       }
 
       // 添加地址信息（销售门诊和销售建设不保存地址字段）
@@ -506,13 +574,11 @@ Page({
         console.error('获取表格字段失败:', err)
       }
 
-      // 处理多张图片上传
-      const newImages = formData.images.filter(img => img.includes('tmp')) // 新上传的图片
-      const oldImages = formData.images.filter(img => !img.includes('tmp')) // 原有的图片
-
-      // 引入云存储上传工具
+      // 处理多张图片上传（保留显示顺序，支持拖拽排序）
       const { uploadToCloudStorage } = require('../../utils/cloud-storage-uploader.js')
-      const cloudFileIDs = []
+      const imagePathToCloudFileID = this.data.imagePathToCloudFileID || {}
+      const newImages = formData.images.filter(img => img.includes('tmp'))
+      const newImageFileIDMap = {}
 
       // 上传新图片
       if (newImages.length > 0) {
@@ -530,7 +596,7 @@ Page({
               }
             )
             if (cloudResult.success) {
-              cloudFileIDs.push(cloudResult.fileID)
+              newImageFileIDMap[newImages[i]] = cloudResult.fileID
               console.log(`[云存储] 图片 ${i + 1} 上传成功:`, cloudResult.fileID)
             } else {
               throw new Error(`图片 ${i + 1} 上传失败`)
@@ -549,14 +615,10 @@ Page({
         wx.hideLoading()
       }
 
-      // 获取保留的原有图片的 cloudFileIDs（通过映射）
-      const imagePathToCloudFileID = this.data.imagePathToCloudFileID || {}
-      const retainedCloudFileIDs = oldImages
-        .map(imagePath => imagePathToCloudFileID[imagePath])
-        .filter(fileID => fileID) // 过滤掉 undefined
-
-      // 合并保留的原有 cloudFileIDs 和新上传的 cloudFileIDs
-      const finalCloudFileIDs = [...retainedCloudFileIDs, ...cloudFileIDs]
+      // 按显示顺序构建 finalCloudFileIDs（保留拖拽排序结果）
+      const finalCloudFileIDs = formData.images
+        .map(img => img.includes('tmp') ? newImageFileIDMap[img] : imagePathToCloudFileID[img])
+        .filter(Boolean)
 
       // 保存 cloudFileIDs 数组（用逗号分隔的字符串）
       if (finalCloudFileIDs.length > 0) {
@@ -663,6 +725,7 @@ Page({
           globalEvents[globalIdx].address = formData.address || existingEvent.address
           globalEvents[globalIdx].latitude = formData.latitude
           globalEvents[globalIdx].longitude = formData.longitude
+          globalEvents[globalIdx].notes = formData.notes || ''
 
           // 更新 cloudFileIDs，触发图片重新下载（包括删除所有图片的情况）
           globalEvents[globalIdx].cloudImageFileIDs = finalCloudFileIDs

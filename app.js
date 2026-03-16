@@ -1,8 +1,8 @@
 // app.js
 const { DATA_SOURCE_CONFIG } = require('./utils/data-source-config.js')
-const { loadAllProfilesText, downloadAllProfileImages } = require('./utils/profile-loader.js')
-const { fetchAssets, getAssetsFromCache } = require('./utils/assets-loader.js')
-const { fetchFeishuEventsText, downloadEventImagesBackground, getEventsFromCache } = require('./utils/events-data-loader.js')
+const { loadAllProfilesText } = require('./utils/profile-loader.js')
+const { fetchAssets } = require('./utils/assets-loader.js')
+const { fetchFeishuEventsText, getEventsFromCache } = require('./utils/events-data-loader.js')
 const { updateShareTracking } = require('./utils/feishu-api.js')
 
 App({
@@ -27,12 +27,6 @@ App({
 
     // 如果使用飞书数据源，先从本地缓存恢复数据（立即可用），再异步拉取最新
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
-      // 优先加载静态资源（logo、banner等）
-      const cachedAssets = getAssetsFromCache()
-      if (Object.keys(cachedAssets).length > 0) {
-        this.globalData.assetsData = cachedAssets
-      }
-
       // 加载活动缓存
       const cachedEvents = getEventsFromCache()
       if (cachedEvents.length > 0) {
@@ -49,8 +43,7 @@ App({
     console.log('AIA Excellence 小程序启动')
 
     // 获取系统信息
-    const systemInfo = wx.getSystemInfoSync()
-    this.globalData.systemInfo = systemInfo
+    this.globalData.systemInfo = wx.getWindowInfo()
 
     // 检查更新
     if (wx.canIUse('getUpdateManager')) {
@@ -78,12 +71,10 @@ App({
         console.log('[App] 检测到小程序刚更新,清除图片缓存')
         // 清除更新标记
         wx.removeStorageSync('app_will_update')
-        // 清除活动图片缓存(临时文件已被清除)
+        // 清除活动文本缓存
         wx.removeStorageSync('events_cache_v1')
-        // 清除团队图片缓存
+        // 清除团队文本缓存
         wx.removeStorageSync('partners_cache_v1')
-        // 标记需要强制重新下载所有图片
-        this.globalData.forceRedownloadImages = true
       }
     } catch (e) {
       console.error('[App] 检查更新标记失败:', e)
@@ -96,37 +87,20 @@ App({
     this._fetchingFeishuData = true
     try {
       // 加载文本数据（包含 changedIds 和 changedImageIds）
-      const { profiles, changedIds, changedImageIds } = await loadAllProfilesText()
+      const { profiles, changedIds } = await loadAllProfilesText()
 
       // 保留现有的图片路径（如果有的话）
       const existingData = this.globalData.partnersData || []
       if (existingData.length > 0) {
-        const existingWithImages = existingData.filter(p => p.image).length
-        console.log(`[App] preloadFeishuTeam: 现有数据 ${existingData.length} 条，其中 ${existingWithImages} 条有图片`)
-
-        let preservedCount = 0
         profiles.forEach(profile => {
           const existing = existingData.find(p => p.employeeId === profile.employeeId)
           if (existing) {
-            // 保留现有的图片路径（只要不是空字符串）
-            if (existing.image) {
-              profile.image = existing.image
-              preservedCount++
-            }
-            if (existing.qrcode) {
-              profile.qrcode = existing.qrcode
-            }
-            if (existing.loaded) {
-              profile.loaded = existing.loaded
-            }
+            if (existing.image) profile.image = existing.image
+            if (existing.qrcode) profile.qrcode = existing.qrcode
+            if (existing.loaded) profile.loaded = existing.loaded
           }
         })
-        console.log(`[App] preloadFeishuTeam: 保留了 ${preservedCount} 条图片路径`)
       }
-
-      // 始终更新引用，保证图片路径的修改能同步到 globalData
-      const finalWithImages = profiles.filter(p => p.image).length
-      console.log(`[App] preloadFeishuTeam: 最终数据 ${profiles.length} 条，其中 ${finalWithImages} 条有图片`)
       this.globalData.partnersData = profiles
 
       // 飞书数据更新后，若已有 openid，重新比对身份
@@ -145,64 +119,10 @@ App({
       // 后续加载时，只在有变化时通知页面刷新（避免不必要的重新渲染）
       // 变化包括：记录修改、新增、删除
       if (isFirstLoad || changedIds.size > 0 || hasDeleted) {
-        if (isFirstLoad) {
-          console.log('[App] 首次加载，通知页面初始化')
-        } else if (hasDeleted) {
-          console.log(`[App] 检测到记录删除（${existingData.length} → ${profiles.length}），通知页面刷新`)
-        } else {
-          console.log(`[App] 检测到变化，通知页面刷新`)
-        }
         this.globalData.partnersDataListeners.forEach(cb => cb(profiles))
-      } else {
-        console.log('[App] 数据无变化')
       }
 
-      // 检查哪些记录需要下载图片：
-      // 1. cloudFileID 变化的记录（changedImageIds）
-      // 2. 有 cloudFileID 但没有图片路径的记录（首次加载或缓存丢失）
-      // 注意：二维码按需下载，不在启动时下载
-      const needDownload = profiles.filter(p => {
-        if (changedImageIds.has(p.employeeId)) return true
-        // 有 cloudImageFileID 但没有图片路径，需要下载
-        if (p.cloudImageFileID && !p.image) return true
-        return false
-      }).sort((a, b) => {
-        // 工号越大（越新入职）排越前，优先下载
-        const numA = parseInt(a.employeeId, 10)
-        const numB = parseInt(b.employeeId, 10)
-        if (!isNaN(numA) && !isNaN(numB)) return numB - numA
-        return (b.employeeId || '').localeCompare(a.employeeId || '')
-      })
-
-      if (needDownload.length > 0) {
-        console.log(`[飞书] 团队需要下载 ${needDownload.length} 张图片（图片变更${changedImageIds.size}张 + 缺失图片${needDownload.length - changedImageIds.size}张）`)
-
-        // 等待图片下载完成
-        downloadAllProfileImages(needDownload, (type, employeeId, path) => {
-          console.log(`[App ImageReady] 收到回调 - type: ${type}, employeeId: ${employeeId}, path: ${path}`)
-          // 更新 globalData 中对应的记录
-          const profile = profiles.find(p => p.employeeId === employeeId)
-          if (profile) {
-            if (type === 'avatar') {
-              profile.image = path
-              profile.loaded = true
-              console.log(`[App ImageReady] 更新 ${profile.name} 的头像: ${path}`)
-              // 只在头像下载完成时通知监听器（用于 team 页面更新头像）
-              this.globalData.imageReadyListeners.forEach(cb => cb(type, employeeId, path))
-            } else if (type === 'qrcode') {
-              profile.qrcode = path
-              // 二维码下载完成后，通知数据监听器更新显示
-              this.globalData.partnersDataListeners.forEach(cb => cb(profiles))
-            }
-          } else {
-            console.log(`[App ImageReady] 未找到 employeeId: ${employeeId}`)
-          }
-        }, DATA_SOURCE_CONFIG.imageConcurrency || 2).then(() => {
-          console.log(`[飞书] 团队图片下载完成`)
-        })
-      } else {
-        console.log('[飞书] 团队所有图片已就绪，无需下载')
-      }
+      // 头像已通过 CDN URL 直接内嵌在 profile.image，无需下载
 
     } catch (error) {
       console.error('预加载飞书数据失败:', error)
@@ -216,17 +136,11 @@ App({
     if (this._fetchingFeishuAssets) return
     this._fetchingFeishuAssets = true
     try {
-      console.log('开始预加载静态资源...')
+      const { assets } = await fetchAssets()
 
-      const { assets } = await fetchAssets((code) => {
-        // 每个资源下载完成后立即更新 globalData 并通知页面
-        console.log(`静态资源 [${code}] 就绪,立即通知页面`)
-        this.globalData.assetsData = getAssetsFromCache()
-        this.globalData.assetsDataListeners.forEach(cb => cb(this.globalData.assetsData))
-      })
-
-      // 最后再更新一次全局数据(确保所有资源都已加载)
+      // 更新全局数据并通知页面
       this.globalData.assetsData = assets
+      this.globalData.assetsDataListeners.forEach(cb => cb(assets))
     } catch (error) {
       console.error('预加载飞书静态资源失败:', error)
     } finally {
@@ -236,72 +150,12 @@ App({
 
   // 预加载飞书活动数据（两阶段：文本数据先返回，图片后台下载）
   async preloadFeishuEvents() {
-    if (this._fetchingFeishuEvents) {
-      console.log('[App] preloadFeishuEvents 已在执行中，跳过')
-      return
-    }
+    if (this._fetchingFeishuEvents) return
     this._fetchingFeishuEvents = true
     try {
-      console.log('[App] ========== 开始预加载飞书活动数据 ==========')
-      console.log('[App] 调用时间:', new Date().toISOString())
-      console.log('[App] 调用堆栈:', new Error().stack)
+      const { events, changedIds } = await fetchFeishuEventsText()
 
-      const { events, changedIds, changedImageIds } = await fetchFeishuEventsText()
-
-      // 保留现有的图片路径（如果有的话）
       const existingData = this.globalData.eventsData || []
-      if (existingData.length > 0 && !this.globalData.forceRedownloadImages) {
-        const existingWithImages = existingData.filter(e =>
-          (e.imagePaths && e.imagePaths.length > 0) ||
-          (e.images && e.images.length > 0) ||
-          e.image
-        ).length
-        console.log(`[App] preloadFeishuEvents: 现有数据 ${existingData.length} 条，其中 ${existingWithImages} 条有图片`)
-
-        let preservedCount = 0
-        events.forEach(event => {
-          const existing = existingData.find(e => e.id === event.id)
-          if (existing) {
-            console.log(`[App] 检查活动 ${event.name} (${event.id}):`, {
-              'existing.imagePaths': existing.imagePaths ? `数组长度${existing.imagePaths.length}` : '无',
-              'existing.images': existing.images ? `数组长度${existing.images.length}` : '无',
-              'existing.image': existing.image ? '有' : '无'
-            })
-
-            // 保留现有的图片路径（兼容多种字段名）
-            if (existing.imagePaths && existing.imagePaths.length > 0) {
-              event.imagePaths = existing.imagePaths
-              preservedCount++
-              console.log(`[App] 保留 imagePaths: ${event.name}`)
-            }
-            if (existing.images && existing.images.length > 0) {
-              event.images = existing.images
-              console.log(`[App] 保留 images: ${event.name}`)
-            }
-            if (existing.image) {
-              event.image = existing.image
-              console.log(`[App] 保留 image: ${event.name}`)
-            }
-          } else {
-            console.log(`[App] 新活动 ${event.name} (${event.id}): 在 existingData 中未找到`)
-          }
-        })
-        console.log(`[App] preloadFeishuEvents: 保留了 ${preservedCount} 条图片路径`)
-      } else if (this.globalData.forceRedownloadImages) {
-        console.log('[App] preloadFeishuEvents: 强制重新下载所有图片（小程序刚更新）')
-        // 清除所有活动的图片路径，强制重新下载
-        events.forEach(event => {
-          event.imagePaths = []
-          event.images = []
-          event.image = ''
-        })
-        // 重置标志
-        this.globalData.forceRedownloadImages = false
-      }
-
-      // 始终更新引用，保证图片路径的修改能同步到 globalData
-      const finalWithImages = events.filter(e => e.imagePaths && e.imagePaths.length > 0).length
-      console.log(`[App] preloadFeishuEvents: 最终数据 ${events.length} 条，其中 ${finalWithImages} 条有图片`)
       this.globalData.eventsData = events
 
       // 判断是否是首次加载
@@ -311,46 +165,8 @@ App({
       // 检查活动数量是否变化（用于检测删除）
       const countChanged = existingData.length !== events.length
 
-      // 首次加载时，即使没有变化也要通知页面（让页面获取初始数据）
-      // 后续加载时，在有变化或数量变化时通知页面刷新
       if (isFirstLoad || changedIds.size > 0 || countChanged) {
-        if (isFirstLoad) {
-          console.log('[App] 活动首次加载，通知页面初始化')
-        } else if (countChanged) {
-          console.log(`[App] 活动数量变化（${existingData.length} -> ${events.length}），通知页面刷新`)
-        } else {
-          console.log(`[App] 活动检测到变化，通知页面刷新`)
-        }
-        console.log('[App] 通知 eventsDataListeners，监听器数量:', this.globalData.eventsDataListeners.length)
         this.globalData.eventsDataListeners.forEach(cb => cb(events))
-      } else {
-        console.log('[App] 活动数据无变化，不通知页面')
-      }
-
-      // 检查哪些活动需要下载图片：
-      // 1. cloudImageFileIDs 变化的活动（changedImageIds）
-      // 2. 有 cloudImageFileIDs 但没有图片路径的活动（首次加载或缓存丢失）
-      const needDownload = events.filter(e => {
-        if (changedImageIds.has(e.id)) return true
-        // 有 cloudImageFileIDs 但没有图片路径，需要下载
-        if (e.cloudImageFileIDs && e.cloudImageFileIDs.length > 0 && (!e.images || e.images.length === 0)) return true
-        return false
-      })
-
-      if (needDownload.length > 0) {
-        // 计算总共需要下载的图片数量
-        const totalImages = needDownload.reduce((sum, e) => sum + (e.cloudImageFileIDs?.length || 0), 0)
-        console.log(`[飞书] 活动需要下载 ${totalImages} 张图片（图片变更${changedImageIds.size}条活动 + 缺失图片${needDownload.length - changedImageIds.size}条活动）`)
-
-        // 等待活动图片下载完成
-        downloadEventImagesBackground(needDownload, (eventId, path) => {
-          // 通知监听器（用于活动页面更新图片）
-          this.globalData.eventsImageReadyListeners.forEach(cb => cb(eventId, path))
-        }).then(() => {
-          console.log(`[飞书] 活动图片下载完成`)
-        })
-      } else {
-        console.log('[飞书] 活动所有图片已就绪，无需下载')
       }
 
     } catch (error) {
@@ -383,12 +199,13 @@ App({
 
     const matched = partners.find(p => p.wxOpenid && p.wxOpenid.trim() === openid.trim()) || null
     this.globalData.currentUser = matched
+    this.globalData.currentUserResolved = true
     console.log('身份识别:', matched ? `联合创始人 ${matched.name}` : '普通用户')
     // 始终通知 listeners，即使是 null（普通用户）
     this.globalData.currentUserListeners.forEach(cb => cb(matched))
   },
 
-  async onShow(options) {
+  onShow(options) {
     // 解析分享来源参数（从后台切换回来时）
     if (options) {
       const shareParams = this.parseShareParams(options)
@@ -400,11 +217,11 @@ App({
       }
     }
 
-    // 每次显示时重新拉取飞书数据，优先加载静态资源
+    // 每次显示时重新拉取飞书数据，三个任务并发执行
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
-      await this.preloadFeishuAssets()
-      await this.preloadFeishuTeam()
-      await this.preloadFeishuEvents()
+      this.preloadFeishuAssets()
+      this.preloadFeishuTeam()
+      this.preloadFeishuEvents()
     }
   },
 
@@ -467,6 +284,7 @@ App({
     userInfo: null,
     openid: null,                // 当前登录用户的微信 openid
     currentUser: null,           // 匹配到的联合创始人对象，null 表示普通用户
+    currentUserResolved: false,  // 身份识别是否已完成
     currentUserListeners: [],    // 身份识别完成回调列表
     partnersData: null,          // 飞书数据缓存
     partnersDataTimestamp: null, // 团队数据加载时间戳
@@ -479,7 +297,6 @@ App({
     eventsImageReadyListeners: [], // 活动图片下载完成回调列表
     eventsDataListeners: [],     // 活动数据刷新回调列表
     initialShareFrom: null,      // 小程序启动时的分享来源
-    lastTrackedShareFrom: null,  // 最近一次统计的分享来源（避免重复统计）
-    forceRedownloadImages: false // 强制重新下载所有图片（小程序更新后）
+    lastTrackedShareFrom: null   // 最近一次统计的分享来源（避免重复统计）
   }
 })

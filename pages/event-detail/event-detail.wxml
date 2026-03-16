@@ -41,6 +41,11 @@
   }
 </wxs>
 
+<!-- 开屏动画 -->
+<view wx:if="{{showSplash}}" class="splash-overlay {{splashMeltOut ? 'splash-melt' : ''}}" style="padding-bottom: {{splashNavBarHeight}}px">
+  <image wx:if="{{splashLogoUrl}}" class="splash-logo {{splashLogoVisible ? 'splash-logo-in' : ''}} {{splashHeartbeat ? 'splash-heartbeat' : ''}}" src="{{splashLogoUrl}}" mode="aspectFit" />
+</view>
+
 <view class="detail-container" wx:if="{{event}}">
   <!-- 活动图片轮播 -->
   <view class="image-section">
@@ -78,15 +83,8 @@
     <!-- 活动标题 -->
     <view class="title-section">
       <text class="event-title">{{event.name || '活动详情'}}</text>
-      <view class="status-row">
-        <view wx:if="{{event.status}}" class="status-badge status-{{utils.getStatusClass(event.status)}}">
-          <text class="status-text">{{event.status}}</text>
-        </view>
-        <!-- 签到码按钮（仅非进行中且有签到码时显示） -->
-        <view wx:if="{{event.status !== '进行中' && event.cloudCheckinQrcodeFileID}}" class="checkin-btn" bindtap="onShowCheckinQrcode">
-          <text class="checkin-btn-text">签到码</text>
-          <text class="checkin-btn-arrow">›</text>
-        </view>
+      <view wx:if="{{event.status}}" class="status-badge status-{{utils.getStatusClass(event.status)}}">
+        <text class="status-text">{{event.status}}</text>
       </view>
     </view>
 
@@ -128,6 +126,23 @@
         </view>
         <text class="info-value">{{event.address}}</text>
       </view>
+
+      <!-- 签到码（仅非进行中且有签到码时显示） -->
+      <view wx:if="{{event.status !== '进行中' && event.cloudCheckinQrcodeFileID}}" class="info-row" bindtap="onShowCheckinQrcode">
+        <view class="info-label">
+          <text class="info-icon">🎫</text>
+          <text class="label-text">签到码</text>
+        </view>
+        <view class="checkin-btn">
+          <text class="checkin-btn-text">查看</text>
+          <text class="checkin-btn-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 活动备注 -->
+    <view wx:if="{{event.notes}}" class="notes-section">
+      <text class="notes-text">{{event.notes}}</text>
     </view>
   </view>
 
@@ -151,7 +166,6 @@
       latitude="{{event.latitude}}"
       markers="{{markers}}"
       scale="16"
-      show-location
       bindtap="onNavigate"
       bindmarkertap="onNavigate"
     ></map>
@@ -210,7 +224,7 @@
 </view>
 
 <!-- Canvas 用于生成海报 -->
-<canvas canvas-id="posterCanvas" class="poster-canvas" style="width: 750px; height: {{canvasHeight}}px;"></canvas>
+<canvas canvas-id="posterCanvas" class="poster-canvas" width="750" height="{{canvasHeight}}" style="width: 750px; height: {{canvasHeight}}px;"></canvas>
 
 <!-- 签到码弹窗（非进行中的活动） -->
 <view class="checkin-modal {{showCheckinQrcodeModal ? 'checkin-modal-show' : ''}}" bindtap="onHideCheckinQrcode">

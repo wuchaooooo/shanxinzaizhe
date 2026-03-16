@@ -27,7 +27,10 @@ const FEISHU_CONFIG = {
   otherActivitiesTableId: 'tblvK8J71qdF1HvB',
   // 分享追踪统计 base
   shareTrackingAppToken: 'DahQbPH2paBJWvsaMprc6nFRn9f',
-  shareTrackingTableId: 'tbl9syGrQRoyPSHk'
+  shareTrackingTableId: 'tbl9syGrQRoyPSHk',
+  // 前职关键词 base
+  titleTagsAppToken: 'Ll5VbNc3MahwYxsdOg1c3SZsnsg',
+  titleTagsTableId: 'tblyPz0uldc3aWCH'
 }
 
 // 缓存 tenant_access_token

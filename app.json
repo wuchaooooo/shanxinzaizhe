@@ -28,6 +28,7 @@
     "chooseLocation"
   ],
   "tabBar": {
+    "custom": true,
     "color": "#94a3b8",
     "selectedColor": "#c20000",
     "backgroundColor": "#ffffff",

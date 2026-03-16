@@ -1,20 +1,72 @@
 <!--pages/team/team.wxml-->
-<view class="team-container" bindtap="onContainerTap">
-  <!-- 搜索框 -->
-  <view class="search-container" catchtap="onSearchTap">
+
+<!-- 开屏动画 -->
+<view wx:if="{{showSplash}}" class="splash-overlay {{splashMeltOut ? 'splash-melt' : ''}}" style="padding-bottom: {{splashNavBarHeight}}px">
+  <image wx:if="{{splashLogoUrl}}" class="splash-logo {{splashLogoVisible ? 'splash-logo-in' : ''}} {{splashHeartbeat ? 'splash-heartbeat' : ''}}" src="{{splashLogoUrl}}" mode="aspectFit" />
+</view>
+
+<!-- 顶部固定 Tab 栏 -->
+<view class="tabs-fixed-wrapper">
+  <!-- 默认态：搜索图标 + tab 滚动区 + 展开按钮 -->
+  <view wx:if="{{!isSearching}}" class="tabs-row">
+    <view class="search-icon-btn" bindtap="onSearchOpen">
+      <text class="search-icon-text">🔍</text>
+    </view>
+    <scroll-view class="tabs-container" scroll-x="{{true}}" show-scrollbar="{{false}}" scroll-with-animation="{{true}}" scroll-left="{{tabScrollLeft}}" bindscroll="onTabsScroll">
+      <view class="tabs">
+        <view
+          class="tab-item {{activeTab === item ? 'tab-active' : ''}}"
+          wx:for="{{visibleTabs}}"
+          wx:key="index"
+          bindtap="onTabChange"
+          data-tab="{{item}}"
+        >
+          <text class="tab-text">{{item}}</text>
+        </view>
+        <!-- 展开箭头：在最后一个 tab 后面，滑动才能看到 -->
+        <view wx:if="{{hasMoreTabs}}" class="expand-btn" catchtap="onToggleTagPanel">
+          <text class="expand-icon">{{showTagPanel ? '▲' : '▼'}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 搜索态：← + 搜索框 -->
+  <view wx:else class="tabs-row">
+    <view class="search-icon-btn" bindtap="onSearchClose">
+      <text class="search-back-icon-text">←</text>
+    </view>
     <view class="search-box">
-      <text class="search-icon">🔍</text>
+      <text class="search-tab-label">{{activeTab}}</text>
+      <text class="search-divider">|</text>
       <input
         class="search-input"
         placeholder="{{searchPlaceholder}}"
         placeholder-class="search-placeholder"
         bindinput="onSearchInput"
         value="{{searchQuery}}"
-        focus="{{isApplyMode}}"
+        focus="{{isSearching}}"
       />
     </view>
   </view>
 
+  <!-- 展开的全部标签面板 -->
+  <view class="tag-panel {{showTagPanel ? 'tag-panel-show' : ''}}" catchtap="onTagPanelStop">
+    <view class="tag-list">
+      <view
+        class="tag-item {{activeTab === item ? 'tag-item-active' : ''}}"
+        wx:for="{{tabs}}"
+        wx:key="index"
+        bindtap="onTabChange"
+        data-tab="{{item}}"
+      >
+        <text>{{item}}</text>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="team-container" bindtap="onContainerTap">
   <!-- 团队统计 -->
   <view class="team-stats-section">
     <view class="team-stats-content {{!isCofounder && identityChecked ? 'team-stats-content-no-button' : ''}}">
@@ -64,7 +116,7 @@
     </view>
     
     <!-- 正常的合伙人列表 -->
-    <view class="partner-item {{enableItemAnimation ? 'item-animating' : ''}}" style="{{enableItemAnimation ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}" wx:for="{{filteredPartners}}" wx:key="employeeId" wx:for-index="index" bindtap="{{item.loaded ? 'onPartnerTap' : ''}}" data-name="{{item.name}}">
+    <view class="partner-item {{item.animated ? 'item-animating' : ''}}" style="{{item.animated ? 'animation-delay: ' + (index * 50) + 'ms' : ''}}" wx:for="{{filteredPartners}}" wx:key="employeeId" wx:for-index="index" bindtap="{{item.loaded ? 'onPartnerTap' : ''}}" data-name="{{item.name}}">
       <view class="partner-avatar {{!item.loaded ? 'partner-avatar-loading' : 'partner-avatar-loaded'}}">
         <view class="partner-avatar-img-wrapper">
           <image class="partner-avatar-img {{item.loaded ? 'partner-avatar-img-show' : ''}}" src="{{item.image}}" mode="aspectFill" binderror="onImageError" data-name="{{item.name}}"></image>

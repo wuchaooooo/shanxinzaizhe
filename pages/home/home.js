@@ -1,9 +1,17 @@
 // pages/home/home.js
 const { animateNumbers } = require('../../utils/animate.js')
 const { getAssetPath } = require('../../utils/assets-loader.js')
+const { runSplashIfNeeded } = require('../../utils/splash.js')
 
 Page({
   data: {
+    // 开屏动画
+    showSplash: false,
+    splashLogoUrl: '',
+    splashLogoVisible: false,
+    splashHeartbeat: false,
+    splashMeltOut: false,
+    splashNavBarHeight: 0,
     shanxinzheliLogoUrl: '',
     aiaLogoUrl: '',
     aiaFooterUrl: '',
@@ -92,29 +100,27 @@ Page({
 
     // 从飞书 base 加载静态资源(立即加载一次,后续通过监听器更新)
     this.loadAssetsFromFeishu()
+
+    // 开屏动画（全局只播一次）
+    runSplashIfNeeded(this)
   },
 
   // 从飞书 base 加载静态资源
   loadAssetsFromFeishu() {
-    console.log('home.loadAssetsFromFeishu 开始加载资源')
-
     // 加载善心浙里 logo（代码：shanxinzheli）
     const logoPath = getAssetPath('shanxinzheli')
-    console.log('shanxinzheli 路径:', logoPath)
     if (logoPath) {
       this.setData({ shanxinzheliLogoUrl: logoPath, logoLoaded: true, logoAnimate: true })
     }
 
     // 加载 AIA logo（代码：aia）
     const aiaLogoPath = getAssetPath('aia')
-    console.log('aia 路径:', aiaLogoPath)
     if (aiaLogoPath) {
       this.setData({ aiaLogoUrl: aiaLogoPath })
     }
 
     // 加载 AIA footer（代码：aia_footer）
     const aiaFooterPath = getAssetPath('aia_footer')
-    console.log('aia_footer 路径:', aiaFooterPath)
     if (aiaFooterPath) {
       this.setData({ aiaFooterUrl: aiaFooterPath })
     }
@@ -123,8 +129,6 @@ Page({
     const missionPath = getAssetPath('mission_banner')
     const visionPath = getAssetPath('vision_banner')
     const valuesPath = getAssetPath('value_banner')
-
-    console.log('banner 路径:', { missionPath, visionPath, valuesPath })
 
     const updates = {}
     if (missionPath) {
@@ -157,9 +161,17 @@ Page({
       clearInterval(this._animateTimer)
       this._animateTimer = null
     }
+    if (this._splashTimers) {
+      this._splashTimers.forEach(t => clearTimeout(t))
+      this._splashTimers = null
+    }
   },
 
   onShow() {
+    // 同步自定义 tabBar 选中状态
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 'pages/home/home', hidden: false })
+    }
     // 数据可能在后台加载完成后才可用，重新计算统计
     this.calculateStats()
 

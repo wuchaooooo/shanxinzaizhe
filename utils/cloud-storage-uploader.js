@@ -54,9 +54,13 @@ async function uploadToCloudStorage(tempFilePath, cloudPath, options = {}) {
 /**
  * 从云存储删除文件
  * @param {string|string[]} fileIDs - 要删除的 fileID 或 fileID 数组
+ * @param {Object} options - 可选参数
+ * @param {boolean} options.useCloudFunction - 是否使用云函数删除（默认 true，可绕过权限限制）
  * @returns {Promise<{success: boolean, deletedCount: number}>}
  */
-async function deleteFromCloudStorage(fileIDs) {
+async function deleteFromCloudStorage(fileIDs, options = {}) {
+  const { useCloudFunction = true } = options
+
   if (!fileIDs) {
     return { success: false, deletedCount: 0, reason: 'No fileIDs provided' }
   }
@@ -71,6 +75,42 @@ async function deleteFromCloudStorage(fileIDs) {
     return { success: true, deletedCount: 0, reason: 'No valid fileIDs' }
   }
 
+  // 优先使用云函数删除（可绕过权限限制）
+  if (useCloudFunction) {
+    try {
+      console.log('[云存储] 使用云函数删除文件:', validFileIDs)
+      const result = await wx.cloud.callFunction({
+        name: 'deleteCloudFile',
+        data: { fileIDs: validFileIDs }
+      })
+
+      if (result.result && result.result.success) {
+        console.log(`[云存储] 云函数删除成功: ${result.result.deletedCount} 个文件`)
+        return {
+          success: true,
+          deletedCount: result.result.deletedCount,
+          failedCount: result.result.failedCount || 0
+        }
+      } else {
+        console.warn('[云存储] 云函数删除失败，尝试直接删除')
+        // 云函数删除失败，降级到直接删除
+        return await deleteDirectly(validFileIDs)
+      }
+    } catch (err) {
+      console.warn('[云存储] 云函数调用失败，尝试直接删除:', err)
+      // 云函数调用失败，降级到直接删除
+      return await deleteDirectly(validFileIDs)
+    }
+  } else {
+    return await deleteDirectly(validFileIDs)
+  }
+}
+
+/**
+ * 直接删除文件（不通过云函数）
+ * @private
+ */
+async function deleteDirectly(validFileIDs) {
   try {
     const result = await wx.cloud.deleteFile({
       fileList: validFileIDs

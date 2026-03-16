@@ -1,34 +1,40 @@
 /* pages/events/events.wxss */
 .events-page {
-  height: 100vh;
   width: 100%;
   background-color: #f5f5f5;
-  overflow: hidden;
+  min-height: 100vh;
 }
 
 .events-scroll-container {
-  margin-top: 219rpx;
-  height: calc(100vh - 219rpx);
+  margin-top: 128rpx;
+  padding-top: 24rpx;
+  padding-bottom: calc(100rpx + env(safe-area-inset-bottom));
 }
 
-/* 搜索框 */
-.search-container-fixed {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 50;
-  padding: 32rpx 32rpx 32rpx 32rpx;
-  background-color: #ffffff;
-  border-bottom: none;
-}
-
+/* 搜索框（搜索态复用） */
 .search-box {
   display: flex;
   align-items: center;
   background-color: rgba(194, 0, 0, 0.05);
   border-radius: 16rpx;
-  padding: 16rpx 20rpx;
+  padding: 12rpx 20rpx;
+  flex: 1;
+  margin-right: 32rpx;
+}
+
+.search-tab-label {
+  font-size: 26rpx;
+  font-weight: bold;
+  color: #c20000;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.search-divider {
+  font-size: 24rpx;
+  color: rgba(194, 0, 0, 0.3);
+  margin: 0 12rpx;
+  flex-shrink: 0;
 }
 
 .search-icon {
@@ -40,8 +46,8 @@
 .search-input {
   flex: 1;
   font-size: 28rpx;
-  height: 56rpx;
-  line-height: 56rpx;
+  height: 44rpx;
+  line-height: 44rpx;
 }
 
 .search-placeholder {
@@ -50,7 +56,7 @@
 
 /* 活动统计 */
 .events-stats-section {
-  margin-top: 30rpx;
+  margin-top: 0;
   margin-left: 16rpx;
   margin-right: 16rpx;
   margin-bottom: 24rpx;
@@ -120,6 +126,7 @@
   gap: 12rpx;
   width: fit-content;
   min-width: 240rpx;
+  height: 56rpx;
   box-shadow: 0 4rpx 16rpx rgba(194, 0, 0, 0.2);
   transition: all 0.3s ease;
   animation: create-btn-breathing 2s ease-in-out infinite;
@@ -168,18 +175,27 @@
 /* 标签页（固定定位）*/
 .tabs-fixed-wrapper {
   position: fixed;
-  top: 120rpx;
+  top: 0;
   left: 0;
   right: 0;
   z-index: 40;
   background-color: #ffffff;
+  border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
+}
+
+/* 默认态：tab + 搜索图标 */
+.tabs-row {
+  display: flex;
+  align-items: center;
+  height: 128rpx;
 }
 
 .tabs-container {
-  padding: 24rpx 32rpx 24rpx 0;
-  border-bottom: 1rpx solid rgba(194, 0, 0, 0.1);
+  width: calc(100% - 88rpx);
   white-space: nowrap;
-  width: 100%;
+  height: 128rpx;
+  display: flex;
+  align-items: center;
 }
 
 .tabs-container::-webkit-scrollbar {
@@ -189,8 +205,20 @@
 .tabs {
   display: inline-flex;
   gap: 48rpx;
-  padding-left: 60rpx;
-  padding-right: 60rpx;
+  padding-left: 16rpx;
+  padding-right: 16rpx;
+  height: 100%;
+  align-items: center;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 128rpx;
+  flex-shrink: 0;
+  position: relative;
+  transition: all 0.3s;
 }
 
 .tab-item:first-child {
@@ -199,6 +227,57 @@
 
 .tab-item:last-child {
   padding-right: 0;
+}
+
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: 16rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 6rpx;
+  background-color: #c20000;
+  border-radius: 3rpx;
+}
+
+.search-icon-btn {
+  width: 88rpx;
+  height: 128rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.search-icon-text {
+  font-size: 40rpx;
+}
+
+.search-back-icon-text {
+  font-size: 44rpx;
+  font-weight: bold;
+  color: #c20000;
+}
+
+/* 搜索态：搜索框 + 返回按钮 */
+.search-row {
+  display: flex;
+  align-items: center;
+  height: 128rpx;
+  padding: 0 24rpx;
+  gap: 16rpx;
+}
+
+.search-cancel-btn {
+  flex-shrink: 0;
+  padding: 0 8rpx;
+}
+
+.search-cancel-text {
+  font-size: 28rpx;
+  color: #c20000;
+  white-space: nowrap;
 }
 
 .create-btn {
@@ -218,19 +297,8 @@
   color: #ffffff;
 }
 
-.tab-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0 16rpx;
-  border-bottom: 6rpx solid transparent;
-  transition: all 0.3s;
-  flex-shrink: 0;
-}
-
 .tab-active {
-  border-bottom-color: #c20000;
+  /* underline handled by ::after */
 }
 
 .tab-text {
@@ -354,7 +422,12 @@
   transition: transform 0.2s ease;
 }
 
-/* 渐进式渲染时的动画 */
+/* 图片加载中：卡片隐藏 */
+.event-card.card-pre-animate {
+  opacity: 0;
+}
+
+/* 图片加载完成后弹入动画 */
 .event-card.card-animating {
   opacity: 0;
   transform: scale(0.98);
@@ -532,4 +605,21 @@
 .empty-desc {
   font-size: 28rpx;
   color: #64748b;
+}
+
+/* 底部加载更多 */
+.load-more-footer {
+  display: flex;
+  justify-content: center;
+  padding: 40rpx 0 60rpx;
+}
+
+.load-more-hint {
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+.load-more-end {
+  font-size: 24rpx;
+  color: #cbd5e1;
 }

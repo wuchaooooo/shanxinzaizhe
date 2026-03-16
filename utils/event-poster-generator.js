@@ -9,8 +9,9 @@ const { generateMiniProgramCode } = require('./qrcode-generator.js')
  * @param {Object} page - 调用页面的 this
  * @param {string} canvasId - canvas 的 canvas-id
  * @param {Object} event - 活动数据
+ * @param {Object} options - 额外选项，如 { shareFrom: '员工号' }
  */
-async function generateEventPoster(page, canvasId, event) {
+async function generateEventPoster(page, canvasId, event, options = {}) {
   try {
     // 立即显示弹窗（骨架屏状态）
     page.setData({
@@ -26,8 +27,19 @@ async function generateEventPoster(page, canvasId, event) {
     // 根据组织者姓名查找对应的合伙人数据
     const organizer = partnersData.find(p => p.name === event.organizer)
 
-    // 组织者的微信二维码（用于海报）
-    const organizerQRCode = organizer?.qrcode || ''
+    // 确定海报中"联系"二维码的优先级：
+    // 1. 当前用户是联合创始人 → 用自己的个人微信二维码
+    // 2. 普通用户 + 链接有 shareFrom → 用分享者的个人微信二维码
+    // 3. 兜底 → 用组织者的个人微信二维码
+    let contactQRCode = organizer?.qrcode || ''
+    if (currentUser && currentUser.qrcode) {
+      contactQRCode = currentUser.qrcode
+    } else if (options.shareFrom) {
+      const shareFromPartner = partnersData.find(p => p.employeeId === options.shareFrom)
+      if (shareFromPartner && shareFromPartner.qrcode) {
+        contactQRCode = shareFromPartner.qrcode
+      }
+    }
 
     // 生成动态小程序码（如果是联合创始人）
     let qrcodeImageUrl = null
@@ -50,13 +62,20 @@ async function generateEventPoster(page, canvasId, event) {
     let imageHeight = 1000 // 默认活动图片高度
     const infoHeight = 400 // 信息区域：名称 + 分割线 + 时间地点&二维码行
 
+    // 确保 event.image 有值（fallback 到 images[0]）
+    if (!event.image && event.images && event.images.length > 0) {
+      event = { ...event, image: event.images[0] }
+    }
+
     // 如果有图片，根据图片实际比例计算高度
     let actualImageHeight = imageHeight
+    let localImagePath = event.image || ''
     if (event.image) {
       try {
         const imgInfo = await wx.getImageInfo({ src: event.image })
         actualImageHeight = Math.floor(canvasWidth * imgInfo.height / imgInfo.width)
         imageHeight = actualImageHeight
+        localImagePath = imgInfo.path // 使用本地缓存路径，drawImage 才能正常渲染
       } catch (e) {
         console.error('获取图片信息失败:', e)
       }
@@ -65,14 +84,14 @@ async function generateEventPoster(page, canvasId, event) {
     const canvasHeight = imageHeight + infoHeight
 
     page.setData({ canvasHeight })
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await new Promise(resolve => setTimeout(resolve, 300))
 
     const ctx = wx.createCanvasContext(canvasId, page)
 
     // 1. 绘制活动图片
-    if (event.image) {
+    if (localImagePath) {
       try {
-        ctx.drawImage(event.image, 0, 0, canvasWidth, imageHeight)
+        ctx.drawImage(localImagePath, 0, 0, canvasWidth, imageHeight)
       } catch (e) {
         console.error('绘制活动图片失败:', e)
         ctx.setFillStyle('#f5f5f5')
@@ -137,18 +156,18 @@ async function generateEventPoster(page, canvasId, event) {
     const location = event.address || '待定'
     drawWrappedText(ctx, `📍  ${location}`, padding, textY, textAreaWidth, 40)
 
-    // 右侧：组织者二维码（左）
-    if (organizerQRCode) {
+    // 右侧：联系人二维码（当前用户 > 分享者 > 组织者）
+    if (contactQRCode) {
       try {
         ctx.setFillStyle('#f8fafc')
         ctx.fillRect(qrStartX - 10, qrStartY - 10, qrSize + 20, qrSize + 20)
-        ctx.drawImage(organizerQRCode, qrStartX, qrStartY, qrSize, qrSize)
+        ctx.drawImage(contactQRCode, qrStartX, qrStartY, qrSize, qrSize)
         ctx.setFillStyle('#64748b')
         ctx.font = 'bold 22px sans-serif'
         ctx.setTextAlign('center')
-        ctx.fillText('联系组织者', qrStartX + qrSize / 2, qrStartY + qrSize + 18)
+        ctx.fillText('联系我', qrStartX + qrSize / 2, qrStartY + qrSize + 18)
       } catch (e) {
-        console.error('绘制组织者二维码失败:', e)
+        console.error('绘制联系二维码失败:', e)
       }
     }
 
@@ -169,21 +188,32 @@ async function generateEventPoster(page, canvasId, event) {
     }
 
     // 5. 绘制并导出
-    ctx.draw(false, async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 500))
-        const res = await wx.canvasToTempFilePath({
+    console.log('[海报] 开始 draw，canvasId:', canvasId, 'canvasWidth:', canvasWidth, 'canvasHeight:', canvasHeight)
+    ctx.draw(false, () => {
+      console.log('[海报] draw 回调触发，准备导出')
+      setTimeout(() => {
+        console.log('[海报] 调用 canvasToTempFilePath')
+        wx.canvasToTempFilePath({
           canvasId: canvasId,
+          x: 0,
+          y: 0,
+          width: canvasWidth,
+          height: canvasHeight,
+          destWidth: canvasWidth * 2,
+          destHeight: canvasHeight * 2,
           fileType: 'png',
-          quality: 1
-        }, page)
-
-        page.setData({ posterImage: res.tempFilePath })
-      } catch (err) {
-        console.error('导出海报失败:', err)
-        wx.showToast({ title: '生成失败，请重试', icon: 'none' })
-        page.setData({ showPoster: false })
-      }
+          quality: 1,
+          success: (res) => {
+            console.log('[海报] 导出成功:', res.tempFilePath)
+            page.setData({ posterImage: res.tempFilePath })
+          },
+          fail: (err) => {
+            console.error('[海报] 导出失败:', JSON.stringify(err))
+            wx.showToast({ title: '生成失败，请重试', icon: 'none' })
+            page.setData({ showPoster: false })
+          }
+        })
+      }, 300)
     })
   } catch (error) {
     console.error('生成活动海报失败:', error)

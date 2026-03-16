@@ -1,9 +1,11 @@
 // pages/team/team.js
-const { loadAllProfilesText, downloadAllProfileImages } = require('../../utils/profile-loader.js')
+const { loadAllProfilesText } = require('../../utils/profile-loader.js')
 const { getAssetPath } = require('../../utils/assets-loader.js')
 const { animateNumbers } = require('../../utils/animate.js')
 const { generateTeamPoster, generateShareImage } = require('../../utils/poster-generator.js')
 const { DATA_SOURCE_CONFIG } = require('../../utils/data-source-config.js')
+const { runSplashIfNeeded } = require('../../utils/splash.js')
+const { getAllRecords } = require('../../utils/feishu-api.js')
 
 // 处理合伙人数据
 // team页面只显示第一个学校和职位
@@ -65,7 +67,6 @@ function generatePlaceholders(count = 15) {
 function getInitialPartners() {
   const app = getApp()
   const cached = app.globalData.partnersData || []
-  console.log('[Team Init] getInitialPartners 调用，缓存数据数量:', cached.length)
 
   if (cached.length > 0) {
     // 过滤掉未完善的资料，只显示有 employeeId 的
@@ -76,11 +77,6 @@ function getInitialPartners() {
         ...partner,
         loaded: false
       })
-      console.log(`[Team Init] ${partner.name} (${partner.employeeId}):`, {
-        image: partner.image ? '有' : '无',
-        cloudImageFileID: partner.cloudImageFileID ? '有' : '无',
-        loaded: result.loaded
-      })
       return result
     })
 
@@ -88,12 +84,18 @@ function getInitialPartners() {
     return sortByJoinDate(partners)
   }
   // 如果没有缓存数据，返回占位符
-  console.log('[Team Init] 无缓存数据，返回占位符')
   return generatePlaceholders()
 }
 
 Page({
   data: {
+    // 开屏动画
+    showSplash: false,
+    splashLogoUrl: '',
+    splashLogoVisible: false,
+    splashHeartbeat: false,
+    splashMeltOut: false,
+    splashNavBarHeight: 0,
     searchQuery: '',
     partners: getInitialPartners(),
     filteredPartners: getInitialPartners(),  // 使用缓存的图片初始化
@@ -102,6 +104,13 @@ Page({
     uniqueSkills: 0,
     searchPlaceholder: '搜索善心浙里联合创始人',
     isApplyMode: false,
+    isSearching: false,
+    activeTab: '全部前职',
+    tabs: ['全部前职'],
+    visibleTabs: ['全部前职'],  // tabs 前8个，用于 tab 栏渲染
+    hasMoreTabs: false,         // tabs.length > 8
+    tabScrollLeft: 0,
+    showTagPanel: false,
     isCofounder: false,  // 当前用户是否为联合创始人
     identityChecked: false,  // 身份识别是否完成
     loading: false,
@@ -113,8 +122,7 @@ Page({
     shareImageUrl: '', // 分享图片路径
     hasIncompleteProfile: false, // 是否有未完善的资料（有openid但无employeeId）
     incompleteProfileOpenid: '', // 未完善资料的openid
-    enableItemAnimation: false, // 禁用项目动画（骨架屏一开始就全部显示）
-    isFirstLoad: true // 是否首次加载
+    enableItemAnimation: false // 保留兼容，已由 item.animated 替代
   },
 
   checkAllImagesLoaded(partners) {
@@ -126,12 +134,10 @@ Page({
   _scheduleUpdate() {
     if (this._updateTimer) {
       clearTimeout(this._updateTimer)
-      console.log('[Team Update] 清除之前的定时器')
     }
 
     this._updateTimer = setTimeout(() => {
       const pendingCount = Object.keys(this._pendingUpdates).length
-      console.log(`[Team Update] 执行批量更新，待更新字段数: ${pendingCount}`)
 
       if (pendingCount > 0) {
         // 计算 allImagesLoaded 并合并到同一次 setData
@@ -152,10 +158,8 @@ Page({
         // 合并 allImagesLoaded 到同一次 setData
         const allLoaded = this.checkAllImagesLoaded(updatedPartners)
         this._pendingUpdates.allImagesLoaded = allLoaded
-        console.log(`[Team Update] allImagesLoaded: ${allLoaded}`)
 
         // 一次性更新所有数据
-        console.log('[Team Update] 执行 setData，更新内容:', Object.keys(this._pendingUpdates))
         this.setData(this._pendingUpdates)
         this._pendingUpdates = {}
       }
@@ -164,11 +168,9 @@ Page({
 
   // 同步已下载的图片路径（从 globalData 到页面数据）
   _syncDownloadedImages() {
-    console.log('[Team Sync] 开始同步已下载的图片')
     const app = getApp()
     const globalPartners = app.globalData.partnersData || []
     if (globalPartners.length === 0) {
-      console.log('[Team Sync] globalPartners 为空，跳过')
       return
     }
 
@@ -181,73 +183,55 @@ Page({
       // 使用 employeeId 匹配（更可靠）
       const globalPartner = globalPartners.find(p => p.employeeId === partner.employeeId)
       if (!globalPartner) {
-        console.log(`[Team Sync] ${partner.name} 未在 globalPartners 中找到`)
         return
       }
 
-      console.log(`[Team Sync] ${partner.name} (${partner.employeeId}):`, {
-        pageImage: partner.image ? '有' : '无',
-        pageLoaded: partner.loaded,
-        globalImage: globalPartner.image ? '有' : '无',
-        cloudImageFileID: globalPartner.cloudImageFileID ? '有' : '无'
-      })
-
       // 新增：如果没有 cloudImageFileID，说明没有图片要下载，立即标记为 loaded
       if (!globalPartner.cloudImageFileID && !partner.loaded) {
-        console.log(`[Team Sync] ${partner.name} 无 cloudImageFileID，标记为 loaded`)
         updates[`partners[${idx}].loaded`] = true
+        updates[`partners[${idx}].animated`] = true
         hasUpdates = true
         syncCount++
 
         const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
         if (fidx !== -1) {
           updates[`filteredPartners[${fidx}].loaded`] = true
+          updates[`filteredPartners[${fidx}].animated`] = true
         }
         return  // 跳过后续的图片同步逻辑
       }
 
-      // 同步头像 - 改进逻辑
-      // 1. 如果 globalPartner.image 存在且不同，直接同步
-      // 2. 如果 globalPartner.image 为空但有 cloudImageFileID，尝试从缓存读取
+      // 同步头像：CDN 模式下 globalPartner.image 已是 CDN URL，直接同步
       let imageToSync = null
       if (globalPartner.image && globalPartner.image !== partner.image) {
         imageToSync = globalPartner.image
-        console.log(`[Team Sync] ${partner.name} 从 globalPartner 同步图片`)
-      } else if (!globalPartner.image && globalPartner.cloudImageFileID) {
-        // 尝试从缓存读取
-        const { getCached } = require('../../utils/image-cache.js')
-        const cachedPath = getCached(globalPartner.cloudImageFileID)
-        if (cachedPath && cachedPath !== partner.image) {
-          imageToSync = cachedPath
-          // 同时更新 globalData
-          globalPartner.image = cachedPath
-          console.log(`[Team Sync] ${partner.name} 从缓存读取图片: ${cachedPath}`)
-        }
       }
 
       if (imageToSync) {
         updates[`partners[${idx}].image`] = imageToSync
         updates[`partners[${idx}].loaded`] = true
+        updates[`partners[${idx}].animated`] = true
         hasUpdates = true
         syncCount++
-        console.log(`[Team Sync] ${partner.name} 更新图片和 loaded 状态`)
 
         // 同时更新 filteredPartners
         const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
         if (fidx !== -1) {
           updates[`filteredPartners[${fidx}].image`] = imageToSync
           updates[`filteredPartners[${fidx}].loaded`] = true
+          updates[`filteredPartners[${fidx}].animated`] = true
         }
       } else if (partner.image && !partner.loaded) {
         // 图片路径已同步但 loaded 仍为 false（竞态导致），直接修复
         updates[`partners[${idx}].loaded`] = true
+        updates[`partners[${idx}].animated`] = true
         hasUpdates = true
         syncCount++
-        console.log(`[Team Sync] ${partner.name} 已有图片但 loaded 为 false，修复状态`)
 
         const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
         if (fidx !== -1) {
           updates[`filteredPartners[${fidx}].loaded`] = true
+          updates[`filteredPartners[${fidx}].animated`] = true
         }
       }
 
@@ -255,7 +239,6 @@ Page({
       if (globalPartner.qrcode && globalPartner.qrcode !== partner.qrcode) {
         updates[`partners[${idx}].qrcode`] = globalPartner.qrcode
         hasUpdates = true
-        console.log(`[Team Sync] ${partner.name} 同步二维码`)
 
         const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === partner.employeeId)
         if (fidx !== -1) {
@@ -265,7 +248,6 @@ Page({
     })
 
     if (hasUpdates) {
-      console.log(`[Team Sync] 同步完成，更新了 ${syncCount} 个合伙人`)
 
       // 计算更新后的 allImagesLoaded 状态
       const updatedPartners = [...this.data.partners]
@@ -282,15 +264,15 @@ Page({
 
       // 同时更新 allImagesLoaded
       updates.allImagesLoaded = this.checkAllImagesLoaded(updatedPartners)
-      console.log(`[Team Sync] allImagesLoaded: ${updates.allImagesLoaded}`)
 
       this.setData(updates)
-    } else {
-      console.log('[Team Sync] 无需更新')
     }
   },
 
   onLoad() {
+    // 开屏动画（全局只播一次）
+    runSplashIfNeeded(this)
+
     // 首次加载时不启用动画，让骨架屏一开始就全部显示
     // （动画会导致骨架屏一个一个出现）
 
@@ -300,7 +282,6 @@ Page({
 
     // 加载善心 logo（代码：shanxinzheli）
     const shanxinLogoPath = getAssetPath('shanxinzheli')
-    console.log('[Team onLoad] shanxinLogoPath:', shanxinLogoPath)
     if (shanxinLogoPath) {
       this.setData({
         shanxinLogoUrl: shanxinLogoPath,
@@ -308,7 +289,6 @@ Page({
       })
     } else {
       // 路径为空时，等待异步加载完成
-      console.log('[Team onLoad] shanxinLogoPath 为空，等待异步加载')
     }
 
     // 加载 AIA footer（代码：aia_footer）
@@ -320,10 +300,8 @@ Page({
     const app = getApp()
     // 注册静态资源下载完成回调
     this._assetsDataCb = (assets) => {
-      console.log('[Team _assetsDataCb] 收到静态资源回调:', assets)
       if (assets && assets['shanxinzheli']) {
         const path = typeof assets['shanxinzheli'] === 'string' ? assets['shanxinzheli'] : assets['shanxinzheli'].path
-        console.log('[Team _assetsDataCb] 设置 shanxinLogoUrl:', path)
         this.setData({
           shanxinLogoUrl: path,
           posterBtnLogoLoaded: true  // logo已加载，设置为true
@@ -347,15 +325,10 @@ Page({
       const completeProfiles = filterCompleteProfiles(partnersData)
       const sortedData = sortByJoinDate([...completeProfiles])
       const partners = sortedData.map(partner => {
-        // 修改：初始都设为 false，等待图片下载或确认没有图片
         const result = processPartnerData({
           ...partner,
-          loaded: false
-        })
-        console.log(`[Team onLoad] ${partner.name} (${partner.employeeId}):`, {
-          image: partner.image ? '有' : '无',
-          cloudImageFileID: partner.cloudImageFileID ? '有' : '无',
-          loaded: result.loaded
+          loaded: !!partner.image,   // CDN 模式下有 image URL 即视为已加载
+          animated: !!partner.image  // 已加载的立即触发入场动画
         })
         return result
       })
@@ -375,30 +348,19 @@ Page({
 
     // 注册图片下载完成回调，处理头像和二维码
     this._imageReadyCb = (type, employeeId, path) => {
-      console.log(`[Team ImageReady] 收到回调 - type: ${type}, employeeId: ${employeeId}, path: ${path}`)
 
       if (type !== 'avatar') {
-        console.log('[Team ImageReady] 跳过非头像类型')
         return  // 只处理头像，二维码不在列表页显示
       }
 
       const partners = this.data.partners
       const idx = partners.findIndex(p => p.employeeId === employeeId)
       if (idx === -1) {
-        console.log(`[Team ImageReady] 未找到合伙人: ${employeeId}`)
         return
       }
 
-      const partner = partners[idx]
-      console.log(`[Team ImageReady] ${partner.name} 当前状态:`, {
-        currentImage: partner.image,
-        currentLoaded: partner.loaded,
-        newPath: path
-      })
-
       // 防御性检查：如果已经是这个路径且已标记为 loaded，跳过
       if (partners[idx].image === path && partners[idx].loaded) {
-        console.log(`[Team ImageReady] ${partner.name} 已是相同路径且已 loaded，跳过`)
         return
       }
 
@@ -413,16 +375,15 @@ Page({
       // 加入待更新队列（不立即 setData）
       this._pendingUpdates[`partners[${idx}].image`] = path
       this._pendingUpdates[`partners[${idx}].loaded`] = true
+      this._pendingUpdates[`partners[${idx}].animated`] = true
 
       // 同时更新 filteredPartners（WXML 渲染使用）
       const fidx = this.data.filteredPartners.findIndex(p => p.employeeId === employeeId)
       if (fidx !== -1) {
         this._pendingUpdates[`filteredPartners[${fidx}].image`] = path
         this._pendingUpdates[`filteredPartners[${fidx}].loaded`] = true
-        console.log(`[Team ImageReady] ${partner.name} 同时更新 filteredPartners[${fidx}]`)
+        this._pendingUpdates[`filteredPartners[${fidx}].animated`] = true
       }
-
-      console.log(`[Team ImageReady] ${partner.name} 加入待更新队列，当前队列大小:`, Object.keys(this._pendingUpdates).length)
 
       // 防抖：50ms 内的更新合并为一次 setData
       this._scheduleUpdate()
@@ -453,15 +414,14 @@ Page({
 
       if (needRebuild) {
         // 需要重建列表：保留已下载的图片
-        console.log('[Team Rebuild] 需要重建列表')
         const imageMap = {}
         const loadedMap = {}
+        const animatedMap = {}
         // 优先从 globalData 取（_imageReadyCb 会同步更新 globalData）
         const globalPartners = app.globalData.partnersData || []
         globalPartners.forEach(p => {
           if (p.employeeId && p.image) {
             imageMap[p.employeeId] = p.image
-            console.log(`[Team Rebuild] 从 globalData 获取 ${p.name} 的图片`)
           }
         })
         // 再从当前页面数据补充（可能有 globalData 里没有的）
@@ -469,20 +429,15 @@ Page({
           if (p.employeeId) {
             if (p.image && !imageMap[p.employeeId]) {
               imageMap[p.employeeId] = p.image
-              console.log(`[Team Rebuild] 从页面数据获取 ${p.name} 的图片`)
             }
             if (p.loaded) loadedMap[p.employeeId] = true
+            if (p.animated) animatedMap[p.employeeId] = true
           }
         })
-        // 最后用 getCached 兜底：直接读文件系统，不依赖内存状态
-        const { getCached } = require('../../utils/image-cache.js')
+        // 最后用 partner.image 兜底（CDN 模式下已是 CDN URL）
         sortedData.forEach(p => {
-          if (p.employeeId && !imageMap[p.employeeId] && p.cloudImageFileID) {
-            const cached = getCached(p.cloudImageFileID)
-            if (cached) {
-              imageMap[p.employeeId] = cached
-              console.log(`[Team Rebuild] 从 getCached 获取 ${p.name} 的图片`)
-            }
+          if (p.employeeId && !imageMap[p.employeeId] && p.image) {
+            imageMap[p.employeeId] = p.image
           }
         })
 
@@ -494,18 +449,11 @@ Page({
           // 修改：只有当有图片或没有 cloudImageFileID 时才标记为 loaded
           const shouldBeLoaded = wasLoaded || finalImage || !partner.cloudImageFileID
 
-          console.log(`[Team Rebuild] ${partner.name}:`, {
-            existingImage: existingImage ? '有' : '无',
-            finalImage: finalImage ? '有' : '无',
-            wasLoaded,
-            cloudImageFileID: partner.cloudImageFileID ? '有' : '无',
-            shouldBeLoaded: !!shouldBeLoaded
-          })
-
           return processPartnerData({
             ...partner,
             image: finalImage,
-            loaded: !!shouldBeLoaded
+            loaded: !!shouldBeLoaded,
+            animated: !!animatedMap[partner.employeeId] || !!shouldBeLoaded
           })
         })
 
@@ -561,11 +509,8 @@ Page({
         }
 
         if (hasChanges) {
-          console.log('[Team] 更新文字数据')
           this.setData(updates)
           this.calculateStats()
-        } else {
-          console.log('[Team] 数据无变化')
         }
       }
     }
@@ -574,12 +519,10 @@ Page({
     // 注册身份识别回调，更新底部按钮和占位符显示
     this._currentUserCb = (user) => {
       // 只有当用户有营销员工号时才显示生成海报按钮
-      console.log('[Team _currentUserCb] 身份识别完成:', { user, hasEmployeeId: !!(user && user.employeeId) })
       this.setData({
         isCofounder: !!(user && user.employeeId),
         identityChecked: true
       })
-      console.log('[Team _currentUserCb] 设置后状态:', { isCofounder: this.data.isCofounder, identityChecked: this.data.identityChecked, posterBtnLogoLoaded: this.data.posterBtnLogoLoaded })
 
       // 重新检查是否需要显示占位符
       const partnersData = app.globalData.partnersData || []
@@ -605,6 +548,9 @@ Page({
         incompleteProfileOpenid: currentOpenid
       })
     }
+
+    // 加载前职关键词 tab
+    this.loadTitleTags()
   },
 
   onUnload() {
@@ -662,8 +608,8 @@ Page({
       const sortedData = sortByJoinDate([...completeProfiles])
       const partners = sortedData.map(partner => processPartnerData({
         ...partner,
-        // 初始都显示骨架图，等待图片加载完成后一起显示
-        loaded: false
+        loaded: !!partner.image,
+        animated: !!partner.image
       }))
       this.setData({
         partners,
@@ -673,12 +619,6 @@ Page({
         incompleteProfileOpenid: currentOpenid
       })
       this.calculateStats()
-
-      // 阶段二：后台下载图片
-      downloadAllProfileImages(partnersData, (type, employeeId, path) => {
-        // 通知所有监听器（头像和二维码）
-        app.globalData.imageReadyListeners.forEach(cb => cb(type, employeeId, path))
-      }, DATA_SOURCE_CONFIG.imageConcurrency || 10)
     } catch (error) {
       console.error('加载飞书数据失败:', error)
       this.setData({ loading: false })
@@ -688,6 +628,10 @@ Page({
 
   onShow() {
     const app = getApp()
+    // 同步自定义 tabBar 选中状态
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 'pages/team/team', hidden: false })
+    }
 
     // 只在首次显示时同步一次，避免多次调用导致闪烁
     if (!this._hasShownOnce) {
@@ -697,6 +641,9 @@ Page({
 
     // 预加载数据（不重新注册监听器）
     app.preloadFeishuTeam()
+
+    // 每次回到页面静默拉取最新前职标签，和缓存比对后更新
+    this.loadTitleTags()
   },
 
   calculateStats() {
@@ -738,31 +685,154 @@ Page({
     }
   },
 
-  onSearchInput(e) {
-    const query = e.detail.value.toLowerCase()
-    this.setData({
-      searchQuery: query
-    })
+  // ── 前职 Tab 筛选 ────────────────────────────────────────────────
 
-    // 根据搜索关键词过滤合伙人
-    if (query === '') {
-      // 如果搜索框为空，显示所有合伙人
-      this.setData({
-        filteredPartners: this.data.partners
+  _setTabs(tabs) {
+    const MAX = 8
+    const baseTabs = tabs.slice(0, MAX)
+    const activeTab = this.data.activeTab
+
+    // 如果当前选中的 tab 不在前8个但在全部 tabs 里，继续保留为额外项
+    let visibleTabs = baseTabs
+    if (activeTab && !baseTabs.includes(activeTab) && tabs.includes(activeTab)) {
+      visibleTabs = [...baseTabs, activeTab]
+    }
+
+    this.setData({
+      tabs,
+      visibleTabs,
+      hasMoreTabs: tabs.length > MAX
+    })
+  },
+
+  async loadTitleTags() {
+    const CACHE_KEY = 'title_tags_cache'
+
+    // 读取本地缓存，先快速渲染
+    let cachedTags = []
+    try {
+      const cached = wx.getStorageSync(CACHE_KEY)
+      if (cached && cached.tags && cached.tags.length > 0) {
+        cachedTags = cached.tags
+        this._setTabs(['全部前职', ...cachedTags])
+      }
+    } catch (e) { /* ignore */ }
+
+    // 后台静默拉取飞书最新数据，与缓存比对，有变化才刷新
+    try {
+      const records = await getAllRecords({
+        appToken: 'Ll5VbNc3MahwYxsdOg1c3SZsnsg',
+        tableId: 'tblyPz0uldc3aWCH'
       })
-    } else {
-      // 根据姓名、学校或职位过滤
-      const filtered = this.data.partners.filter(partner => {
+
+      if (records.length === 0) return
+
+      const firstFields = records[0].fields
+      const keyField = Object.keys(firstFields).find(k => k.includes('关键词') || k.includes('名称') || k.includes('标签') || k.includes('前职'))
+      if (!keyField) {
+        console.warn('前职关键词表：未找到合适的字段名，可用字段：', Object.keys(firstFields))
+        return
+      }
+
+      const freshTags = records
+        .map(r => r.fields[keyField])
+        .filter(v => v && typeof v === 'string' && v.trim())
+        .map(v => v.trim())
+
+      // 与缓存比对，内容有变化才更新界面和缓存
+      if (JSON.stringify(freshTags) !== JSON.stringify(cachedTags)) {
+        console.log('前职标签有更新，刷新 tab 栏')
+        wx.setStorageSync(CACHE_KEY, { tags: freshTags })
+        this._setTabs(['全部前职', ...freshTags])
+      }
+    } catch (error) {
+      console.error('加载前职关键词失败:', error)
+    }
+  },
+
+  onTabChange(e) {
+    const tab = e.currentTarget.dataset.tab
+    const { tabs } = this.data
+    const MAX = 8
+    const baseTabs = tabs.slice(0, MAX)
+
+    // 选中的 tab 不在前8个里 → 追加到末尾显示；否则恢复为基础列表（移除之前的额外项）
+    const newVisibleTabs = baseTabs.includes(tab) ? baseTabs : [...baseTabs, tab]
+    const index = newVisibleTabs.indexOf(tab)
+
+    this.setData(
+      { activeTab: tab, showTagPanel: false, searchQuery: '', visibleTabs: newVisibleTabs },
+      () => { this._scrollTabIntoView(index) }
+    )
+    this._applyFilters('', tab)
+  },
+
+  onTabsScroll(e) {
+    // 实时记录用户手动滚动的实际位置，避免 tabScrollLeft data 与真实位置脱节
+    this._actualScrollLeft = e.detail.scrollLeft
+  },
+
+  _scrollTabIntoView(index) {
+    if (index < 0) return
+    const query = wx.createSelectorQuery().in(this)
+    query.selectAll('.tab-item').boundingClientRect()
+    query.select('.tabs-container').boundingClientRect()
+    query.exec(res => {
+      const tabRects = res[0]
+      const containerRect = res[1]
+      if (!tabRects || !tabRects[index] || !containerRect) return
+
+      // 优先使用实际滚动位置（用户手动滑动后 data 可能未更新）
+      const currentScrollLeft = this._actualScrollLeft != null ? this._actualScrollLeft : this.data.tabScrollLeft
+      const tabRect = tabRects[index]
+      // tab 在滚动内容中的实际偏移
+      const tabContentLeft = tabRect.left - containerRect.left + currentScrollLeft
+      // 让点击的 tab 居中
+      const newScrollLeft = Math.max(0, tabContentLeft - (containerRect.width - tabRect.width) / 2)
+      this._actualScrollLeft = newScrollLeft  // 同步更新，避免下次计算用到旧值
+      this.setData({ tabScrollLeft: newScrollLeft })
+    })
+  },
+
+  onToggleTagPanel() {
+    this.setData({ showTagPanel: !this.data.showTagPanel })
+  },
+
+  onTagPanelStop() {
+    // 阻止面板内点击冒泡到容器（避免面板被立即关闭）
+  },
+
+  // 根据 tab 返回过滤后的合伙人（不考虑搜索词）
+  _tabFilteredPartners(tab) {
+    if (!tab || tab === '全部前职') return this.data.partners
+    return this.data.partners.filter(partner => {
+      const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title || '']
+      return titleArray.some(t => t.includes(tab))
+    })
+  },
+
+  // 同时应用 tab 筛选 + 搜索词过滤
+  _applyFilters(query, tab) {
+    let base = this._tabFilteredPartners(tab)
+    if (query) {
+      const q = query.toLowerCase()
+      base = base.filter(partner => {
         const schoolArray = Array.isArray(partner.school) ? partner.school : [partner.school || '']
         const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title || '']
-        const schoolMatch = schoolArray.some(s => s.toLowerCase().includes(query))
-        const titleMatch = titleArray.some(t => t.toLowerCase().includes(query))
-        return partner.name.toLowerCase().includes(query) || schoolMatch || titleMatch
-      })
-      this.setData({
-        filteredPartners: filtered
+        const schoolMatch = schoolArray.some(s => s.toLowerCase().includes(q))
+        const titleMatch = titleArray.some(t => t.toLowerCase().includes(q))
+        return partner.name.toLowerCase().includes(q) || schoolMatch || titleMatch
       })
     }
+    this.setData({ filteredPartners: base })
+  },
+
+  // ─────────────────────────────────────────────────────────────────
+
+  onSearchInput(e) {
+    const query = e.detail.value.toLowerCase()
+    this.setData({ searchQuery: query })
+    this._applyFilters(query, this.data.activeTab)
   },
 
   // 点击未完善资料的占位项
@@ -805,21 +875,35 @@ Page({
     // 注意：小程序中需要通过设置 focus 属性来实现
   },
 
-  // 点击容器空白处,恢复搜索框状态
+  // 点击容器空白处,恢复搜索框状态，关闭展开面板
   onContainerTap() {
+    const updates = {}
     if (this.data.isApplyMode) {
-      this.setData({
-        isApplyMode: false,
-        searchPlaceholder: '搜索善心浙里联合创始人',
-        searchQuery: '',
-        filteredPartners: this.data.partners
-      })
+      updates.isApplyMode = false
+      updates.searchPlaceholder = '搜索善心浙里联合创始人'
+      updates.searchQuery = ''
+      updates.filteredPartners = this._tabFilteredPartners(this.data.activeTab)
+    }
+    if (this.data.showTagPanel) {
+      updates.showTagPanel = false
+    }
+    if (Object.keys(updates).length > 0) {
+      this.setData(updates)
     }
   },
 
   // 阻止搜索框点击事件冒泡
   onSearchTap() {
     // 空方法,用于阻止事件冒泡到容器
+  },
+
+  onSearchOpen() {
+    this.setData({ isSearching: true, showTagPanel: false })
+  },
+
+  onSearchClose() {
+    this.setData({ isSearching: false, searchQuery: '' })
+    this._applyFilters('', this.data.activeTab)
   },
 
   // 分享功能
@@ -884,65 +968,14 @@ Page({
     const currentUser = app.globalData.currentUser
     if (!currentUser) return
 
-    // 预加载：确保二维码和小程序码都已准备好
-    const preparePromises = []
-
-    // 1. 确保个人二维码已下载
-    if (currentUser.cloudQrcodeFileID && !currentUser.qrcode) {
-      const qrcodePromise = (async () => {
-        try {
-          const { getImage } = require('../../utils/image-cache.js')
-          const qrcodePath = await getImage(currentUser.cloudQrcodeFileID)
-          if (qrcodePath) {
-            currentUser.qrcode = qrcodePath
-            console.log(`[${currentUser.name}] 二维码已准备好:`, qrcodePath)
-          }
-        } catch (error) {
-          console.error('下载二维码失败:', error)
-        }
-      })()
-      preparePromises.push(qrcodePromise)
-    }
-
-    // 2. 预生成动态小程序码（如果还没有缓存）
-    if (currentUser.employeeId) {
-      const miniProgramCodePromise = (async () => {
-        try {
-          const { generateMiniProgramCode } = require('../../utils/qrcode-generator.js')
-          await generateMiniProgramCode(currentUser.employeeId)
-          console.log(`[${currentUser.name}] 小程序码已准备好`)
-        } catch (error) {
-          console.error('预生成小程序码失败:', error)
-        }
-      })()
-      preparePromises.push(miniProgramCodePromise)
-    }
-
-    // 并行执行所有预加载任务
-    if (preparePromises.length > 0) {
-      await Promise.all(preparePromises)
-    }
-
-    // 调试日志：确认传递给海报生成器的数据
-    console.log(`[生成海报] 准备生成海报，当前用户信息:`)
-    console.log(`  - 姓名: ${currentUser.name}`)
-    console.log(`  - employeeId: ${currentUser.employeeId}`)
-    console.log(`  - qrcode: ${currentUser.qrcode || '(空)'}`)
-    console.log(`  - cloudQrcodeFileID: ${currentUser.cloudQrcodeFileID || '(空)'}`)
-    console.log(`  - image: ${currentUser.image || '(空)'}`)
-
     const generatePoster = () => {
-      // 先卸载scroll-view，强制重置滚动位置
       this.setData({ posterScrollReady: false }, () => {
-        // 立即重新挂载scroll-view
         this.setData({ posterScrollReady: true }, () => {
-          // 然后生成海报
           generateTeamPoster(this, 'posterCanvas', currentUser, this.data.partners)
         })
       })
     }
 
-    // 检查是否所有头像都已加载
     if (!this.data.allImagesLoaded) {
       this.waitForImagesLoaded(generatePoster)
     } else {
@@ -964,7 +997,6 @@ Page({
 
   // 海报按钮logo加载完成
   onPosterBtnLogoLoad() {
-    console.log('[Team onPosterBtnLogoLoad] 海报按钮 logo 加载完成')
     this.setData({
       posterBtnLogoLoaded: true
     })

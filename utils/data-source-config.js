@@ -11,6 +11,11 @@ const DATA_SOURCE_CONFIG = {
   // 云存储功能开关（默认关闭，测试通过后再开启）
   useCloudStorage: true,
 
+  // 头像直接用腾讯云公开 CDN URL，跳过本地下载缓存
+  // 需要云存储文件权限设为"所有用户可读"
+  useCdnUrl: true,
+  cdnBaseUrl: 'https://7368-shanxinzaizhe-1g0sxfo695003783-1405846505.tcb.qcloud.la',
+
   // 静态资源源类型: 'feishu' 或 'cloud'
   assetsSource: 'cloud',
 
@@ -69,6 +74,7 @@ const DATA_SOURCE_CONFIG = {
     latitude: '地址纬度',
     longitude: '地址经度',
     cloudCheckinQrcodeFileID: '活动签到码链接_腾讯云_file_id',  // 云存储签到码 fileID
+    notes: '活动备注',  // 活动备注（可选）
     lastModifiedDate: 'Last Modified Date'
   }
 }

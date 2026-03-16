@@ -1,7 +1,11 @@
 <!--pages/event-edit/event-edit.wxml-->
 <view class="edit-container">
-  <view class="form-section">
-    <!-- 活动类型和组织者 -->
+
+  <!-- 基本信息 -->
+  <text class="card-title">基本信息</text>
+  <view class="form-card">
+
+    <!-- 活动类型 + 组织者 -->
     <view class="form-item-row">
       <view class="form-item-half">
         <view class="form-label">
@@ -21,6 +25,7 @@
         </picker>
         <view wx:else class="form-input-readonly">
           <text class="readonly-text">{{formData.type}}</text>
+          <text class="readonly-lock">🔒</text>
         </view>
       </view>
 
@@ -31,6 +36,7 @@
         </view>
         <view class="form-input-readonly">
           <text class="readonly-text">{{formData.organizer || '当前用户'}}</text>
+          <text class="readonly-lock">🔒</text>
         </view>
       </view>
     </view>
@@ -49,6 +55,27 @@
       />
     </view>
 
+    <!-- 活动备注 -->
+    <view class="form-item">
+      <view class="form-label">
+        <text class="label-text">活动备注</text>
+        <text class="label-hint">（可选）</text>
+      </view>
+      <textarea
+        class="form-textarea"
+        placeholder="请输入活动备注"
+        value="{{formData.notes}}"
+        bindinput="onNotesInput"
+        maxlength="500"
+        auto-height
+      ></textarea>
+    </view>
+  </view>
+
+  <!-- 活动时间 -->
+  <text class="card-title">活动时间</text>
+  <view class="form-card">
+
     <!-- 开始时间 -->
     <view class="form-item">
       <view class="form-label">
@@ -56,24 +83,16 @@
         <text class="required">*</text>
       </view>
       <view class="time-picker-row">
-        <picker
-          class="time-picker-half"
-          mode="date"
-          value="{{formData.displayDate}}"
-          bindchange="onDateChange"
-        >
+        <picker class="time-picker-half" mode="date" value="{{formData.displayDate}}" bindchange="onDateChange">
           <view class="form-picker">
-            <text class="{{formData.displayDate ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayDate || '请选择日期'}}</text>
+            <text class="picker-icon">📅</text>
+            <text class="{{formData.displayDate ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayDate || '选择日期'}}</text>
           </view>
         </picker>
-        <picker
-          class="time-picker-half"
-          mode="time"
-          value="{{formData.displayTime}}"
-          bindchange="onTimeChange"
-        >
+        <picker class="time-picker-half" mode="time" value="{{formData.displayTime}}" bindchange="onTimeChange">
           <view class="form-picker">
-            <text class="{{formData.displayTime ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayTime || '请选择时间'}}</text>
+            <text class="picker-icon">⏰</text>
+            <text class="{{formData.displayTime ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayTime || '选择时间'}}</text>
           </view>
         </picker>
       </view>
@@ -86,116 +105,100 @@
         <text class="required">*</text>
       </view>
       <view class="time-picker-row">
-        <picker
-          class="time-picker-half"
-          mode="date"
-          value="{{formData.displayEndDate}}"
-          bindchange="onEndDateChange"
-        >
+        <picker class="time-picker-half" mode="date" value="{{formData.displayEndDate}}" bindchange="onEndDateChange">
           <view class="form-picker">
-            <text class="{{formData.displayEndDate ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayEndDate || '请选择日期'}}</text>
+            <text class="picker-icon">📅</text>
+            <text class="{{formData.displayEndDate ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayEndDate || '选择日期'}}</text>
           </view>
         </picker>
-        <picker
-          class="time-picker-half"
-          mode="time"
-          value="{{formData.displayEndTime}}"
-          bindchange="onEndTimeChange"
-        >
+        <picker class="time-picker-half" mode="time" value="{{formData.displayEndTime}}" bindchange="onEndTimeChange">
           <view class="form-picker">
-            <text class="{{formData.displayEndTime ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayEndTime || '请选择时间'}}</text>
+            <text class="picker-icon">⏰</text>
+            <text class="{{formData.displayEndTime ? 'picker-text' : 'picker-placeholder'}}">{{formData.displayEndTime || '选择时间'}}</text>
           </view>
         </picker>
       </view>
     </view>
+  </view>
 
-    <!-- 活动地址（销售门诊和销售建设不显示） -->
-    <view class="form-item" wx:if="{{formData.type !== '销售门诊' && formData.type !== '销售建设'}}">
-      <view class="form-label">
-        <text class="label-text">活动地址</text>
-      </view>
+  <!-- 活动地址（销售门诊和销售建设不显示） -->
+  <text class="card-title" wx:if="{{formData.type !== '销售门诊' && formData.type !== '销售建设'}}">活动地址</text>
+  <view class="form-card" wx:if="{{formData.type !== '销售门诊' && formData.type !== '销售建设'}}">
+    <view class="form-item">
       <view class="location-picker" bindtap="onChooseLocation">
-        <text class="location-text">{{formData.address || '点击选择地址'}}</text>
         <text class="location-icon">📍</text>
+        <text class="{{formData.address ? 'location-text' : 'location-text-placeholder'}}">{{formData.address || '点击选择活动地址'}}</text>
+        <text class="location-arrow">›</text>
       </view>
     </view>
+  </view>
 
-    <!-- 活动签到码（仅星享会、午餐会、客户活动显示） -->
-    <view class="form-item" wx:if="{{formData.type === '星享会' || formData.type === '午餐会' || formData.type === '客户活动'}}">
-      <view class="form-label">
-        <text class="label-text">活动签到码</text>
-        <text class="label-hint">（可选）</text>
-      </view>
-      <view class="checkin-qrcode-upload">
-        <!-- 已上传的签到码 -->
-        <view class="checkin-qrcode-item" wx:if="{{formData.checkinQrcode}}">
-          <image
-            class="checkin-qrcode-image"
-            src="{{formData.checkinQrcode}}"
-            mode="aspectFit"
-          ></image>
-          <view class="checkin-qrcode-delete" bindtap="onDeleteCheckinQrcode">
+  <!-- 活动签到码（仅星享会、午餐会、客户活动显示） -->
+  <text class="card-title" wx:if="{{formData.type === '星享会' || formData.type === '午餐会' || formData.type === '客户活动'}}">活动签到码</text>
+  <view class="form-card" wx:if="{{formData.type === '星享会' || formData.type === '午餐会' || formData.type === '客户活动'}}">
+    <view class="form-item">
+      <view class="images-grid">
+        <view class="image-item" wx:if="{{formData.checkinQrcode}}">
+          <image class="upload-image" src="{{formData.checkinQrcode}}" mode="aspectFit"></image>
+          <view class="image-delete" bindtap="onDeleteCheckinQrcode">
             <text class="delete-icon">✕</text>
           </view>
         </view>
-        <!-- 上传按钮 -->
-        <view
-          wx:if="{{!formData.checkinQrcode}}"
-          class="checkin-qrcode-upload-btn"
-          bindtap="onChooseCheckinQrcode"
-        >
-          <text class="upload-icon">📷</text>
+        <view wx:else class="image-upload" bindtap="onChooseCheckinQrcode">
+          <text class="upload-plus">+</text>
           <text class="upload-text">上传签到码</text>
         </view>
       </view>
     </view>
+  </view>
 
-    <!-- 活动图片 -->
+  <!-- 活动海报 -->
+  <text class="card-title">活动海报</text>
+  <view class="form-card">
     <view class="form-item">
       <view class="form-label">
-        <text class="label-text">活动海报<text class="required">*</text></text>
-        <text class="label-hint">（最多9张）</text>
+        <text class="label-text">最多9张</text>
+        <text class="required">*</text>
       </view>
       <view class="images-grid">
-        <!-- 已上传的图片 -->
         <view
-          class="image-item"
+          class="image-item {{dragging && dragIndex === index ? 'image-item-dragging' : ''}} {{dragging && dropIndex === index && dragIndex !== index ? 'image-item-drop-target' : ''}}"
           wx:for="{{formData.images}}"
           wx:key="index"
+          data-index="{{index}}"
+          bindlongpress="onImageLongPress"
+          catchtouchmove="onImageTouchMove"
+          bindtouchend="onImageTouchEnd"
         >
-          <image
-            class="upload-image"
-            src="{{item}}"
-            mode="aspectFill"
-          ></image>
+          <image class="upload-image" src="{{item}}" mode="aspectFill"></image>
           <view class="image-delete" bindtap="onDeleteImage" data-index="{{index}}">
             <text class="delete-icon">✕</text>
           </view>
         </view>
-        <!-- 上传按钮 -->
-        <view
-          wx:if="{{formData.images.length < 9}}"
-          class="image-upload"
-          bindtap="onChooseImage"
-        >
-          <text class="upload-icon">📷</text>
+        <view wx:if="{{formData.images.length < 9}}" class="image-upload" bindtap="onChooseImage">
+          <text class="upload-plus">+</text>
           <text class="upload-text">添加图片</text>
         </view>
       </view>
+      <view class="drag-hint">
+        <text>☰ 长按图片可拖拽排序</text>
+      </view>
     </view>
+  </view>
+
+  <!-- 拖拽幽灵图 -->
+  <view wx:if="{{dragging}}" class="drag-ghost-view" style="left: {{dragX - 50}}px; top: {{dragY - 50}}px;">
+    <image class="drag-ghost-img" src="{{dragImageSrc}}" mode="aspectFill"></image>
   </view>
 
   <!-- 保存和删除按钮 -->
   <view class="actions-section">
     <view class="actions-buttons">
       <button wx:if="{{isEdit}}" class="delete-btn" bindtap="onDelete">删除</button>
-      <button
-        class="save-btn"
-        bindtap="onSave"
-        disabled="{{saving}}"
-      >
+      <button class="save-btn" bindtap="onSave" disabled="{{saving}}">
         {{saving ? '保存中...' : (isEdit ? '保存修改' : '创建活动')}}
       </button>
     </view>
   </view>
+
 </view>

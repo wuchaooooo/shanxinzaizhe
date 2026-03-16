@@ -106,8 +106,9 @@
 /* 活动标题 */
 .title-section {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
   margin-bottom: 24rpx;
   gap: 16rpx;
 }
@@ -116,15 +117,14 @@
   font-size: 40rpx;
   font-weight: bold;
   color: #0f172a;
-  flex: 1;
   line-height: 1.4;
+  flex: 1;
 }
 
 .status-row {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  flex-shrink: 0;
 }
 
 .status-badge {
@@ -256,6 +256,21 @@
   border-radius: 50%;
   border: 2rpx solid #e2e8f0;
   flex-shrink: 0;
+}
+
+/* 活动备注 */
+.notes-section {
+  background-color: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-top: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
+}
+
+.notes-text {
+  font-size: 28rpx;
+  color: #475569;
+  line-height: 1.6;
 }
 
 /* 活动签到 */
@@ -661,7 +676,10 @@
 .poster-canvas {
   position: fixed;
   left: -9999px;
-  top: -9999px;
+  top: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* 签到码弹窗 */

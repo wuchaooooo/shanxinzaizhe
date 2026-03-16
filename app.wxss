@@ -5,6 +5,57 @@ page {
   color: #0f172a;
 }
 
+/* 开屏动画（全局） */
+.splash-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-logo {
+  width: 240rpx;
+  height: 240rpx;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  display: block;
+  flex-shrink: 0;
+}
+
+.splash-logo-in {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.splash-heartbeat {
+  animation: splash-beat 1.6s ease-in-out forwards;
+}
+
+@keyframes splash-beat {
+  0%   { transform: scale(1); }
+  12%  { transform: scale(1.28); }
+  24%  { transform: scale(1); }
+  38%  { transform: scale(1.18); }
+  50%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+
+.splash-melt {
+  animation: splash-melt-out 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes splash-melt-out {
+  from { clip-path: circle(120% at 50% 50%); }
+  to   { clip-path: circle(0% at 50% 50%); }
+}
+
 /* 全局颜色变量 */
 .primary-color {
   color: #c20000;

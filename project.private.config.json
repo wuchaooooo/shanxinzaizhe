@@ -18,5 +18,31 @@
     "ignoreDevUnusedFiles": true,
     "bigPackageSizeSupport": false
   },
-  "condition": {}
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "pages/event-detail/event-detail",
+          "pathName": "pages/event-detail/event-detail",
+          "query": "eventId=recvdJFgiaUS6N&type=%E9%94%80%E5%94%AE%E5%BB%BA%E8%AE%BE",
+          "scene": null,
+          "launchMode": "default"
+        },
+        {
+          "name": "home",
+          "pathName": "pages/home/home",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "team",
+          "pathName": "pages/team/team",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        }
+      ]
+    }
+  }
 }
