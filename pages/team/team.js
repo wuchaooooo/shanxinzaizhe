@@ -111,6 +111,7 @@ Page({
     hasMoreTabs: false,         // tabs.length > 8
     tabScrollLeft: 0,
     showTagPanel: false,
+    titleTagsData: [],          // 前职标签数据（包含关键词和别名）
     isCofounder: false,  // 当前用户是否为联合创始人
     identityChecked: false,  // 身份识别是否完成
     loading: false,
@@ -709,12 +710,12 @@ Page({
     const CACHE_KEY = 'title_tags_cache'
 
     // 读取本地缓存，先快速渲染
-    let cachedTags = []
+    let cachedData = null
     try {
       const cached = wx.getStorageSync(CACHE_KEY)
       if (cached && cached.tags && cached.tags.length > 0) {
-        cachedTags = cached.tags
-        this._setTabs(['全部前职', ...cachedTags])
+        cachedData = cached
+        this._setTabs(['全部前职', ...cached.tags])
       }
     } catch (e) { /* ignore */ }
 
@@ -734,16 +735,54 @@ Page({
         return
       }
 
-      const freshTags = records
-        .map(r => r.fields[keyField])
-        .filter(v => v && typeof v === 'string' && v.trim())
-        .map(v => v.trim())
+      // 查找别名字段
+      const aliasField = Object.keys(firstFields).find(k => k.includes('别名'))
+
+      // 构建标签数据：包含关键词和别名
+      const tagsData = records
+        .map(r => {
+          const keyword = r.fields[keyField]
+          if (!keyword || typeof keyword !== 'string' || !keyword.trim()) return null
+
+          // 解析别名（JSON 数组格式）
+          let aliases = []
+          if (aliasField && r.fields[aliasField]) {
+            try {
+              const aliasValue = r.fields[aliasField]
+              if (typeof aliasValue === 'string') {
+                aliases = JSON.parse(aliasValue)
+              } else if (Array.isArray(aliasValue)) {
+                aliases = aliasValue
+              }
+              // 过滤掉空值
+              aliases = aliases.filter(a => a && typeof a === 'string' && a.trim())
+            } catch (e) {
+              console.warn(`解析别名失败: ${keyword}`, e)
+            }
+          }
+
+          return {
+            keyword: keyword.trim(),
+            aliases: aliases
+          }
+        })
+        .filter(v => v !== null)
+
+      const freshTags = tagsData.map(t => t.keyword)
 
       // 与缓存比对，内容有变化才更新界面和缓存
-      if (JSON.stringify(freshTags) !== JSON.stringify(cachedTags)) {
+      const freshDataStr = JSON.stringify(tagsData)
+      const cachedDataStr = cachedData ? JSON.stringify(cachedData.tagsData) : ''
+
+      if (freshDataStr !== cachedDataStr) {
         console.log('前职标签有更新，刷新 tab 栏')
-        wx.setStorageSync(CACHE_KEY, { tags: freshTags })
+        wx.setStorageSync(CACHE_KEY, { tags: freshTags, tagsData: tagsData })
         this._setTabs(['全部前职', ...freshTags])
+        // 保存到页面数据，供筛选时使用
+        this.setData({ titleTagsData: tagsData })
+      } else if (cachedData && cachedData.tagsData) {
+        // 没有更新，但需要设置 tagsData 供筛选使用
+        this.setData({ titleTagsData: cachedData.tagsData })
       }
     } catch (error) {
       console.error('加载前职关键词失败:', error)
@@ -805,9 +844,26 @@ Page({
   // 根据 tab 返回过滤后的合伙人（不考虑搜索词）
   _tabFilteredPartners(tab) {
     if (!tab || tab === '全部前职') return this.data.partners
+
+    // 查找该 tab 对应的标签数据（包含别名）
+    const tagsData = this.data.titleTagsData || []
+    const tagData = tagsData.find(t => t.keyword === tab)
+
     return this.data.partners.filter(partner => {
       const titleArray = Array.isArray(partner.title) ? partner.title : [partner.title || '']
-      return titleArray.some(t => t.includes(tab))
+
+      // 检查是否匹配关键词
+      const keywordMatch = titleArray.some(t => t.includes(tab))
+
+      // 检查是否匹配别名
+      let aliasMatch = false
+      if (tagData && tagData.aliases && tagData.aliases.length > 0) {
+        aliasMatch = titleArray.some(title =>
+          tagData.aliases.some(alias => title.includes(alias))
+        )
+      }
+
+      return keywordMatch || aliasMatch
     })
   },
 
