@@ -333,10 +333,11 @@ async function getTableFields(params = {}) {
 }
 
 /**
- * 查询分享统计记录
+ * 查询某个工号的所有分享统计记录（总计 + 各日明细，最多8条）
  * @param {string} employeeId - 营销员工号
+ * @returns {Array} 所有记录列表
  */
-async function findShareRecord(employeeId) {
+async function findAllShareRecords(employeeId) {
   const url = `/open-apis/bitable/v1/apps/${FEISHU_CONFIG.shareTrackingAppToken}/tables/${FEISHU_CONFIG.shareTrackingTableId}/records/search`
 
   try {
@@ -356,61 +357,99 @@ async function findShareRecord(employeeId) {
       }
     })
 
-    return result.items && result.items.length > 0 ? result.items[0] : null
+    return result.items || []
   } catch (error) {
     console.error('查询分享记录失败:', error)
-    return null
+    return []
   }
 }
 
 /**
- * 更新分享统计（查询 + 更新/创建）
+ * 更新分享统计（滑动7日窗口 + 总计）
+ * 数据结构：每个工号最多8条记录
+ *   - 1条总计记录：浏览日期为空，浏览总次数累加
+ *   - 最多7条日明细记录：浏览日期为 yyyy-MM-dd，记录当天次数
+ *   超过7条日明细时，删除最早一天的记录
  * @param {string} employeeId - 营销员工号（空字符串表示普通用户）
  * @param {string} employeeName - 营销员姓名
  */
 async function updateShareTracking(employeeId, employeeName = '普通用户') {
-  // 如果 employeeId 为空，使用特殊标识符 'guest' 表示普通用户
   const actualEmployeeId = employeeId || 'guest'
   const actualEmployeeName = employeeId ? employeeName : '普通用户'
 
+  // 当前日期 yyyy-MM-dd
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+
+  const tableParams = {
+    appToken: FEISHU_CONFIG.shareTrackingAppToken,
+    tableId: FEISHU_CONFIG.shareTrackingTableId
+  }
+
   try {
-    // 查询是否已存在该工号的记录
-    const existingRecord = await findShareRecord(actualEmployeeId)
+    // 查询该工号所有记录
+    const allRecords = await findAllShareRecords(actualEmployeeId)
 
-    if (existingRecord) {
-      // 存在则更新浏览次数和姓名
-      const currentCount = existingRecord.fields['浏览总次数'] || 0
-      const newCount = currentCount + 1
+    // 区分总计记录和日明细记录
+    const totalRecord = allRecords.find(r => !r.fields['浏览日期'])
+    const dailyRecords = allRecords.filter(r => !!r.fields['浏览日期'])
 
-      await updateRecord(
-        existingRecord.record_id,
+    // ── 1. 处理日明细 ──
+    const todayRecord = dailyRecords.find(r => r.fields['浏览日期'] === today)
+
+    if (todayRecord) {
+      // 当天已有记录，浏览次数 +1
+      const newDailyCount = (todayRecord.fields['浏览次数'] || 0) + 1
+      await updateRecord(todayRecord.record_id, { '浏览次数': newDailyCount }, tableParams)
+      console.log(`更新日明细: ${actualEmployeeName}(${actualEmployeeId}) ${today}, 次数: ${newDailyCount}`)
+    } else {
+      // 当天没有记录，新建
+      if (dailyRecords.length >= 7) {
+        // 超过7条，删除最早那天（按浏览日期字符串升序排，取第一条）
+        const sorted = dailyRecords.slice().sort((a, b) =>
+          (a.fields['浏览日期'] || '').localeCompare(b.fields['浏览日期'] || '')
+        )
+        const oldest = sorted[0]
+        await deleteRecord(oldest.record_id, tableParams)
+        console.log(`删除最早日明细: ${actualEmployeeId} ${oldest.fields['浏览日期']}`)
+      }
+
+      await createRecord(
         {
-          '浏览总次数': newCount,
+          '分享者工号': actualEmployeeId,
+          '分享者姓名': actualEmployeeName,
+          '浏览日期': today,
+          '浏览次数': 1
+        },
+        tableParams
+      )
+      console.log(`创建日明细: ${actualEmployeeName}(${actualEmployeeId}) ${today}`)
+    }
+
+    // ── 2. 处理总计记录 ──
+    if (totalRecord) {
+      const newTotal = (totalRecord.fields['浏览总次数'] || 0) + 1
+      await updateRecord(
+        totalRecord.record_id,
+        {
+          '浏览总次数': newTotal,
           '分享者姓名': actualEmployeeName
         },
-        {
-          appToken: FEISHU_CONFIG.shareTrackingAppToken,
-          tableId: FEISHU_CONFIG.shareTrackingTableId
-        }
+        tableParams
       )
-
-      console.log(`更新分享统计: ${actualEmployeeName}(${actualEmployeeId}), 浏览次数: ${currentCount} -> ${newCount}`)
-      return { success: true, message: '统计成功', count: newCount }
+      console.log(`更新总计: ${actualEmployeeName}(${actualEmployeeId}), 总次数: ${newTotal}`)
+      return { success: true, message: '统计成功', count: newTotal }
     } else {
-      // 不存在则创建新记录
       await createRecord(
         {
           '分享者工号': actualEmployeeId,
           '分享者姓名': actualEmployeeName,
           '浏览总次数': 1
         },
-        {
-          appToken: FEISHU_CONFIG.shareTrackingAppToken,
-          tableId: FEISHU_CONFIG.shareTrackingTableId
-        }
+        tableParams
       )
-
-      console.log(`创建分享统计: ${actualEmployeeName}(${actualEmployeeId}), 浏览次数: 1`)
+      console.log(`创建总计: ${actualEmployeeName}(${actualEmployeeId})`)
       return { success: true, message: '统计成功', count: 1 }
     }
   } catch (error) {
@@ -430,7 +469,7 @@ module.exports = {
   clearTokenCache,
   uploadImage,
   getTableFields,
-  findShareRecord,
+  findAllShareRecords,
   updateShareTracking,
   FEISHU_CONFIG
 }
