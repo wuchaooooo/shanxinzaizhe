@@ -65,8 +65,8 @@ Page({
   async recordShareVisit(shareFromEmployeeId) {
     const app = getApp()
 
-    // 如果没有分享来源且身份还未识别完成，等待识别后再上报
-    if (!shareFromEmployeeId && !app.globalData.currentUserResolved) {
+    // 身份还未识别完成时，等待识别后再上报（无论是否有分享来源，都需要等 partnersData 加载）
+    if (!app.globalData.currentUserResolved) {
       const listener = () => {
         const idx = app.globalData.currentUserListeners.indexOf(listener)
         if (idx > -1) app.globalData.currentUserListeners.splice(idx, 1)
@@ -301,20 +301,6 @@ Page({
     // 注意：不要用 event.image 填充 event.images，因为这会影响下载逻辑
     if (!event.images) {
       event.images = []
-    }
-
-    // 如果活动已结束且有签到码，将签到码添加到图片列表的最后
-    if (event.status === '已结束' && event.checkinQrcode) {
-      console.log('活动已结束，检查签到码:', {
-        status: event.status,
-        hasCheckinQrcode: !!event.checkinQrcode,
-        checkinQrcode: event.checkinQrcode
-      })
-
-      // 检查签到码是否已经在 images 数组中
-      if (!event.images.includes(event.checkinQrcode)) {
-        event.images.push(event.checkinQrcode)
-      }
     }
 
     // 如果 images 数组为空但有 cloudImageFileIDs，说明图片还未下载
