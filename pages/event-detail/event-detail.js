@@ -46,81 +46,11 @@ Page({
       isCofounder: !!app.globalData.currentUser
     })
 
-    // 处理分享来源（营销员工号）
-    if (shareFrom) {
-      this.recordShareVisit(shareFrom, eventId)
-    } else {
-      // 普通用户访问
-      this.recordShareVisit(null, eventId)
-    }
-
     // 注册图片下载监听器
     this.registerImageListener()
 
     // 加载活动数据
     this.loadEventData(eventId)
-  },
-
-  // 记录分享访问
-  async recordShareVisit(shareFromEmployeeId) {
-    const app = getApp()
-
-    // 身份还未识别完成时，等待识别后再上报（无论是否有分享来源，都需要等 partnersData 加载）
-    if (!app.globalData.currentUserResolved) {
-      const listener = () => {
-        const idx = app.globalData.currentUserListeners.indexOf(listener)
-        if (idx > -1) app.globalData.currentUserListeners.splice(idx, 1)
-        this.recordShareVisit(shareFromEmployeeId)
-      }
-      app.globalData.currentUserListeners.push(listener)
-      return
-    }
-
-    const partnersData = app.globalData.partnersData || []
-    const currentUser = app.globalData.currentUser
-    const feishuApi = require('../../utils/feishu-api.js')
-
-    let visitorName = '普通用户'
-    let visitorEmployeeId = ''
-
-    if (shareFromEmployeeId) {
-      // 链接带了分享工号，根据工号查找营销员信息
-      const partner = partnersData.find(p => p.employeeId === shareFromEmployeeId)
-      if (partner) {
-        visitorName = partner.name
-        visitorEmployeeId = shareFromEmployeeId
-        console.log(`分享访问：营销员 ${visitorName} (${visitorEmployeeId})`)
-      } else {
-        console.log(`分享访问：未找到工号 ${shareFromEmployeeId} 对应的营销员`)
-        // 即使找不到营销员，也使用工号进行统计
-        visitorEmployeeId = shareFromEmployeeId
-      }
-    } else {
-      // 链接没有分享工号，区分两种情况
-      if (currentUser) {
-        // 情况1：当前登录用户是联合创始人
-        visitorName = currentUser.name || '联合创始人'
-        visitorEmployeeId = currentUser.employeeId || ''
-        console.log(`直接访问：联合创始人 ${visitorName} (${visitorEmployeeId})`)
-      } else {
-        // 情况2：当前登录用户是普通用户
-        visitorName = '普通用户'
-        visitorEmployeeId = ''
-        console.log('直接访问：普通用户')
-      }
-    }
-
-    // 调用后端接口记录访问
-    try {
-      const result = await feishuApi.updateShareTracking(visitorEmployeeId, visitorName)
-      if (result.success) {
-        console.log(`分享统计成功: ${visitorName}, 浏览次数: ${result.count}`)
-      } else {
-        console.error('分享统计失败:', result.message)
-      }
-    } catch (error) {
-      console.error('记录分享访问失败:', error)
-    }
   },
 
   // 页面显示时重新加载数据

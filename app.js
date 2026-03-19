@@ -18,12 +18,11 @@ App({
     if (shareParams.shareFrom) {
       this.globalData.initialShareFrom = shareParams.shareFrom
       console.log('分享来源:', shareParams.shareFrom)
-      // 调用统计接口
-      this.trackShare(shareParams)
     }
 
     // 获取 openid 并与飞书联合创始人数据比对身份（尽早发起网络请求）
-    this.fetchOpenidAndMatchUser()
+    // 身份识别完成后统一上报浏览记录（会话级，每次启动上报一次）
+    this.fetchOpenidAndMatchUser(shareParams.shareFrom || null)
 
     // 如果使用飞书数据源，先从本地缓存恢复数据（立即可用），再异步拉取最新
     if (DATA_SOURCE_CONFIG.source === 'feishu') {
@@ -177,14 +176,15 @@ App({
   },
 
   // 获取当前登录用户的 openid，并与飞书联合创始人数据比对身份
-  fetchOpenidAndMatchUser() {
+  // shareFrom: 本次启动的分享来源工号（无则为 null）
+  fetchOpenidAndMatchUser(shareFrom) {
     wx.cloud.callFunction({
       name: 'getOpenid',
       success: (r) => {
         const openid = r.result && r.result.openid
         if (!openid) return
         this.globalData.openid = openid
-        this._matchCurrentUser(openid)
+        this._matchCurrentUser(openid, shareFrom)
       },
       fail: (err) => {
         console.error('获取 openid 失败:', err)
@@ -192,8 +192,8 @@ App({
     })
   },
 
-  // 根据 openid 查找对应的联合创始人记录
-  _matchCurrentUser(openid) {
+  // 根据 openid 查找对应的联合创始人记录，识别完成后上报浏览记录
+  _matchCurrentUser(openid, shareFrom) {
     const partners = this.globalData.partnersData
     if (!partners || partners.length === 0) return
 
@@ -203,6 +203,9 @@ App({
     console.log('身份识别:', matched ? `联合创始人 ${matched.name}` : '普通用户')
     // 始终通知 listeners，即使是 null（普通用户）
     this.globalData.currentUserListeners.forEach(cb => cb(matched))
+
+    // 身份识别完成后，上报本次会话浏览记录
+    this._trackVisit(shareFrom)
   },
 
   onShow(options) {
@@ -212,8 +215,9 @@ App({
       if (shareParams.shareFrom && shareParams.shareFrom !== this.globalData.lastTrackedShareFrom) {
         this.globalData.initialShareFrom = shareParams.shareFrom
         console.log('分享来源（onShow）:', shareParams.shareFrom)
-        // 调用统计接口
-        this.trackShare(shareParams)
+        // 新的分享来源，重置标记后上报
+        this._visitTracked = false
+        this._trackVisit(shareParams.shareFrom)
       }
     }
 
@@ -246,32 +250,36 @@ App({
     return { shareFrom, targetPage, scene: options.scene || '' }
   },
 
-  // 调用分享统计接口
-  async trackShare(shareParams) {
-    const { shareFrom } = shareParams
+  // 上报本次会话浏览记录（每次启动只调用一次）
+  async _trackVisit(shareFrom) {
+    // 防止重复上报
+    if (this._visitTracked) return
+    this._visitTracked = true
 
-    // 记录最近一次统计的分享来源，避免重复统计
-    this.globalData.lastTrackedShareFrom = shareFrom
+    let visitorEmployeeId = ''
+    let visitorName = '普通用户'
 
-    // 确定分享者姓名
-    let shareFromName = '普通用户'
     if (shareFrom && shareFrom !== 'guest') {
-      // 从已加载的 partnersData 中查找对应的姓名
-      const partnersData = this.globalData.partnersData
-      if (partnersData && partnersData.length > 0) {
-        const partner = partnersData.find(p => p.employeeId === shareFrom)
-        if (partner) {
-          shareFromName = partner.name
-        }
-      }
+      // 通过分享链接进入：上报分享者
+      const partner = (this.globalData.partnersData || []).find(p => p.employeeId === shareFrom)
+      visitorEmployeeId = shareFrom
+      visitorName = partner ? partner.name : '普通用户'
+      console.log(`浏览上报：分享来源 ${visitorName}(${visitorEmployeeId})`)
+    } else if (this.globalData.currentUser) {
+      // 直接打开且是联合创始人：上报自己
+      visitorEmployeeId = this.globalData.currentUser.employeeId || ''
+      visitorName = this.globalData.currentUser.name || '联合创始人'
+      console.log(`浏览上报：联合创始人 ${visitorName}(${visitorEmployeeId})`)
+    } else {
+      // 普通用户
+      console.log('浏览上报：普通用户')
     }
 
-    // 直接调用飞书 API 更新统计
     try {
-      const result = await updateShareTracking(shareFrom, shareFromName)
-      console.log('分享统计成功:', result)
+      const result = await updateShareTracking(visitorEmployeeId, visitorName)
+      console.log('浏览上报成功:', result)
     } catch (error) {
-      console.error('分享统计失败:', error)
+      console.error('浏览上报失败:', error)
     }
   },
 

@@ -391,28 +391,36 @@ async function updateShareTracking(employeeId, employeeName = '普通用户') {
     // 查询该工号所有记录
     const allRecords = await findAllShareRecords(actualEmployeeId)
 
+    // 飞书文本字段返回格式为 [{type:'text', text:'值'}]，提取字符串
+    const getTextField = (val) => {
+      if (!val) return ''
+      if (typeof val === 'string') return val
+      if (Array.isArray(val) && val.length > 0) return val[0].text || ''
+      return ''
+    }
+
     // 区分总计记录和日明细记录
     const totalRecord = allRecords.find(r => !r.fields['浏览日期'])
     const dailyRecords = allRecords.filter(r => !!r.fields['浏览日期'])
 
     // ── 1. 处理日明细 ──
-    const todayRecord = dailyRecords.find(r => r.fields['浏览日期'] === today)
+    const todayRecord = dailyRecords.find(r => getTextField(r.fields['浏览日期']) === today)
 
     if (todayRecord) {
-      // 当天已有记录，浏览次数 +1
-      const newDailyCount = (todayRecord.fields['浏览次数'] || 0) + 1
-      await updateRecord(todayRecord.record_id, { '浏览次数': newDailyCount }, tableParams)
+      // 当天已有记录，浏览总次数 +1
+      const newDailyCount = (todayRecord.fields['浏览总次数'] || 0) + 1
+      await updateRecord(todayRecord.record_id, { '浏览总次数': newDailyCount }, tableParams)
       console.log(`更新日明细: ${actualEmployeeName}(${actualEmployeeId}) ${today}, 次数: ${newDailyCount}`)
     } else {
       // 当天没有记录，新建
       if (dailyRecords.length >= 7) {
         // 超过7条，删除最早那天（按浏览日期字符串升序排，取第一条）
         const sorted = dailyRecords.slice().sort((a, b) =>
-          (a.fields['浏览日期'] || '').localeCompare(b.fields['浏览日期'] || '')
+          getTextField(a.fields['浏览日期']).localeCompare(getTextField(b.fields['浏览日期']))
         )
         const oldest = sorted[0]
         await deleteRecord(oldest.record_id, tableParams)
-        console.log(`删除最早日明细: ${actualEmployeeId} ${oldest.fields['浏览日期']}`)
+        console.log(`删除最早日明细: ${actualEmployeeId} ${getTextField(oldest.fields['浏览日期'])}`)
       }
 
       await createRecord(
@@ -420,7 +428,7 @@ async function updateShareTracking(employeeId, employeeName = '普通用户') {
           '分享者工号': actualEmployeeId,
           '分享者姓名': actualEmployeeName,
           '浏览日期': today,
-          '浏览次数': 1
+          '浏览总次数': 1
         },
         tableParams
       )
