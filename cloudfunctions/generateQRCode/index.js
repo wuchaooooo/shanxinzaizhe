@@ -10,8 +10,8 @@ exports.main = async (event, context) => {
   const { employeeId, page = 'pages/home/home' } = event
 
   try {
-    // scene 参数：有 employeeId 则带上，否则为空（生成通用小程序码）
-    const scene = employeeId ? `e${employeeId}` : ''
+    // scene 参数：有 employeeId 则带上，否则用固定值生成通用小程序码
+    const scene = employeeId ? `e${employeeId}` : 'guest'
 
     const result = await cloud.openapi.wxacode.getUnlimited({
       scene: scene,
