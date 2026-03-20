@@ -11,11 +11,6 @@ const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000 // 7天缓存
  * @returns {Promise<string>} 小程序码临时文件路径
  */
 async function generateMiniProgramCode(employeeId, options = {}) {
-  if (!employeeId) {
-    console.error('generateMiniProgramCode: employeeId 不能为空')
-    return null
-  }
-
   const page = options.page || 'pages/home/home'
 
   // 1. 检查内存缓存（globalData）
@@ -24,7 +19,7 @@ async function generateMiniProgramCode(employeeId, options = {}) {
     app.globalData.qrcodeCache = {}
   }
 
-  const cacheKey = `${employeeId}_${page}`
+  const cacheKey = `${employeeId || 'guest'}_${page}`
   if (app.globalData.qrcodeCache[cacheKey]) {
     console.log(`使用内存缓存的小程序码: ${employeeId}`)
     return app.globalData.qrcodeCache[cacheKey]

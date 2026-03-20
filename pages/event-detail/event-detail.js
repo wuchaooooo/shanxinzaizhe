@@ -645,7 +645,7 @@ Page({
     }
 
     try {
-      generateEventPoster(this, 'posterCanvas', event, { shareFrom: this.shareFrom || '' })
+      generateEventPoster(this, 'posterCanvas', event)
       // 海报生成成功后会自动设置 showPoster，在那时重置 loading
       setTimeout(() => {
         this.setData({

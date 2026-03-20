@@ -1,7 +1,6 @@
 // utils/event-poster-generator.js
 // 活动分享海报生成逻辑
 
-const { getAssetPath } = require('./assets-loader.js')
 const { generateMiniProgramCode } = require('./qrcode-generator.js')
 
 /**
@@ -11,7 +10,7 @@ const { generateMiniProgramCode } = require('./qrcode-generator.js')
  * @param {Object} event - 活动数据
  * @param {Object} options - 额外选项，如 { shareFrom: '员工号' }
  */
-async function generateEventPoster(page, canvasId, event, options = {}) {
+async function generateEventPoster(page, canvasId, event) {
   try {
     // 立即显示弹窗（骨架屏状态）
     page.setData({
@@ -28,33 +27,19 @@ async function generateEventPoster(page, canvasId, event, options = {}) {
     const organizer = partnersData.find(p => p.name === event.organizer)
 
     // 确定海报中"联系"二维码的优先级：
-    // 1. 当前用户是联合创始人 → 用自己的个人微信二维码
-    // 2. 普通用户 + 链接有 shareFrom → 用分享者的个人微信二维码
-    // 3. 兜底 → 用组织者的个人微信二维码
+    // 1. 当前用户是合伙人 → 用自己的个人微信二维码
+    // 2. 非合伙人 → 用活动组织者的个人微信二维码
     let contactQRCode = organizer?.qrcode || ''
-    if (currentUser && currentUser.qrcode) {
-      contactQRCode = currentUser.qrcode
-    } else if (options.shareFrom) {
-      const shareFromPartner = partnersData.find(p => p.employeeId === options.shareFrom)
-      if (shareFromPartner && shareFromPartner.qrcode) {
-        contactQRCode = shareFromPartner.qrcode
-      }
+    if (currentUser) {
+      contactQRCode = currentUser.qrcode || ''
     }
 
-    // 生成动态小程序码（如果是联合创始人）
-    let qrcodeImageUrl = null
-    if (currentUser && currentUser.employeeId) {
-      qrcodeImageUrl = await generateMiniProgramCode(currentUser.employeeId)
-    }
+    // 生成动态小程序码：合伙人带 employeeId（scene=e{id}），普通访客不带（通用码）
+    let qrcodeImageUrl = await generateMiniProgramCode(currentUser?.employeeId || '')
 
-    // 如果动态生成失败，降级到静态小程序码
+    // qrcodeImageUrl 为空时继续生成海报（仅不显示小程序码区域）
     if (!qrcodeImageUrl) {
-      qrcodeImageUrl = getAssetPath('mini_program_qr_code')
-    }
-
-    if (!qrcodeImageUrl) {
-      wx.showToast({ title: '资源加载中，请稍后重试', icon: 'none' })
-      return
+      console.warn('[海报] 小程序码不可用，将省略小程序码区域')
     }
 
     // Canvas 尺寸
