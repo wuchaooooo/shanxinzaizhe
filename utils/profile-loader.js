@@ -5,7 +5,6 @@ const { getAllProfileRecords, extractFieldText, feishuDateToYYYYMM } = require('
 const { DATA_SOURCE_CONFIG } = require('./data-source-config.js')
 const { getImage, evict, fileIDToCdnUrl } = require('./image-cache.js')
 const { createCacheManager, isRecordChanged } = require('./text-cache.js')
-const { deleteFromCloudStorage } = require('./cloud-storage-uploader.js')
 
 // ─── 文字缓存配置 ─────────────────────────────────────────────────────────────
 const CACHE_VERSION = 'v1'
@@ -169,34 +168,11 @@ async function loadAllProfilesText() {
   })
 
   // 检测被删除的成员（在旧缓存中存在但在新数据中不存在）
+  // 注意：自动删除云存储文件有误删风险（飞书 API 返回不完整时会误判），已禁用。
+  // 如需手动清理，请在云开发控制台操作。
   const deletedEmployeeIds = Object.keys(cache).filter(id => !currentEmployeeIds.has(id))
   if (deletedEmployeeIds.length > 0) {
-
-    const fileIDsToDelete = []
-    deletedEmployeeIds.forEach(employeeId => {
-      const oldData = cache[employeeId]
-      if (oldData) {
-        // 清理本地缓存
-        if (oldData.cloudImageFileID) {
-          evict(oldData.cloudImageFileID)
-          fileIDsToDelete.push(oldData.cloudImageFileID)
-        }
-        if (oldData.cloudQrcodeFileID) {
-          evict(oldData.cloudQrcodeFileID)
-          fileIDsToDelete.push(oldData.cloudQrcodeFileID)
-        }
-      }
-    })
-
-    // 批量删除云存储文件
-    if (fileIDsToDelete.length > 0) {
-      try {
-        const deleteResult = await deleteFromCloudStorage(fileIDsToDelete)
-        console.log(`[飞书数据源] 云存储清理完成: 成功删除 ${deleteResult.deletedCount} 个文件`)
-      } catch (err) {
-        console.error('[飞书数据源] 云存储清理失败:', err)
-      }
-    }
+    console.log(`[飞书数据源] 检测到 ${deletedEmployeeIds.length} 个本地缓存中多余的条目（可能是已删除成员或缓存遗留），仅更新本地缓存，不自动删除云存储文件:`, deletedEmployeeIds)
   }
 
   cacheManager.save(newCache)

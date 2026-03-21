@@ -1067,7 +1067,11 @@ Page({
     const idx = partners.findIndex(p => p.name === name)
 
     if (idx !== -1) {
-      // 只清空页面数据，不清空 globalData（避免触发连锁反应导致集体消失）
+      // 记录失败次数，防止无限重试循环（onImageError → _syncDownloadedImages → 再次失败）
+      if (!this._imageErrorCount) this._imageErrorCount = {}
+      const errorKey = partners[idx].employeeId || name
+      this._imageErrorCount[errorKey] = (this._imageErrorCount[errorKey] || 0) + 1
+
       const updates = {
         [`partners[${idx}].image`]: '',
         [`partners[${idx}].loaded`]: false
@@ -1077,12 +1081,20 @@ Page({
         updates[`filteredPartners[${fidx}].image`] = ''
         updates[`filteredPartners[${fidx}].loaded`] = false
       }
-      this.setData(updates, () => {
-        // 延迟后尝试从 globalData 重新同步（可能是临时失败）
-        setTimeout(() => {
-          this._syncDownloadedImages()
-        }, 500)
-      })
+
+      // 只在首次失败时延迟重试（可能是临时网络问题），之后不再重试避免循环
+      if (this._imageErrorCount[errorKey] <= 1) {
+        this.setData(updates, () => {
+          setTimeout(() => {
+            this._syncDownloadedImages()
+          }, 500)
+        })
+      } else {
+        // 多次失败：标记为已加载（loaded=true）以防止骨架屏一直转圈，图片不显示
+        updates[`partners[${idx}].loaded`] = true
+        if (fidx !== -1) updates[`filteredPartners[${fidx}].loaded`] = true
+        this.setData(updates)
+      }
     }
   }
 })
