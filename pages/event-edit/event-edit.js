@@ -391,7 +391,7 @@ Page({
 
     wx.chooseImage({
       count: remainCount,
-      sizeType: ['compressed'],
+      sizeType: ['original'],
       sourceType: ['album', 'camera'],
       success: (res) => {
         const newImages = [...this.data.formData.images, ...res.tempFilePaths]
@@ -426,7 +426,7 @@ Page({
   onChooseCheckinQrcode() {
     wx.chooseImage({
       count: 1,
-      sizeType: ['compressed'],
+      sizeType: ['original'],
       sourceType: ['album', 'camera'],
       success: (res) => {
         this.setData({
@@ -587,9 +587,19 @@ Page({
           for (let i = 0; i < newImages.length; i++) {
             wx.showLoading({ title: `上传图片中 ${i + 1}/${newImages.length}` })
 
+            // 上传前适当压缩，quality 80 兼顾清晰度与体积
+            const compressed = await new Promise((resolve) => {
+              wx.compressImage({
+                src: newImages[i],
+                quality: 80,
+                success: res => resolve(res.tempFilePath),
+                fail: () => resolve(newImages[i]) // 压缩失败则用原图
+              })
+            })
+
             const cloudResult = await uploadToCloudStorage(
-              newImages[i],
-              `images/event/${Date.now()}_${i}.png`,
+              compressed,
+              `images/event/${Date.now()}_${i}.jpg`,
               {
                 employeeId: currentUser?.employeeId,
                 index: i
